@@ -151,91 +151,61 @@ def fetch_and_process_data(client_id, date_start, date_end):
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as e:
-        print(f"Request error: {e}")
+        logger.error(f"Request error: {e}")
         return None
 
     try:
-        timestamps, temperatures, precipitations, snow_depths, wind_speeds = [], [], [], [], []
-        for item in data.get('data', []):
-            time_str = item['referenceTime'].rstrip('Z')
-            time = datetime.fromisoformat(time_str)
-            observations = {obs['elementId']: obs['value'] for obs in item['observations']}
-            
-            timestamps.append(time)
-            temperatures.append(observations.get('air_temperature', np.nan))
-            precipitations.append(observations.get('sum(precipitation_amount PT1H)', np.nan))
-            snow_depths.append(observations.get('surface_snow_thickness', np.nan))
-            wind_speeds.append(observations.get('wind_speed', np.nan))
-
-        # Debugging print for initial data check
-        print(f"Raw temperatures: {temperatures}")
-
-        # Convert to DataFrame for consistent processing
-        df = pd.DataFrame({
-            'timestamp': timestamps,
-            'temperature': temperatures,
-            'precipitation': precipitations,
-            'snow_depth': snow_depths,
-            'wind_speed': wind_speeds
-        }).set_index('timestamp')
+        df = pd.DataFrame([
+            {
+                'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
+                'temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'air_temperature'), np.nan),
+                'precipitation': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
+                'snow_depth': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
+                'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan)
+            }
+            for item in data.get('data', [])
+        ]).set_index('timestamp')
 
         # Ensure all datetime indices are timezone-aware
         df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
 
-        # Handle NaNs in the data
-        df['temperature'].replace(-9999, np.nan, inplace=True)  # Replace sentinel value with NaN
-        df['temperature'].fillna(method='ffill', inplace=True)  # Forward fill missing data
-        df['temperature'].fillna(method='bfill', inplace=True)  # Backward fill if necessary
+        # Handle missing data
+        df['temperature'] = handle_missing_data(df.index, df['temperature'], method='time')
+        df['precipitation'] = handle_missing_data(df.index, df['precipitation'], method='nearest')
+        df['snow_depth'] = handle_missing_data(df.index, df['snow_depth'], method='linear')
+        df['wind_speed'] = handle_missing_data(df.index, df['wind_speed'], method='time')
 
-        df['precipitation'].fillna(0, inplace=True)  # Assume no precipitation where missing
-        df['snow_depth'].fillna(0, inplace=True)     # Assume zero snow depth where missing
-        df['wind_speed'].fillna(-1, inplace=True)    # Use -1 as an invalid placeholder for wind speed
-
-        # Debugging print for processed data check
-        print(f"Processed temperatures: {df['temperature'].tolist()}")
-
-        # Extract arrays after handling NaNs
         timestamps = df.index.to_numpy()
         temperatures = df['temperature'].to_numpy()
         precipitations = df['precipitation'].to_numpy()
         snow_depths = df['snow_depth'].to_numpy()
         wind_speeds = df['wind_speed'].to_numpy()
 
-        # Ensure all arrays are of the same length
-        if len(timestamps) == len(temperatures) == len(precipitations) == len(snow_depths) == len(wind_speeds):
-            # Additional processing if required
-            snow_depths = validate_snow_depths(snow_depths)
-            smoothed_snow_depths = smooth_snow_depths(snow_depths)
+        snow_depths = validate_snow_depths(snow_depths)
+        smoothed_snow_depths = smooth_snow_depths(snow_depths)
 
-            confidence_intervals = (
-                smoothed_snow_depths - 1.96 * np.nanstd(snow_depths),
-                smoothed_snow_depths + 1.96 * np.nanstd(snow_depths)
-            )
-            missing_periods = identify_missing_periods(timestamps, snow_depths)
-            snow_precipitations = calculate_snow_precipitations(temperatures, precipitations, snow_depths)
+        confidence_intervals = (
+            smoothed_snow_depths - 1.96 * np.nanstd(snow_depths),
+            smoothed_snow_depths + 1.96 * np.nanstd(snow_depths)
+        )
+        missing_periods = identify_missing_periods(timestamps, snow_depths)
+        snow_precipitations = calculate_snow_precipitations(temperatures, precipitations, snow_depths)
 
-            alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
-            data_points = len(timestamps)
-            missing_data_count = np.isnan(snow_depths).sum()
+        alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
+        data_points = len(timestamps)
+        missing_data_count = np.isnan(snow_depths).sum()
 
-            img_str = create_downloadable_graph(
-                timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
-                wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms,
-                pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
-            )
+        img_str = create_downloadable_graph(
+            timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
+            wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms,
+            pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
+        )
 
-            return img_str, timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, missing_periods, alarms
-        else:
-            print("Data arrays have mismatched lengths, unable to proceed with analysis.")
-            return None
+        return img_str, timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, missing_periods, alarms
 
-    except KeyError as e:
-        print(f"Data processing error: Missing key {e}")
-        return None
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger.error(f"Data processing error: {e}")
         return None
-
 
 # Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
