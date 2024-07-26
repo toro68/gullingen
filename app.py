@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
+    logger.info("Starting function: validate_snow_depths")
     snow_depths = np.array(snow_depths)
     snow_depths[snow_depths < 0] = np.nan
     if np.all(np.isnan(snow_depths)):
@@ -27,18 +28,22 @@ def validate_snow_depths(snow_depths):
     lower_bound = max(0, season_median - 3 * season_std)
     upper_bound = season_median + 3 * season_std
     snow_depths[(snow_depths < lower_bound) | (snow_depths > upper_bound)] = np.nan
+    logger.info("Completed function: validate_snow_depths")
     return snow_depths
 
 # Function to smooth snow depths
 def smooth_snow_depths(snow_depths):
+    logger.info("Starting function: smooth_snow_depths")
     if np.all(np.isnan(snow_depths)):
         return snow_depths
     timestamps = np.arange(len(snow_depths))
     smoothed = lowess(snow_depths, timestamps, frac=0.1, missing='drop')
+    logger.info("Completed function: smooth_snow_depths")
     return smoothed[:, 1]
 
 # Function to handle missing data
 def handle_missing_data(timestamps, data, method='time'):
+    logger.info(f"Starting function: handle_missing_data with method {method}")
     data_series = pd.Series(data, index=timestamps)
     if method == 'time':
         interpolated = data_series.interpolate(method='time')
@@ -47,10 +52,12 @@ def handle_missing_data(timestamps, data, method='time'):
     else:
         interpolated = data_series.interpolate(method='nearest')
     interpolated[interpolated < 0] = 0
+    logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
 
 # Function to create a downloadable graph
 def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, start_time, end_time, data_points, missing_data_count):
+    logger.info("Starting function: create_downloadable_graph")
     fig, axes = plt.subplots(6, 1, figsize=(14, 28), sharex=True)
     plt.rcParams.update({'font.size': 14})
 
@@ -123,11 +130,13 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     img_str = base64.b64encode(img_buffer.getvalue()).decode()
     plt.close(fig)
 
+    logger.info("Completed function: create_downloadable_graph")
     return img_str
 
 # Function to fetch and process data
 @st.cache_data(ttl=3600)
 def fetch_and_process_data(client_id, date_start, date_end):
+    logger.info("Starting function: fetch_and_process_data")
     try:
         url = "https://frost.met.no/observations/v0.jsonld"
         params = {
@@ -194,6 +203,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
             pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
         )
 
+        logger.info("Completed function: fetch_and_process_data")
         return {
             'img_str': img_str,
             'timestamps': timestamps,
@@ -212,6 +222,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
 
 # Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
+    logger.info("Starting function: identify_missing_periods")
     missing_periods = []
     nan_indices = np.where(np.isnan(snow_depths))[0]
     if len(nan_indices) > 0:
@@ -223,10 +234,12 @@ def identify_missing_periods(timestamps, snow_depths):
                 missing_periods.append(current_period)
                 current_period = [timestamps[idx], timestamps[idx]]
         missing_periods.append(current_period)
+    logger.info("Completed function: identify_missing_periods")
     return missing_periods
 
 # Function to calculate snow precipitation
 def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
+    logger.info("Starting function: calculate_snow_precipitations")
     snow_precipitations = []
     for i in range(len(temperatures)):
         if temperatures[i] is not None and temperatures[i] <= 1.5:
@@ -236,10 +249,12 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
                 snow_precipitations.append(0)
         else:
             snow_precipitations.append(0)
+    logger.info("Completed function: calculate_snow_precipitations")
     return snow_precipitations
 
 # Function to identify snow drift alarms with new criteria
 def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
+    logger.info("Starting function: snow_drift_alarm")
     alarms = []
     for i in range(1, len(timestamps)):
         if (wind_speeds[i] > 7 and
@@ -248,10 +263,12 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
             abs(snow_depths[i] - snow_depths[i-1]) >= 0.2 and
             not np.isnan(temperatures[i]) and temperatures[i] < -2):
             alarms.append(timestamps[i])
+    logger.info("Completed function: snow_drift_alarm")
     return alarms
 
 # Function to get date range based on user choice
 def get_date_range(choice):
+    logger.info(f"Starting function: get_date_range with choice {choice}")
     now = datetime.now(ZoneInfo("Europe/Oslo")).replace(minute=0, second=0, microsecond=0)
     if choice == '7d':
         start_time = now - timedelta(days=7)
@@ -270,11 +287,14 @@ def get_date_range(choice):
         start_time = now - timedelta(days=now.weekday() + 1)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
+        logger.error(f"Invalid choice: {choice}")
         return None, None
+    logger.info(f"Date range: {start_time.isoformat()} to {now.isoformat()}")
     return start_time.isoformat(), now.isoformat()
 
 # Function to export data to CSV
 def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms):
+    logger.info("Starting function: export_to_csv")
     df = pd.DataFrame({
         'Timestamp': timestamps,
         'Temperature': temperatures,
@@ -284,6 +304,7 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
         'Wind Speed': wind_speeds,
         'Snow Drift Alarm': ['x' if ts in alarms else '' for ts in timestamps]
     })
+    logger.info("Completed function: export_to_csv")
     return df.to_csv(index=False).encode('utf-8')
 
 # Main function to run the Streamlit app
@@ -344,7 +365,7 @@ def main():
         with st.spinner('Henter og behandler data...'):
             data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
         
-        if data:
+        if data and 'img_str' in data:
             st.image(f"data:image/png;base64,{data['img_str']}", use_column_width=True)
             st.download_button(label="Last ned grafen", data=base64.b64decode(data['img_str']), file_name="weather_data.png", mime="image/png")
 
@@ -400,7 +421,7 @@ def main():
                 st.write("Ingen snøfokk-alarmer i den valgte perioden.")
 
         else:
-            st.error("Ingen data tilgjengelig for valgt periode.")
+            st.error("Ingen data eller grafbilde tilgjengelig for valgt periode.")
 
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
