@@ -1,16 +1,12 @@
-import streamlit as st
-import requests
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
-import streamlit.components.v1 as components
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
@@ -46,6 +42,10 @@ def handle_missing_data(timestamps, data):
 
 # Function to create a downloadable graph
 def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, start_time, end_time, data_points, missing_data_count):
+    # Debug: Ensure data lengths match
+    assert len(timestamps) == len(temperatures) == len(precipitations) == len(snow_depths) == len(wind_speeds), \
+        "Mismatch in data lengths for plotting."
+
     fig, axes = plt.subplots(6, 1, figsize=(14, 28), sharex=True)
     plt.rcParams.update({'font.size': 14})
 
