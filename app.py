@@ -222,6 +222,7 @@ except Exception as e:
     logger.error(f"Data processing error: {e}")
     return None
 
+
 # Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
     logger.info("Starting function: identify_missing_periods")
