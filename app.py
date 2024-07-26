@@ -10,7 +10,6 @@ from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
-import streamlit.components.v1 as components
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
