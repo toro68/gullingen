@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from dateutil import parser
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
@@ -44,15 +43,10 @@ def smooth_snow_depths(snow_depths):
     return smoothed[:, 1]
 
 # Function to handle missing data
-def handle_missing_data(timestamps, data, method='time'):
-    logger.info(f"Starting function: handle_missing_data with method {method}")
+def handle_missing_data(timestamps, data):
+    logger.info("Starting function: handle_missing_data")
     data_series = pd.Series(data, index=timestamps)
-    if method == 'time':
-        interpolated = data_series.interpolate(method='time')
-    elif method == 'linear':
-        interpolated = data_series.interpolate(method='linear')
-    else:
-        interpolated = data_series.interpolate(method='nearest')
+    interpolated = data_series.interpolate(method='time').interpolate(method='linear')
     interpolated[interpolated < 0] = 0
     logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
@@ -65,31 +59,26 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
 
     fig.suptitle(f"Værdata for Gullingen værstasjon (SN46220)\nPeriode: {start_time.strftime('%d.%m.%Y %H:%M')} - {end_time.strftime('%d.%m.%Y %H:%M')}", fontsize=22, fontweight='bold')
 
-    # Plotting temperature data
     axes[0].plot(timestamps, temperatures, 'r-', linewidth=2)
     axes[0].set_ylabel('Temperatur (°C)', fontsize=16)
     axes[0].set_title('Temperatur', fontsize=18)
     axes[0].grid(True, linestyle=':', alpha=0.6)
 
-    # Plotting precipitation data
     axes[1].bar(timestamps, precipitations, width=0.02, align='center', color='b', alpha=0.7)
     axes[1].set_ylabel('Nedbør (mm)', fontsize=16)
     axes[1].set_title('Nedbør', fontsize=18)
     axes[1].grid(True, linestyle=':', alpha=0.6)
 
-    # Plotting estimated snow precipitation
     axes[2].bar(timestamps, snow_precipitations, width=0.02, align='center', color='m', alpha=0.7)
     axes[2].set_ylabel('Antatt snønedbør (mm)', fontsize=16)
     axes[2].set_title('Antatt snønedbør (Temp ≤ 1,5°C og økende snødybde)', fontsize=18)
     axes[2].grid(True, linestyle=':', alpha=0.6)
 
-    # Plotting snow depth data
     if not np.all(np.isnan(snow_depths)):
         axes[3].plot(timestamps, snow_depths, 'o', label='Rå snødybde data', markersize=4)
         axes[3].plot(timestamps, smoothed_snow_depths, '-', label='Glattet snødybde data', linewidth=2)
         axes[3].fill_between(timestamps, confidence_intervals[0], confidence_intervals[1], color='gray', alpha=0.2, label='Konfidensintervall')
 
-    # Highlighting missing data periods
     for period in missing_periods:
         axes[3].axvspan(period[0], period[1], color='yellow', alpha=0.3, label='Manglende data' if period == missing_periods[0] else "")
 
@@ -101,13 +90,11 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     max_snow_depth = np.nanmax(snow_depths)
     axes[3].set_ylim(0, max_snow_depth * 1.1 if not np.isnan(max_snow_depth) and max_snow_depth > 0 else 10)
 
-    # Plotting wind speed data
     axes[4].plot(timestamps, wind_speeds, 'g-', linewidth=2)
     axes[4].set_ylabel('Vindhastighet (m/s)', fontsize=16)
     axes[4].set_title('Vindhastighet', fontsize=18)
     axes[4].grid(True, linestyle=':', alpha=0.6)
 
-    # Plotting snow drift alarms
     alarm_times = [mdates.date2num(alarm) for alarm in alarms]
     axes[5].scatter(alarm_times, [1] * len(alarm_times), color='r', marker='x', s=100, label='Snøfokk-alarm')
     axes[5].set_yticks([])
@@ -174,10 +161,10 @@ def fetch_and_process_data(client_id, date_start, date_end):
 
         df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
 
-        df['temperature'] = handle_missing_data(df.index, df['temperature'], method='time')
-        df['precipitation'] = handle_missing_data(df.index, df['precipitation'], method='nearest')
-        df['snow_depth'] = handle_missing_data(df.index, df['snow_depth'], method='linear')
-        df['wind_speed'] = handle_missing_data(df.index, df['wind_speed'], method='time')
+        df['temperature'] = handle_missing_data(df.index, df['temperature'])
+        df['precipitation'] = handle_missing_data(df.index, df['precipitation'])
+        df['snow_depth'] = handle_missing_data(df.index, df['snow_depth'])
+        df['wind_speed'] = handle_missing_data(df.index, df['wind_speed'])
 
         timestamps = df.index.to_numpy()
         temperatures = df['temperature'].to_numpy()
@@ -254,7 +241,7 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
     logger.info("Completed function: calculate_snow_precipitations")
     return snow_precipitations
 
-# Function to identify snow drift alarms with new criteria
+# Function to identify snow drift alarms
 def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
     logger.info("Starting function: snow_drift_alarm")
     alarms = []
@@ -271,7 +258,8 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
 # Function to get date range based on user choice
 def get_date_range(choice):
     logger.info(f"Starting function: get_date_range with choice {choice}")
-    now = datetime.now(ZoneInfo("Europe/Oslo")).replace(minute=0, second=0, microsecond=0)
+    oslo_tz = pytz.timezone("Europe/Oslo")
+    now = datetime.now(oslo_tz).replace(minute=0, second=0, microsecond=0)
     if choice == '7d':
         start_time = now - timedelta(days=7)
     elif choice == '3d':
@@ -283,6 +271,9 @@ def get_date_range(choice):
     elif choice == '4h':
         start_time = now - timedelta(hours=4)
     elif choice == 'sf':
+        start_time = now - timedelta(days=(now.weekday() - 4) % 7)
+        start_time = start
+        elif choice == 'sf':
         start_time = now - timedelta(days=(now.weekday() - 4) % 7)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     elif choice == 'ss':
@@ -315,20 +306,18 @@ def main():
 
     period = st.selectbox(
         "Velg en periode:",
-        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"]
+        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag", "Egendefinert periode"]
     )
-
-    custom_period = st.checkbox("Egendefinert periode")
 
     client_id = st.secrets["api_keys"]["client_id"]
 
-    if custom_period:
+    if period == "Egendefinert periode":
         st.write("Format: DD-MM-ÅÅÅÅ TT:00 (Eksempel: 07-02-2024 07:00)")
         date_start = st.text_input("Starttidspunkt", "")
         date_end = st.text_input("Sluttidspunkt (eller 'nå')", "")
 
         try:
-            oslo_tz = ZoneInfo("Europe/Oslo")
+            oslo_tz = pytz.timezone("Europe/Oslo")
             if date_end.lower() == 'nå':
                 date_end_dt = datetime.now(oslo_tz).replace(minute=0, second=0, microsecond=0)
             else:
