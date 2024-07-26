@@ -1,35 +1,27 @@
-import streamlit as st
-import requests
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
-import streamlit.components.v1 as components
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
     snow_depths = np.array(snow_depths)
-    # Remove negative snow depths which are considered invalid
-    snow_depths[snow_depths < 0] = np.nan
+    snow_depths[snow_depths < 0] = np.nan  # Set negative values to NaN
 
     if np.all(np.isnan(snow_depths)):
         return snow_depths
 
-    # Calculate median and standard deviation for filtering outliers
     season_median = np.nanmedian(snow_depths)
     season_std = np.nanstd(snow_depths)
     lower_bound = max(0, season_median - 3 * season_std)
     upper_bound = season_median + 3 * season_std
 
-    # Set snow depths outside the bounds to NaN
     snow_depths[(snow_depths < lower_bound) | (snow_depths > upper_bound)] = np.nan
-
     return snow_depths
 
 # Function to smooth snow depths
@@ -38,20 +30,22 @@ def smooth_snow_depths(snow_depths):
         return snow_depths
 
     timestamps = np.arange(len(snow_depths))
-    # Using LOWESS to smooth the snow depths data
     smoothed = lowess(snow_depths, timestamps, frac=0.1, missing='drop')
     return smoothed[:, 1]
 
 # Function to handle missing data
 def handle_missing_data(timestamps, data):
     data_series = pd.Series(data, index=timestamps)
-    # Interpolating missing data using time and linear methods
     interpolated = data_series.interpolate(method='time').interpolate(method='linear')
     interpolated[interpolated < 0] = 0  # Ensure no negative values remain
     return interpolated.to_numpy()
 
 # Function to create a downloadable graph
 def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, start_time, end_time, data_points, missing_data_count):
+    # Debug: Ensure data lengths match
+    assert len(timestamps) == len(temperatures) == len(precipitations) == len(snow_depths) == len(wind_speeds), \
+        "Mismatch in data lengths for plotting."
+
     fig, axes = plt.subplots(6, 1, figsize=(14, 28), sharex=True)
     plt.rcParams.update({'font.size': 14})
 
@@ -144,7 +138,6 @@ def fetch_and_process_data(client_id, date_start, date_end):
         return None
 
     try:
-        # Process data
         timestamps, temperatures, precipitations, snow_depths, wind_speeds = [], [], [], [], []
         for item in data.get('data', []):
             time_str = item['referenceTime'].rstrip('Z')
@@ -179,6 +172,9 @@ def fetch_and_process_data(client_id, date_start, date_end):
         alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
         data_points, missing_data_count = len(timestamps), np.isnan(snow_depths).sum()
 
+        # Debugging log
+        print(f"Timestamps: {len(timestamps)}, Temperatures: {len(temperatures)}, Precipitations: {len(precipitations)}, Snow Depths: {len(snow_depths)}, Wind Speeds: {len(wind_speeds)}")
+
         img_str = create_downloadable_graph(
             timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
             wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms,
@@ -201,7 +197,6 @@ def identify_missing_periods(timestamps, snow_depths):
     if len(nan_indices) > 0:
         current_period = [timestamps[nan_indices[0]], timestamps[nan_indices[0]]]
         for idx in nan_indices[1:]:
-            # Check if the next NaN is contiguous to the current period
             if np.abs(timestamps[idx] - current_period[1]) <= np.timedelta64(1, 'h'):
                 current_period[1] = timestamps[idx]
             else:
@@ -223,8 +218,7 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
             snow_precipitations.append(0)
     return snow_precipitations
 
-# Function to identify snow drift alarms
-# Function to identify snow drift alarms with an enhanced scoring system
+# Enhanced snow drift alarm function
 def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
     alarms = []
     snow_depth_threshold = 0.2  # Reduced threshold for snow depth change
@@ -232,46 +226,21 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     temp_threshold = 0  # Increased temperature threshold to 0°C
     
     for i in range(wind_duration_threshold, len(timestamps)):
-        # Check if wind speed has been over 7 m/s for several hours
         if all(wind_speed > 7 for wind_speed in wind_speeds[i-wind_duration_threshold:i+1]):
-            # Check if there is minimal or no precipitation
             if precipitations[i] < 0.1:
-                # Check if there is a significant change in snow depth over the last 3 hours
                 if not np.isnan(snow_depths[i-3]) and not np.isnan(snow_depths[i]):
                     if abs(snow_depths[i] - snow_depths[i-3]) >= snow_depth_threshold:
-                        # Check if the temperature is below 0°C
                         if not np.isnan(temperatures[i]) and temperatures[i] < temp_threshold:
-                            # Calculate an alarm score based on how many criteria are met
                             alarm_score = 0
-                            alarm_score += min(1, (wind_speeds[i] - 7) / 5)  # Max score at 12 m/s
-                            alarm_score += min(1, abs(temperatures[i]) / 5)  # Max score at -5°C
+                            alarm_score += min(1, (wind_speeds[i] - 7) / 5)
+                            alarm_score += min(1, abs(temperatures[i]) / 5)
                             alarm_score += min(1, (0.1 - precipitations[i]) / 0.1)
-                            alarm_score += min(1, abs(snow_depths[i] - snow_depths[i-3]) / 1)  # Max score at 1 cm change
+                            alarm_score += min(1, abs(snow_depths[i] - snow_depths[i-3]) / 1)
                             
-                            # If the alarm score exceeds a certain threshold, add an alarm
                             if alarm_score > 2.5:  # Adjust this threshold as needed
                                 alarms.append((timestamps[i], alarm_score))
     
     return alarms
-
-
-
-# def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
-#     alarms = []
-
-#     for i in range(1, len(timestamps)):
-#         # Check if wind speed is over 5 m/s
-#         if wind_speeds[i] > 5:
-#             # Check if there is no precipitation
-#             if precipitations[i] == 0:
-#                 # Check if there is a change in snow depth
-#                 if not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]):
-#                     if snow_depths[i] != snow_depths[i-1]:
-#                         # Check if the temperature is below 0°C
-#                         if not np.isnan(temperatures[i]) and temperatures[i] < 0:
-#                             alarms.append(timestamps[i])
-
-#     return alarms
 
 # Function to get date range based on user choice
 def get_date_range(choice):
@@ -287,11 +256,9 @@ def get_date_range(choice):
     elif choice == '4h':
         start_time = now - timedelta(hours=4)
     elif choice == 'sf':
-        # Calculating the previous Friday
         start_time = now - timedelta(days=(now.weekday() - 4) % 7)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     elif choice == 'ss':
-        # Calculating the previous Sunday
         start_time = now - timedelta(days=now.weekday() + 1)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
@@ -301,7 +268,6 @@ def get_date_range(choice):
 
 # Function to export data to CSV
 def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms):
-    # Convert data to a DataFrame for easier CSV export
     df = pd.DataFrame({
         'Timestamp': timestamps,
         'Temperature': temperatures,
@@ -317,7 +283,6 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 def main():
     st.title("Værdata for Gullingen værstasjon (SN46220)")
     
-    # Default selection is "Siste 24 timer"
     period = st.selectbox(
         "Velg en periode:",
         ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"]
@@ -367,7 +332,6 @@ def main():
             st.write(f"Antall datapunkter: {len(timestamps)}")
             st.write(f"Manglende datapunkter: {len(missing_periods)} perioder med manglende data.")
 
-            # CSV download button
             csv_data = export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms)
             st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
 
@@ -376,9 +340,6 @@ def main():
 
     except Exception as e:
         st.error(f"Feil ved henting eller behandling av data: {e}")
-
-
-
 
 if __name__ == "__main__":
     main()
