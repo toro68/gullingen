@@ -215,6 +215,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
         st.error(f"Unexpected error: {e}")
         return None
 
+
 # Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
     missing_periods = []
