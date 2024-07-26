@@ -227,7 +227,7 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
 # Function to identify snow drift alarms
 def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
     alarms = []
-    snow_depth_threshold = 0.5  # Set your threshold for snow depth change
+    snow_depth_threshold = 0.2  # Set your threshold for snow depth change
 
     for i in range(1, len(timestamps)):
         # Check if wind speed is over 7 m/s
