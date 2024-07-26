@@ -10,6 +10,11 @@ from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
@@ -37,9 +42,15 @@ def smooth_snow_depths(snow_depths):
     return smoothed[:, 1]
 
 # Function to handle missing data
-def handle_missing_data(timestamps, data):
+def handle_missing_data(timestamps, data, method='time'):
     data_series = pd.Series(data, index=timestamps)
-    interpolated = data_series.interpolate(method='time').interpolate(method='linear')
+    if method == 'time':
+        interpolated = data_series.interpolate(method='time')
+    elif method == 'linear':
+        interpolated = data_series.interpolate(method='linear')
+    else:
+        interpolated = data_series.interpolate(method='nearest')
+    
     interpolated[interpolated < 0] = 0  # Ensure no negative values remain
     return interpolated.to_numpy()
 
@@ -108,7 +119,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     fig.tight_layout(rect=[0, 0.03, 1, 0.97])
 
     fig.text(0.99, 0.01, f'Data hentet: {datetime.now(ZoneInfo("Europe/Oslo")).strftime("%d.%m.%Y %H:%M")}\nAntall datapunkter: {data_points}\nManglende datapunkter: {missing_data_count}', ha='right', va='bottom', fontsize=12)
-    fig.text(0.5, 0.01, 'Snøfokk-alarm: Vind > 5 m/s, ingen nedbør, endring i snødybde, og temperatur < 0°C', ha='center', va='bottom', fontsize=12, color='red')
+    fig.text(0.5, 0.01, 'Snøfokk-alarm: Vind > 7 m/s, nedbør < 0.1 mm, endring i snødybde ≥ 0.2 cm, og temperatur < -2°C', ha='center', va='bottom', fontsize=12, color='red')
 
     img_buffer = io.BytesIO()
     plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
@@ -120,6 +131,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     return img_str
 
 # Function to fetch and process data
+@st.cache_data(ttl=3600)  # Cache the data for 1 hour
 def fetch_and_process_data(client_id, date_start, date_end):
     try:
         url = "https://frost.met.no/observations/v0.jsonld"
@@ -133,57 +145,36 @@ def fetch_and_process_data(client_id, date_start, date_end):
         response.raise_for_status()
         data = response.json()
     except requests.RequestException as e:
-        st.error(f"Request error: {e}")
+        logger.error(f"Request error: {e}")
         return None
 
     try:
-        timestamps, temperatures, precipitations, snow_depths, wind_speeds = [], [], [], [], []
-        for item in data.get('data', []):
-            time_str = item['referenceTime'].rstrip('Z')
-            time = datetime.fromisoformat(time_str)
-            observations = {obs['elementId']: obs['value'] for obs in item['observations']}
-            
-            timestamps.append(time)
-            temperatures.append(observations.get('air_temperature', np.nan))
-            precipitations.append(observations.get('sum(precipitation_amount PT1H)', np.nan))
-            snow_depths.append(observations.get('surface_snow_thickness', np.nan))
-            wind_speeds.append(observations.get('wind_speed', np.nan))
-
-        df = pd.DataFrame({
-            'timestamp': timestamps,
-            'temperature': temperatures,
-            'precipitation': precipitations,
-            'snow_depth': snow_depths,
-            'wind_speed': wind_speeds
-        }).set_index('timestamp')
+        df = pd.DataFrame([
+            {
+                'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
+                'temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'air_temperature'), np.nan),
+                'precipitation': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
+                'snow_depth': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
+                'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan)
+            }
+            for item in data.get('data', [])
+        ]).set_index('timestamp')
 
         # Ensure all datetime indices are timezone-aware
         df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
 
-        # Debug print to verify data
-        print(df.head())
+        # Handle missing data
+        df['temperature'] = handle_missing_data(df.index, df['temperature'], method='time')
+        df['precipitation'] = handle_missing_data(df.index, df['precipitation'], method='nearest')
+        df['snow_depth'] = handle_missing_data(df.index, df['snow_depth'], method='linear')
+        df['wind_speed'] = handle_missing_data(df.index, df['wind_speed'], method='time')
 
-        # Handle NaNs in the data
-        df['temperature'].fillna(-9999, inplace=True)  # Use -9999 as a sentinel value for missing temperatures
-        df['precipitation'].fillna(0, inplace=True)    # Assume no precipitation where missing
-        df['snow_depth'].fillna(0, inplace=True)       # Assume zero snow depth where missing
-        df['wind_speed'].fillna(-1, inplace=True)      # Use -1 as an invalid placeholder for wind speed
-
-        # Interpolating missing data
-        df = df.interpolate(method='time').fillna(method='ffill').fillna(method='bfill')
-
-        # Ensure all arrays are of the same length
         timestamps = df.index.to_numpy()
         temperatures = df['temperature'].to_numpy()
         precipitations = df['precipitation'].to_numpy()
         snow_depths = df['snow_depth'].to_numpy()
         wind_speeds = df['wind_speed'].to_numpy()
 
-        # Debug print to verify data lengths
-        print(f"Lengths - timestamps: {len(timestamps)}, temperatures: {len(temperatures)}, "
-              f"precipitations: {len(precipitations)}, snow_depths: {len(snow_depths)}, wind_speeds: {len(wind_speeds)}")
-
-        # Additional processing if required
         snow_depths = validate_snow_depths(snow_depths)
         smoothed_snow_depths = smooth_snow_depths(snow_depths)
 
@@ -206,13 +197,9 @@ def fetch_and_process_data(client_id, date_start, date_end):
 
         return img_str, timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, missing_periods, alarms
 
-    except KeyError as e:
-        st.error(f"Data processing error: Missing key {e}")
-        return None
     except Exception as e:
-        st.error(f"Unexpected error: {e}")
+        logger.error(f"Data processing error: {e}")
         return None
-
 
 # Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
@@ -247,24 +234,18 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     alarms = []
 
     for i in range(1, len(timestamps)):
-        # Check if wind speed is over 7 m/s
-        if wind_speeds[i] > 7:
-            # Check if precipitation is less than 0.1 mm
-            if precipitations[i] < 0.1:
-                # Check if there is a significant change in snow depth
-                if not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]):
-                    if abs(snow_depths[i] - snow_depths[i-1]) >= 0.2:
-                        # Check if the temperature is below -2°C
-                        if not np.isnan(temperatures[i]) and temperatures[i] < -2:
-                            alarms.append(timestamps[i])
+        if (wind_speeds[i] > 7 and
+            precipitations[i] < 0.1 and
+            not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
+            abs(snow_depths[i] - snow_depths[i-1]) >= 0.2 and
+            not np.isnan(temperatures[i]) and temperatures[i] < -2):
+            alarms.append(timestamps[i])
 
     return alarms
 
 # Function to get date range based on user choice
 def get_date_range(choice):
     now = datetime.now(ZoneInfo("Europe/Oslo")).replace(minute=0, second=0, microsecond=0)
-    start_time = None
-
     if choice == '7d':
         start_time = now - timedelta(days=7)
     elif choice == '3d':
@@ -281,10 +262,10 @@ def get_date_range(choice):
     elif choice == 'ss':
         start_time = now - timedelta(days=now.weekday() + 1)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        return None, None
 
-    if start_time:
-        return start_time.isoformat(), now.isoformat()
-    return None, None
+    return start_time.isoformat(), now.isoformat()
 
 # Function to export data to CSV
 def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms):
@@ -349,7 +330,9 @@ def main():
     st.write(f"Henter data fra {date_start_isoformat} til {date_end_isoformat}")
 
     try:
-        data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
+        with st.spinner('Henter og behandler data...'):
+            data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
+        
         if data:
             img_str, timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, missing_periods, alarms = data
 
@@ -362,10 +345,55 @@ def main():
             csv_data = export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms)
             st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
 
+            # Display summary statistics
+            st.subheader("Oppsummering av data")
+            summary_df = pd.DataFrame({
+                'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
+                'Temperatur (°C)': [
+                    f"{np.mean(temperatures):.1f}",
+                    f"{np.median(temperatures):.1f}",
+                    f"{np.min(temperatures):.1f}",
+                    f"{np.max(temperatures):.1f}"
+                ],
+                'Nedbør (mm)': [
+                    f"{np.mean(precipitations):.1f}",
+                    f"{np.median(precipitations):.1f}",
+                    f"{np.min(precipitations):.1f}",
+                    f"{np.max(precipitations):.1f}"
+                ],
+                'Snødybde (cm)': [
+                    f"{np.nanmean(snow_depths):.1f}",
+                    f"{np.nanmedian(snow_depths):.1f}",
+                    f"{np.nanmin(snow_depths):.1f}",
+                    f"{np.nanmax(snow_depths):.1f}"
+                ],
+                'Vindhastighet (m/s)': [
+                    f"{np.mean(wind_speeds):.1f}",
+                    f"{np.median(wind_speeds):.1f}",
+                    f"{np.min(wind_speeds):.1f}",
+                    f"{np.max(wind_speeds):.1f}"
+                ]
+            })
+            st.table(summary_df)
+
+            # Display snow drift alarms
+            st.subheader("Snøfokk-alarmer")
+            if alarms:
+                alarm_df = pd.DataFrame({
+                    'Tidspunkt': alarms,
+                    'Temperatur (°C)': [temperatures[np.where(timestamps == alarm)[0][0]] for alarm in alarms],
+                    'Vindhastighet (m/s)': [wind_speeds[np.where(timestamps == alarm)[0][0]] for alarm in alarms],
+                    'Snødybde (cm)': [snow_depths[np.where(timestamps == alarm)[0][0]] for alarm in alarms]
+                })
+                st.dataframe(alarm_df)
+            else:
+                st.write("Ingen snøfokk-alarmer i den valgte perioden.")
+
         else:
             st.error("Ingen data tilgjengelig for valgt periode.")
 
     except Exception as e:
+        logger.error(f"Feil ved henting eller behandling av data: {e}")
         st.error(f"Feil ved henting eller behandling av data: {e}")
 
 if __name__ == "__main__":
