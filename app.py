@@ -156,71 +156,71 @@ def fetch_and_process_data(client_id, date_start, date_end):
         logger.error(f"Request error: {e}")
         return None
 
-    try {
-        df = pd.DataFrame([
-            {
-                'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
-                'temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'air_temperature'), np.nan),
-                'precipitation': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
-                'snow_depth': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
-                'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan)
-            }
-            for item in data.get('data', [])
-        ]).set_index('timestamp')
-
-        logger.info(f"Created DataFrame with shape: {df.shape}")
-        logger.info(f"DataFrame columns: {df.columns}")
-        logger.info(f"Sample of temperature data: {df['temperature'].head()}")
-
-        df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
-
-        df['temperature'] = handle_missing_data(df.index, df['temperature'], method='time')
-        df['precipitation'] = handle_missing_data(df.index, df['precipitation'], method='nearest')
-        df['snow_depth'] = handle_missing_data(df.index, df['snow_depth'], method='linear')
-        df['wind_speed'] = handle_missing_data(df.index, df['wind_speed'], method='time')
-
-        timestamps = df.index.to_numpy()
-        temperatures = df['temperature'].to_numpy()
-        precipitations = df['precipitation'].to_numpy()
-        snow_depths = df['snow_depth'].to_numpy()
-        wind_speeds = df['wind_speed'].to_numpy()
-
-        snow_depths = validate_snow_depths(snow_depths)
-        smoothed_snow_depths = smooth_snow_depths(snow_depths)
-
-        confidence_intervals = (
-            smoothed_snow_depths - 1.96 * np.nanstd(snow_depths),
-            smoothed_snow_depths + 1.96 * np.nanstd(snow_depths)
-        )
-        missing_periods = identify_missing_periods(timestamps, snow_depths)
-        snow_precipitations = calculate_snow_precipitations(temperatures, precipitations, snow_depths)
-
-        alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
-        data_points = len(timestamps)
-        missing_data_count = np.isnan(snow_depths).sum()
-
-        img_str = create_downloadable_graph(
-            timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
-            wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms,
-            pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
-        )
-
-        logger.info("Completed function: fetch_and_process_data")
-        return {
-            'img_str': img_str,
-            'timestamps': timestamps,
-            'temperatures': temperatures,
-            'precipitations': precipitations,
-            'snow_depths': snow_depths,
-            'snow_precipitations': snow_precipitations,
-            'wind_speeds': wind_speeds,
-            'missing_periods': missing_periods,
-            'alarms': alarms
+    try:
+    df = pd.DataFrame([
+        {
+            'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
+            'temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'air_temperature'), np.nan),
+            'precipitation': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
+            'snow_depth': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
+            'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan)
         }
+        for item in data.get('data', [])
+    ]).set_index('timestamp')
 
-    except Exception as e:
-        logger.error(f"Data processing error: {e}")
-        return None
+    logger.info(f"Created DataFrame with shape: {df.shape}")
+    logger.info(f"DataFrame columns: {df.columns}")
+    logger.info(f"Sample of temperature data: {df['temperature'].head()}")
+
+    df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
+
+    df['temperature'] = handle_missing_data(df.index, df['temperature'], method='time')
+    df['precipitation'] = handle_missing_data(df.index, df['precipitation'], method='nearest')
+    df['snow_depth'] = handle_missing_data(df.index, df['snow_depth'], method='linear')
+    df['wind_speed'] = handle_missing_data(df.index, df['wind_speed'], method='time')
+
+    timestamps = df.index.to_numpy()
+    temperatures = df['temperature'].to_numpy()
+    precipitations = df['precipitation'].to_numpy()
+    snow_depths = df['snow_depth'].to_numpy()
+    wind_speeds = df['wind_speed'].to_numpy()
+
+    snow_depths = validate_snow_depths(snow_depths)
+    smoothed_snow_depths = smooth_snow_depths(snow_depths)
+
+    confidence_intervals = (
+        smoothed_snow_depths - 1.96 * np.nanstd(snow_depths),
+        smoothed_snow_depths + 1.96 * np.nanstd(snow_depths)
+    )
+    missing_periods = identify_missing_periods(timestamps, snow_depths)
+    snow_precipitations = calculate_snow_precipitations(temperatures, precipitations, snow_depths)
+
+    alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
+    data_points = len(timestamps)
+    missing_data_count = np.isnan(snow_depths).sum()
+
+    img_str = create_downloadable_graph(
+        timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
+        wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms,
+        pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
+    )
+
+    logger.info("Completed function: fetch_and_process_data")
+    return {
+        'img_str': img_str,
+        'timestamps': timestamps,
+        'temperatures': temperatures,
+        'precipitations': precipitations,
+        'snow_depths': snow_depths,
+        'snow_precipitations': snow_precipitations,
+        'wind_speeds': wind_speeds,
+        'missing_periods': missing_periods,
+        'alarms': alarms
+    }
+
+except Exception as e:
+    logger.error(f"Data processing error: {e}")
+    return None
 
 # Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
