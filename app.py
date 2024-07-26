@@ -156,7 +156,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
         logger.error(f"Request error: {e}")
         return None
 
-    try:
+    try {
         df = pd.DataFrame([
             {
                 'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
@@ -431,4 +431,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
