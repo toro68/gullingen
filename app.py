@@ -224,24 +224,36 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
     return snow_precipitations
 
 # Function to identify snow drift alarms
-# Function to identify snow drift alarms
+# Function to identify snow drift alarms with an enhanced scoring system
 def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
     alarms = []
-    snow_depth_threshold = 0.2  # Set your threshold for snow depth change
-
-    for i in range(1, len(timestamps)):
-        # Check if wind speed is over 7 m/s
-        if wind_speeds[i] > 7:
+    snow_depth_threshold = 0.2  # Reduced threshold for snow depth change
+    wind_duration_threshold = 3  # Number of hours with sustained strong winds
+    temp_threshold = 0  # Increased temperature threshold to 0°C
+    
+    for i in range(wind_duration_threshold, len(timestamps)):
+        # Check if wind speed has been over 7 m/s for several hours
+        if all(wind_speed > 7 for wind_speed in wind_speeds[i-wind_duration_threshold:i+1]):
             # Check if there is minimal or no precipitation
             if precipitations[i] < 0.1:
-                # Check if there is a significant change in snow depth (positive or negative)
-                if not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]):
-                    if abs(snow_depths[i] - snow_depths[i-1]) >= snow_depth_threshold:
-                        # Check if the temperature is below -2°C
-                        if not np.isnan(temperatures[i]) and temperatures[i] < -2:
-                            alarms.append(timestamps[i])
-
+                # Check if there is a significant change in snow depth over the last 3 hours
+                if not np.isnan(snow_depths[i-3]) and not np.isnan(snow_depths[i]):
+                    if abs(snow_depths[i] - snow_depths[i-3]) >= snow_depth_threshold:
+                        # Check if the temperature is below 0°C
+                        if not np.isnan(temperatures[i]) and temperatures[i] < temp_threshold:
+                            # Calculate an alarm score based on how many criteria are met
+                            alarm_score = 0
+                            alarm_score += min(1, (wind_speeds[i] - 7) / 5)  # Max score at 12 m/s
+                            alarm_score += min(1, abs(temperatures[i]) / 5)  # Max score at -5°C
+                            alarm_score += min(1, (0.1 - precipitations[i]) / 0.1)
+                            alarm_score += min(1, abs(snow_depths[i] - snow_depths[i-3]) / 1)  # Max score at 1 cm change
+                            
+                            # If the alarm score exceeds a certain threshold, add an alarm
+                            if alarm_score > 2.5:  # Adjust this threshold as needed
+                                alarms.append((timestamps[i], alarm_score))
+    
     return alarms
+
 
 
 # def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
