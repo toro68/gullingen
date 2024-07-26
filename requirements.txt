@@ -1,4 +1,4 @@
-Bottleneck @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_2bxpizxa3c/croot/bottleneck_1707864819812/work
+# Bottleneck @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_2bxpizxa3c/croot/bottleneck_1707864819812/work
 contourpy @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_041uwyxdzo/croot/contourpy_1700583585236/work
 cycler @ file:///tmp/build/80754af9/cycler_1637851556182/work
 fonttools @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_60c8ux4mkl/croot/fonttools_1713551354374/work
@@ -6,12 +6,12 @@ importlib_resources @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h000
 kiwisolver @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_93o8te804v/croot/kiwisolver_1672387163224/work
 matplotlib==3.7.1
 numexpr @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_45yefq0kt6/croot/numexpr_1696515289183/work
-numpy @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_a51i_mbs7m/croot/numpy_and_numpy_base_1708638620867/work/dist/numpy-1.26.4-cp39-cp39-macosx_11_0_arm64.whl#sha256=829e20a6c33ce51c1a93497d06cb4af22d84caa54a431ea062765da3134e5287
+# numpy @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_a51i_mbs7m/croot/numpy_and_numpy_base_1708638620867/work/dist/numpy-1.26.4-cp39-cp39-macosx_11_0_arm64.whl#sha256=829e20a6c33ce51c1a93497d06cb4af22d84caa54a431ea062765da3134e5287
 packaging @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_81ri4yfpjw/croot/packaging_1720101866878/work
 pandas @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_b53hgou29t/croot/pandas_1718308972393/work/dist/pandas-2.2.2-cp39-cp39-macosx_11_0_arm64.whl#sha256=13085868c28d558e3214942c5c6b532fa6c8f9f47ac098152cd08433eb586ed7
 patsy @ file:///home/conda/feedstock_root/build_artifacts/patsy_1704469236901/work
 pillow @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_617xe_y58w/croot/pillow_1721059447446/work
-plotly @ file:///home/conda/feedstock_root/build_artifacts/plotly_1721758163679/work
+# plotly @ file:///home/conda/feedstock_root/build_artifacts/plotly_1721758163679/work
 pyparsing @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_3b_3vxnd07/croots/recipe/pyparsing_1661452540919/work
 python-dateutil @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_66ud1l42_h/croot/python-dateutil_1716495741162/work
 pytz @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_a4b76c83ik/croot/pytz_1713974318928/work
@@ -23,3 +23,8 @@ tornado @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_a4
 tzdata==2024.1
 unicodedata2 @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_a3epjto7gs/croot/unicodedata2_1713212955584/work
 zipp @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_31jm3q76eq/croot/zipp_1704206913245/work
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.11.3
+plotly==5.23.0
+streamlit==1.37.0
