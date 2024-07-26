@@ -228,18 +228,35 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     alarms = []
 
     for i in range(1, len(timestamps)):
-        # Check if wind speed is over 5 m/s
-        if wind_speeds[i] > 5:
-            # Check if there is no precipitation
-            if precipitations[i] == 0:
-                # Check if there is a change in snow depth
+        # Check if wind speed is over 7 m/s
+        if wind_speeds[i] > 7:
+            # Check if there is minimal or no precipitation
+            if precipitations[i] < 0.1:
+                # Check if there is a significant change in snow depth
                 if not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]):
-                    if snow_depths[i] != snow_depths[i-1]:
-                        # Check if the temperature is below 0°C
-                        if not np.isnan(temperatures[i]) and temperatures[i] < 0:
+                    if snow_depths[i] - snow_depths[i-1] >= 0.5:
+                        # Check if the temperature is below -2°C
+                        if not np.isnan(temperatures[i]) and temperatures[i] < -2:
                             alarms.append(timestamps[i])
 
     return alarms
+
+# def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
+#     alarms = []
+
+#     for i in range(1, len(timestamps)):
+#         # Check if wind speed is over 5 m/s
+#         if wind_speeds[i] > 5:
+#             # Check if there is no precipitation
+#             if precipitations[i] == 0:
+#                 # Check if there is a change in snow depth
+#                 if not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]):
+#                     if snow_depths[i] != snow_depths[i-1]:
+#                         # Check if the temperature is below 0°C
+#                         if not np.isnan(temperatures[i]) and temperatures[i] < 0:
+#                             alarms.append(timestamps[i])
+
+#     return alarms
 
 # Function to get date range based on user choice
 def get_date_range(choice):
@@ -350,13 +367,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# New criteria for Snowfokk-alarm:
-# Wind speed > 7 m/s
-# Temperature < -2°C
-# No or minimal precipitation (e.g., < 0.1 mm/h)
-# Positive change in snow depth over a short period (e.g., ≥ 0.5 cm/h)
-def check_snowfokk_alarm(wind_speed, temperature, precipitation, snow_depth_change):
-    if wind_speed > 7 and temperature < -2 and precipitation < 0.1 and snow_depth_change >= 0.5:
-        return True
-    return False
