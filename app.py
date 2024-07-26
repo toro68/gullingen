@@ -67,6 +67,9 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     axes[0].set_title('Temperatur', fontsize=18)
     axes[0].grid(True, linestyle=':', alpha=0.6)
 
+    # Debugging print for temperature data
+    print(f"Temperatures: {temperatures}")
+    
     # Plotting precipitation data
     axes[1].bar(timestamps, precipitations, width=0.02, align='center', color='b', alpha=0.7)
     axes[1].set_ylabel('Nedbør (mm)', fontsize=16)
@@ -104,13 +107,15 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     axes[4].grid(True, linestyle=':', alpha=0.6)
 
     # Plotting snow drift alarms
-    alarm_times = [mdates.date2num(alarm) for alarm in alarms]
-    axes[5].scatter(alarm_times, [1] * len(alarm_times), color='r', marker='x', s=100, label='Snøfokk-alarm')
-    axes[5].set_yticks([])
-    axes[5].set_title('Snøfokk-alarmer', fontsize=18)
-    axes[5].grid(True, linestyle=':', alpha=0.6)
-    axes[5].legend(loc='upper right')
-
+    if alarms:
+        alarm_times = [mdates.date2num(alarm[0]) for alarm in alarms]
+        alarm_scores = [alarm[1] for alarm in alarms]
+        axes[5].scatter(alarm_times, alarm_scores, color='r', marker='x', s=100, label='Snøfokk-alarm')
+        axes[5].set_yticks([])
+        axes[5].set_title('Snøfokk-alarmer', fontsize=18)
+        axes[5].grid(True, linestyle=':', alpha=0.6)
+        axes[5].legend(loc='upper right')
+    
     for ax in axes[:6]:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m %H:%M'))
         ax.tick_params(axis='x', rotation=45, labelsize=12)
@@ -119,7 +124,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     fig.tight_layout(rect=[0, 0.03, 1, 0.97])
 
     fig.text(0.99, 0.01, f'Data hentet: {datetime.now(ZoneInfo("Europe/Oslo")).strftime("%d.%m.%Y %H:%M")}\nAntall datapunkter: {data_points}\nManglende datapunkter: {missing_data_count}', ha='right', va='bottom', fontsize=12)
-    fig.text(0.5, 0.01, 'Snøfokk-alarm: Vind > 7 m/s, nedbør < 0.1 mm, endring i snødybde ≥ 0.2 cm, og temperatur < -2°C', ha='center', va='bottom', fontsize=12, color='red')
+    fig.text(0.5, 0.01, 'Snøfokk-alarm: Vind > 5 m/s, ingen nedbør, endring i snødybde, og temperatur < 0°C', ha='center', va='bottom', fontsize=12, color='red')
 
     img_buffer = io.BytesIO()
     plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
@@ -129,6 +134,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     plt.close(fig)
 
     return img_str
+
 
 # Function to fetch and process data
 @st.cache_data(ttl=3600)  # Cache the data for 1 hour
