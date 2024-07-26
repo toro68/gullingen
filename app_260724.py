@@ -350,13 +350,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# New criteria for Snowfokk-alarm:
-# Wind speed > 7 m/s
-# Temperature < -2°C
-# No or minimal precipitation (e.g., < 0.1 mm/h)
-# Positive change in snow depth over a short period (e.g., ≥ 0.5 cm/h)
-def check_snowfokk_alarm(wind_speed, temperature, precipitation, snow_depth_change):
-    if wind_speed > 7 and temperature < -2 and precipitation < 0.1 and snow_depth_change >= 0.5:
-        return True
-    return False
