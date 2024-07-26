@@ -43,15 +43,18 @@ def smooth_snow_depths(snow_depths):
     logger.info("Completed function: smooth_snow_depths")
     return smoothed[:, 1]
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 # Function to handle missing data
-def handle_missing_data(data_series):
-    logger.info("Handling missing data")
-    interpolated = data_series.interpolate(method='time').fillna(method='bfill').fillna(method='ffill')
+def handle_missing_data(timestamps, data, method='time'):
+    logger.info(f"Starting function: handle_missing_data with method {method}")
+    data_series = pd.Series(data, index=timestamps)
+    if method == 'time':
+        interpolated = data_series.interpolate(method='time')
+    elif method == 'linear':
+        interpolated = data_series.interpolate(method='linear')
+    else:
+        interpolated = data_series.interpolate(method='nearest')
     interpolated[interpolated < 0] = 0
+    logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
 
 # Function to create a downloadable graph
@@ -135,37 +138,89 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
 # Function to fetch and process data
 @st.cache_data(ttl=3600)
 def fetch_and_process_data(client_id, date_start, date_end):
-    logger.info("Starting data fetch")
-    url = "https://frost.met.no/observations/v0.jsonld"
-    params = {
-        "sources": "SN46220",
-        "elements": "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_speed",
-        "timeresolutions": "PT1H",
-        "referencetime": f"{date_start}/{date_end}"
-    }
-    response = requests.get(url, params=params, auth=(client_id, ""))
-    data = response.json()
-
-    df = pd.DataFrame([
-        {
-            'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
-            'temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'air_temperature'), np.nan),
-            'precipitation': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
-            'snow_depth': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
-            'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan)
+    logger.info("Starting function: fetch_and_process_data")
+    try:
+        url = "https://frost.met.no/observations/v0.jsonld"
+        params = {
+            "sources": "SN46220",
+            "elements": "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_speed",
+            "timeresolutions": "PT1H",
+            "referencetime": f"{date_start}/{date_end}"
         }
-        for item in data.get('data', [])
-    ]).set_index('timestamp')
+        logger.info(f"Sending request with params: {params}")
+        response = requests.get(url, params=params, auth=(client_id, ""))
+        response.raise_for_status()
+        data = response.json()
+        logger.info(f"Received data with {len(data.get('data', []))} entries")
+    except requests.RequestException as e:
+        logger.error(f"Request error: {e}")
+        return None
 
-    df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
-    
-    # Handle missing data
-    df['temperature'] = handle_missing_data(df['temperature'])
-    df['precipitation'] = handle_missing_data(df['precipitation'])
-    df['snow_depth'] = handle_missing_data(df['snow_depth'])
-    df['wind_speed'] = handle_missing_data(df['wind_speed'])
+    try:
+        df = pd.DataFrame([
+            {
+                'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
+                'temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'air_temperature'), np.nan),
+                'precipitation': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
+                'snow_depth': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
+                'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan)
+            }
+            for item in data.get('data', [])
+        ]).set_index('timestamp')
 
-    return df
+        logger.info(f"Created DataFrame with shape: {df.shape}")
+        logger.info(f"DataFrame columns: {df.columns}")
+        logger.info(f"Sample of temperature data: {df['temperature'].head()}")
+
+        df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
+
+        df['temperature'] = handle_missing_data(df.index, df['temperature'], method='time')
+        df['precipitation'] = handle_missing_data(df.index, df['precipitation'], method='nearest')
+        df['snow_depth'] = handle_missing_data(df.index, df['snow_depth'], method='linear')
+        df['wind_speed'] = handle_missing_data(df.index, df['wind_speed'], method='time')
+
+        timestamps = df.index.to_numpy()
+        temperatures = df['temperature'].to_numpy()
+        precipitations = df['precipitation'].to_numpy()
+        snow_depths = df['snow_depth'].to_numpy()
+        wind_speeds = df['wind_speed'].to_numpy()
+
+        snow_depths = validate_snow_depths(snow_depths)
+        smoothed_snow_depths = smooth_snow_depths(snow_depths)
+
+        confidence_intervals = (
+            smoothed_snow_depths - 1.96 * np.nanstd(snow_depths),
+            smoothed_snow_depths + 1.96 * np.nanstd(snow_depths)
+        )
+        missing_periods = identify_missing_periods(timestamps, snow_depths)
+        snow_precipitations = calculate_snow_precipitations(temperatures, precipitations, snow_depths)
+
+        alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
+        data_points = len(timestamps)
+        missing_data_count = np.isnan(snow_depths).sum()
+
+        img_str = create_downloadable_graph(
+            timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
+            wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms,
+            pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
+        )
+
+        logger.info("Completed function: fetch_and_process_data")
+        return {
+            'img_str': img_str,
+            'timestamps': timestamps,
+            'temperatures': temperatures,
+            'precipitations': precipitations,
+            'snow_depths': snow_depths,
+            'snow_precipitations': snow_precipitations,
+            'wind_speeds': wind_speeds,
+            'missing_periods': missing_periods,
+            'alarms': alarms
+        }
+
+    except Exception as e:
+        logger.error(f"Data processing error: {e}")
+        return None
 
 # Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
@@ -258,7 +313,11 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 def main():
     st.title("Værdata for Gullingen værstasjon (SN46220)")
 
-    period = st.selectbox("Velg en periode:", ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"])
+    period = st.selectbox(
+        "Velg en periode:",
+        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"]
+    )
+
     custom_period = st.checkbox("Egendefinert periode")
 
     client_id = st.secrets["api_keys"]["client_id"]
@@ -306,20 +365,66 @@ def main():
 
     try:
         with st.spinner('Henter og behandler data...'):
-            df = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
+            data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
         
-        if df is not None and not df.empty:
-            fig, ax = plt.subplots(figsize=(14, 7))
-            ax.plot(df.index, df['temperature'], 'r-', label='Temperatur')
-            ax.set_title("Temperatur")
-            ax.set_xlabel("Tid")
-            ax.set_ylabel("Temperatur (°C)")
-            ax.legend()
-            ax.grid(True)
+        if data and 'img_str' in data:
+            st.image(f"data:image/png;base64,{data['img_str']}", use_column_width=True)
+            st.download_button(label="Last ned grafen", data=base64.b64decode(data['img_str']), file_name="weather_data.png", mime="image/png")
 
-            st.pyplot(fig)
+            st.write(f"Antall datapunkter: {len(data['timestamps'])}")
+            st.write(f"Manglende datapunkter: {len(data['missing_periods'])} perioder med manglende data.")
+
+            csv_data = export_to_csv(data['timestamps'], data['temperatures'], data['precipitations'], 
+                                     data['snow_depths'], data['snow_precipitations'], data['wind_speeds'], data['alarms'])
+            st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
+
+            # Display summary statistics
+            st.subheader("Oppsummering av data")
+            summary_df = pd.DataFrame({
+                'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
+                'Temperatur (°C)': [
+                    f"{np.mean(data['temperatures']):.1f}",
+                    f"{np.median(data['temperatures']):.1f}",
+                    f"{np.min(data['temperatures']):.1f}",
+                    f"{np.max(data['temperatures']):.1f}"
+                ],
+                'Nedbør (mm)': [
+                    f"{np.mean(data['precipitations']):.1f}",
+                    f"{np.median(data['precipitations']):.1f}",
+                    f"{np.min(data['precipitations']):.1f}",
+                    f"{np.max(data['precipitations']):.1f}"
+                ],
+                'Snødybde (cm)': [
+                    f"{np.nanmean(data['snow_depths']):.1f}",
+                    f"{np.nanmedian(data['snow_depths']):.1f}",
+                    f"{np.nanmin(data['snow_depths']):.1f}",
+                    f"{np.nanmax(data['snow_depths']):.1f}"
+                ],
+                'Vindhastighet (m/s)': [
+                    f"{np.mean(data['wind_speeds']):.1f}",
+                    f"{np.median(data['wind_speeds']):.1f}",
+                    f"{np.min(data['wind_speeds']):.1f}",
+                    f"{np.max(data['wind_speeds']):.1f}"
+                ]
+            })
+            st.table(summary_df)
+
+            # Display snow drift alarms
+            st.subheader("Snøfokk-alarmer")
+            if data['alarms']:
+                alarm_df = pd.DataFrame({
+                    'Tidspunkt': data['alarms'],
+                    'Temperatur (°C)': [data['temperatures'][np.where(data['timestamps'] == alarm)[0][0]] for alarm in data['alarms']],
+                    'Vindhastighet (m/s)': [data['wind_speeds'][np.where(data['timestamps'] == alarm)[0][0]] for alarm in data['alarms']],
+                    'Snødybde (cm)': [data['snow_depths'][np.where(data['timestamps'] == alarm)[0][0]] for alarm in data['alarms']]
+                })
+                st.dataframe(alarm_df)
+            else:
+                st.write("Ingen snøfokk-alarmer i den valgte perioden.")
+
         else:
-            st.error("Ingen data tilgjengelig for valgt periode.")
+            st.error("Ingen data eller grafbilde tilgjengelig for valgt periode.")
+
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
         st.error(f"Feil ved henting eller behandling av data: {e}")
