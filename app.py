@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from dateutil import parser
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
@@ -11,6 +12,7 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
 import logging
+import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -394,7 +396,7 @@ def main():
                 ],
                 'Snødybde (cm)': [
                     f"{np.nanmean(data['snow_depths']):.1f}",
-                    f"{np.nanmedian(data['snow_depths'])::.1f}",
+                    f"{np.nanmedian(data['snow_depths']):.1f}",
                     f"{np.nanmin(data['snow_depths']):.1f}",
                     f"{np.nanmax(data['snow_depths']):.1f}"
                 ],
