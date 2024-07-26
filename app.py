@@ -130,7 +130,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
             "referencetime": f"{date_start}/{date_end}"
         }
         response = requests.get(url, params=params, auth=(client_id, ""))
-        response.raise_for_status()  # Raise an error for bad status codes
+        response.raise_for_status()
         data = response.json()
     except requests.RequestException as e:
         st.error(f"Request error: {e}")
@@ -145,7 +145,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
             
             timestamps.append(time)
             temperatures.append(observations.get('air_temperature', np.nan))
-            precipitations.append(observations.get('sum(precipitation_amount PT1H)', 0))
+            precipitations.append(observations.get('sum(precipitation_amount PT1H)', np.nan))
             snow_depths.append(observations.get('surface_snow_thickness', np.nan))
             wind_speeds.append(observations.get('wind_speed', np.nan))
 
@@ -157,27 +157,48 @@ def fetch_and_process_data(client_id, date_start, date_end):
             'wind_speed': wind_speeds
         }).set_index('timestamp')
 
-        df = df.resample('H').asfreq()
-        timestamps, temperatures, precipitations, snow_depths, wind_speeds = df.index.to_numpy(), df['temperature'].to_numpy(), df['precipitation'].to_numpy(), df['snow_depth'].to_numpy(), df['wind_speed'].to_numpy()
+        # Ensure all datetime indices are timezone-aware
+        df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
 
-        # Replace NaNs in critical arrays with appropriate default values
-        wind_speeds = np.nan_to_num(wind_speeds, nan=-1)  # Use -1 as a placeholder for invalid data
-        temperatures = np.nan_to_num(temperatures, nan=-9999)  # Use -9999 as a sentinel value
-        precipitations = np.nan_to_num(precipitations, nan=0)  # Assume no precipitation if data is missing
+        # Debug print to verify data
+        print(df.head())
 
+        # Handle NaNs in the data
+        df['temperature'].fillna(-9999, inplace=True)  # Use -9999 as a sentinel value for missing temperatures
+        df['precipitation'].fillna(0, inplace=True)    # Assume no precipitation where missing
+        df['snow_depth'].fillna(0, inplace=True)       # Assume zero snow depth where missing
+        df['wind_speed'].fillna(-1, inplace=True)      # Use -1 as an invalid placeholder for wind speed
+
+        # Handle missing data (interpolate or use other methods)
+        df = df.interpolate(method='time').fillna(method='ffill').fillna(method='bfill')
+
+        timestamps = df.index.to_numpy()
+        temperatures = df['temperature'].to_numpy()
+        precipitations = df['precipitation'].to_numpy()
+        snow_depths = df['snow_depth'].to_numpy()
+        wind_speeds = df['wind_speed'].to_numpy()
+
+        # Debug print to verify NaNs have been handled
+        print("Post-processing check:")
+        print(f"NaNs in temperatures: {np.isnan(temperatures).sum()}")
+        print(f"NaNs in precipitations: {np.isnan(precipitations).sum()}")
+        print(f"NaNs in snow_depths: {np.isnan(snow_depths).sum()}")
+        print(f"NaNs in wind_speeds: {np.isnan(wind_speeds).sum()}")
+
+        # Additional processing if required
         snow_depths = validate_snow_depths(snow_depths)
-        snow_depths = handle_missing_data(timestamps, snow_depths)
         smoothed_snow_depths = smooth_snow_depths(snow_depths)
 
-        confidence_intervals = (smoothed_snow_depths - 1.96 * np.nanstd(snow_depths), smoothed_snow_depths + 1.96 * np.nanstd(snow_depths))
+        confidence_intervals = (
+            smoothed_snow_depths - 1.96 * np.nanstd(snow_depths),
+            smoothed_snow_depths + 1.96 * np.nanstd(snow_depths)
+        )
         missing_periods = identify_missing_periods(timestamps, snow_depths)
         snow_precipitations = calculate_snow_precipitations(temperatures, precipitations, snow_depths)
 
         alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
-        data_points, missing_data_count = len(timestamps), np.isnan(snow_depths).sum()
-
-        # Debugging log
-        print(f"Timestamps: {len(timestamps)}, Temperatures: {len(temperatures)}, Precipitations: {len(precipitations)}, Snow Depths: {len(snow_depths)}, Wind Speeds: {len(wind_speeds)}")
+        data_points = len(timestamps)
+        missing_data_count = np.isnan(snow_depths).sum()
 
         img_str = create_downloadable_graph(
             timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
