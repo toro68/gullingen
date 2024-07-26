@@ -254,9 +254,11 @@ def get_date_range(choice):
     elif choice == '4h':
         start_time = now - timedelta(hours=4)
     elif choice == 'sf':
+        # Ensure correct handling of the start of the week (Monday)
         start_time = now - timedelta(days=(now.weekday() - 4) % 7)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     elif choice == 'ss':
+        # Ensure correct handling of the start of the week (Sunday)
         start_time = now - timedelta(days=now.weekday() + 1)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
