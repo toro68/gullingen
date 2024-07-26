@@ -115,7 +115,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     fig.tight_layout(rect=[0, 0.03, 1, 0.97])
 
     fig.text(0.99, 0.01, f'Data hentet: {datetime.now(ZoneInfo("Europe/Oslo")).strftime("%d.%m.%Y %H:%M")}\nAntall datapunkter: {data_points}\nManglende datapunkter: {missing_data_count}', ha='right', va='bottom', fontsize=12)
-    fig.text(0.5, 0.01, 'Snøfokk-alarm: Vind > 5 m/s, ingen nedbør, endring i snødybde, og temperatur < 0°C', ha='center', va='bottom', fontsize=12, color='red')
+    fig.text(0.5, 0.01, 'Snøfokk-alarm: Vind > 7 m/s, endring i snødybde, og temperatur under -1°C', ha='center', va='bottom', fontsize=12, color='red')
 
     img_buffer = io.BytesIO()
     plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
@@ -224,6 +224,13 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
     return snow_precipitations
 
 # Function to identify snow drift alarms
+# Systemet analyserer værdata time for time og ser etter spesifikke forhold som ofte er forbundet med snøfokk. Her er hva systemet ser etter:
+# Sterk vind: Vindhastigheter over 7 meter per sekund (ca. 25 km/t).
+# Lite eller ingen ny nedbør: Mindre enn 0,1 mm nedbør i løpet av en time.
+# Endringer i snødybden: En økning eller reduksjon på minst 0,2 cm, som kan tyde på at snø flyttes rundt.
+# Kalde temperaturer: Under -1°C.
+
+# Når alle disse forholdene oppstår samtidig, utløser systemet en snøfokk-alarm. 
 def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
     alarms = []
 
@@ -235,8 +242,8 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
                 # Check if there is a significant change in snow depth
                 if not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]):
                     if abs(snow_depths[i] - snow_depths[i-1]) >= 0.2:
-                        # Check if the temperature is below -2°C
-                        if not np.isnan(temperatures[i]) and temperatures[i] < -2:
+                        # Check if the temperature is below -1°C
+                        if not np.isnan(temperatures[i]) and temperatures[i] < -1:
                             alarms.append(timestamps[i])
 
     return alarms
