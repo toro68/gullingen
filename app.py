@@ -346,11 +346,19 @@ def main():
         st.error(f"Feil ved henting eller behandling av data: {e}")
 
     # Adding the iframe at the bottom of the page
-    components.iframe(
-        src="https://plowman-new.xn--snbryting-m8ac.net/nb/share/Y3VzdG9tZXItMTM=",
-        height=800,  # Set to a fixed height in pixels
-        width=1200  # Set to a fixed width in pixels
-    )
+# Assuming a width of 14 inches for the graphs and considering standard screen DPI, 
+# we can calculate the equivalent pixel width.
+graph_width_in_inches = 14
+dpi = 100  # Assuming 100 DPI for standard screen resolution
+iframe_width_in_pixels = graph_width_in_inches * dpi
+
+# Set the iframe width based on the calculated pixel width
+components.iframe(
+    src="https://plowman-new.xn--snbryting-m8ac.net/nb/share/Y3VzdG9tZXItMTM=",
+    height=800,  # Set to a fixed height in pixels
+    width=int(iframe_width_in_pixels)  # Calculated based on the graph width
+)
+
 
 if __name__ == "__main__":
     main()
