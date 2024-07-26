@@ -169,21 +169,19 @@ def fetch_and_process_data(client_id, date_start, date_end):
         df['snow_depth'].fillna(0, inplace=True)       # Assume zero snow depth where missing
         df['wind_speed'].fillna(-1, inplace=True)      # Use -1 as an invalid placeholder for wind speed
 
-        # Handle missing data (interpolate or use other methods)
+        # Interpolating missing data
         df = df.interpolate(method='time').fillna(method='ffill').fillna(method='bfill')
 
+        # Ensure all arrays are of the same length
         timestamps = df.index.to_numpy()
         temperatures = df['temperature'].to_numpy()
         precipitations = df['precipitation'].to_numpy()
         snow_depths = df['snow_depth'].to_numpy()
         wind_speeds = df['wind_speed'].to_numpy()
 
-        # Debug print to verify NaNs have been handled
-        print("Post-processing check:")
-        print(f"NaNs in temperatures: {np.isnan(temperatures).sum()}")
-        print(f"NaNs in precipitations: {np.isnan(precipitations).sum()}")
-        print(f"NaNs in snow_depths: {np.isnan(snow_depths).sum()}")
-        print(f"NaNs in wind_speeds: {np.isnan(wind_speeds).sum()}")
+        # Debug print to verify data lengths
+        print(f"Lengths - timestamps: {len(timestamps)}, temperatures: {len(temperatures)}, "
+              f"precipitations: {len(precipitations)}, snow_depths: {len(snow_depths)}, wind_speeds: {len(wind_speeds)}")
 
         # Additional processing if required
         snow_depths = validate_snow_depths(snow_depths)
