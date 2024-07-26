@@ -243,6 +243,8 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
 # Function to get date range based on user choice
 def get_date_range(choice):
     now = datetime.now(ZoneInfo("Europe/Oslo")).replace(minute=0, second=0, microsecond=0)
+    start_time = None
+
     if choice == '7d':
         start_time = now - timedelta(days=7)
     elif choice == '3d':
@@ -254,17 +256,15 @@ def get_date_range(choice):
     elif choice == '4h':
         start_time = now - timedelta(hours=4)
     elif choice == 'sf':
-        # Ensure correct handling of the start of the week (Monday)
         start_time = now - timedelta(days=(now.weekday() - 4) % 7)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
     elif choice == 'ss':
-        # Ensure correct handling of the start of the week (Sunday)
         start_time = now - timedelta(days=now.weekday() + 1)
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
-    else:
-        return None, None
 
-    return start_time.isoformat(timespec='hours'), now.isoformat(timespec='hours')
+    if start_time:
+        return start_time.isoformat(), now.isoformat()
+    return None, None
 
 # Function to export data to CSV
 def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms):
@@ -282,7 +282,7 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 # Main function to run the Streamlit app
 def main():
     st.title("Værdata for Gullingen værstasjon (SN46220)")
-    
+
     period = st.selectbox(
         "Velg en periode:",
         ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"]
@@ -299,10 +299,12 @@ def main():
 
         try:
             oslo_tz = ZoneInfo("Europe/Oslo")
-            date_end_isoformat = (datetime.now(oslo_tz).replace(minute=0, second=0, microsecond=0).isoformat(timespec='hours')
-                                  if date_end.lower() == 'nå'
-                                  else datetime.strptime(date_end, "%d-%m-%Y %H:%M").replace(tzinfo=oslo_tz).isoformat(timespec='hours'))
-            date_start_isoformat = datetime.strptime(date_start, "%d-%m-%Y %H:%M").replace(tzinfo=oslo_tz).isoformat(timespec='hours')
+            date_end_isoformat = (
+                datetime.now(oslo_tz).replace(minute=0, second=0, microsecond=0).isoformat()
+                if date_end.lower() == 'nå'
+                else datetime.strptime(date_end, "%d-%m-%Y %H:%M").replace(tzinfo=oslo_tz).isoformat()
+            )
+            date_start_isoformat = datetime.strptime(date_start, "%d-%m-%Y %H:%M").replace(tzinfo=oslo_tz).isoformat()
 
             if date_end_isoformat <= date_start_isoformat:
                 st.error("Sluttidspunktet må være etter starttidspunktet.")
@@ -320,6 +322,11 @@ def main():
             "Siden sist søndag": 'ss'
         }
         date_start_isoformat, date_end_isoformat = get_date_range(choice_map[period])
+        if not date_start_isoformat or not date_end_isoformat:
+            st.error("Ugyldig periodevalg.")
+            return
+
+    st.write(f"Henter data fra {date_start_isoformat} til {date_end_isoformat}")
 
     try:
         data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
