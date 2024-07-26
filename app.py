@@ -226,21 +226,21 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
 # Function to identify snow drift alarms
 def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
     alarms = []
-    snow_depth_threshold = 0.2  # Set your threshold for snow depth change
 
     for i in range(1, len(timestamps)):
         # Check if wind speed is over 7 m/s
         if wind_speeds[i] > 7:
-            # Check if there is minimal or no precipitation
+            # Check if precipitation is less than 0.1 mm
             if precipitations[i] < 0.1:
-                # Check if there is a significant change in snow depth (positive or negative)
+                # Check if there is a significant change in snow depth
                 if not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]):
-                    if abs(snow_depths[i] - snow_depths[i-1]) >= snow_depth_threshold:
+                    if abs(snow_depths[i] - snow_depths[i-1]) >= 0.2:
                         # Check if the temperature is below -2°C
                         if not np.isnan(temperatures[i]) and temperatures[i] < -2:
                             alarms.append(timestamps[i])
 
     return alarms
+
 
 
 
