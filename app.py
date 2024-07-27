@@ -1,4 +1,51 @@
+
 import streamlit as st
+import pytz
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Convert timestamps to UTC
+def convert_to_utc(df, column_name):
+    df[column_name] = pd.to_datetime(df[column_name]).dt.tz_convert('UTC')
+    return df
+
+# Example usage in your data processing function
+def process_data(df):
+    df = convert_to_utc(df, 'timestamp_column')  # Replace 'timestamp_column' with actual column name
+    df = df.resample('h').asfreq()
+    # Further processing...
+    return df
+
+# Main function to run the Streamlit app
+def main():
+    st.title("Værdata for Gullingen værstasjon (SN46220)")
+
+    # Select date range
+    period = st.selectbox("Velg en periode:", ["Siste uke", "Siste måned", "Tilpasset"])
+    if period == "Tilpasset":
+        start_date = st.date_input("Startdato")
+        end_date = st.date_input("Sluttdato")
+    else:
+        # Set default date range for last week or month
+        end_date = pd.Timestamp.now()
+        start_date = end_date - pd.DateOffset(weeks=1) if period == "Siste uke" else end_date - pd.DateOffset(months=1)
+
+    df = pd.read_csv('data.csv')  # Replace with actual data source
+    df = process_data(df)
+
+    # Check for NaN values and handle accordingly
+    if df['snow_depth'].isna().all():
+        st.error("Ingen gyldige data tilgjengelig for valgt periode.")
+    else:
+        max_snow_depth = np.nanmax(df['snow_depth'])
+        # Plotting and further processing...
+
+if __name__ == "__main__":
+    main()
+import streamlit as st
+import streamlit as st
+import pytz
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
