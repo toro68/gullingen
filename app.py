@@ -429,6 +429,23 @@ def main():
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
         st.error(f"Feil ved henting eller behandling av data: {e}")
+st.markdown(
+    """
+    <hr>
+    <p style='font-size: 12px; color: grey;'>
+    Systemet analyserer værdata time for time og ser etter spesifikke forhold som ofte er forbundet med snøfokk.
+    Her er de nøyaktige kriteriene systemet bruker:
+    <ul>
+    <li><b>Sterk vind:</b> Vindhastigheter over 7 meter per sekund (ca. 25 km/t).</li>
+    <li><b>Minimal nedbør:</b> Mindre enn 0,1 mm nedbør i løpet av en time.</li>
+    <li><b>Endringer i snødybden:</b> En økning eller reduksjon på minst 0,2 cm, som kan indikere at snø forflyttes.</li>
+    <li><b>Kalde temperaturer:</b> Under -2°C.</li>
+    </ul>
+    Når alle disse fire forholdene oppstår samtidig i løpet av en time, utløser systemet en snøfokk-alarm.
+    </p>
+    """, 
+    unsafe_allow_html=True
+)
 
 if __name__ == "__main__":
     main()
