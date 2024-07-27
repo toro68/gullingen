@@ -6,57 +6,38 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
 import logging
-import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Hente GPS aktivitet
-def fetch_gps_data(start_time=None):
-    url = "https://kart.irute.net/fjellbergsskardet_busses.json?_=1657373465172"
-    r = requests.get(url)
-    
-    if r.status_code != 200:
-        return None
-
-    j = r.json()
-    all_eq_dicts = j['features']
-
-    oslo_tz = ZoneInfo("Europe/Oslo")
-    gps_data = []
-    for eq_dict in all_eq_dicts:
-        bilnr = eq_dict['properties']['BILNR']
-        date_str = eq_dict['properties']['Date']
+# Function to fetch GPS data
+def fetch_gps_data():
+    logger.info("Fetching GPS data")
+    try:
+        url = "https://kart.irute.net/fjellbergsskardet_busses.json?_=1657373465172"
+        response = requests.get(url)
+        response.raise_for_status()
+        gps_data = response.json()
+        all_eq_dicts = gps_data['features']
         
-        try:
-            # Prøv først det originale formatet
-            date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            try:
-                # Hvis det ikke fungerer, prøv det nye formatet
-                date = datetime.strptime(date_str, "%H:%M:%S %d.%m.%Y")
-            except ValueError:
-                # Hvis ingen av formatene fungerer, logg feilen og hopp over denne posten
-                logger.error(f"Kunne ikke parse datoen: {date_str}")
-                continue
+        gps_entries = []
+        for eq_dict in all_eq_dicts:
+            gps_entry = {
+                'BILNR': eq_dict['properties']['BILNR'],
+                'Date': datetime.strptime(eq_dict['properties']['Date'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("Europe/Oslo"))
+            }
+            gps_entries.append(gps_entry)
         
-        # Legg til tidssone-informasjon
-        date = date.replace(tzinfo=oslo_tz)
-        
-        if start_time is None or date >= start_time:
-            gps_data.append({
-                'BILNR': bilnr,
-                'Date': date,
-                'Formatted_Date': date.strftime("%d.%m.%Y %H:%M")
-            })
-
-    return sorted(gps_data, key=lambda x: x['Date'], reverse=True)
+        logger.info("Successfully fetched and processed GPS data")
+        return gps_entries
+    except requests.RequestException as e:
+        logger.error(f"Error fetching GPS data: {e}")
+        return []
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
@@ -195,7 +176,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     logger.info("Completed function: create_downloadable_graph")
     return img_str
 
-# Function to fetch and process data
+# Function to fetch and process weather data
 @st.cache_data(ttl=3600)
 def fetch_and_process_data(client_id, date_start, date_end):
     logger.info("Starting function: fetch_and_process_data")
@@ -371,7 +352,7 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 
 # Main function to run the Streamlit app
 def main():
-    st.title("Værdata og GPS-aktivitet for Gullingen værstasjon (SN46220)")
+    st.title("Værdata og GPS aktivitet")
 
     period = st.selectbox(
         "Velg en periode:",
@@ -412,24 +393,77 @@ def main():
     try:
         with st.spinner('Henter og behandler data...'):
             weather_data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
-            
-            # Konverter date_start_isoformat til en datetime med tidssone
-            start_time = datetime.fromisoformat(date_start_isoformat).replace(tzinfo=ZoneInfo("Europe/Oslo"))
-            gps_data = fetch_gps_data(start_time)
+            gps_data = fetch_gps_data()
         
-        # ... (resten av koden forblir uendret)
+        if weather_data and 'img_str' in weather_data:
+            st.image(f"data:image/png;base64,{weather_data['img_str']}", use_column_width=True)
+            st.download_button(label="Last ned grafen", data=base64.b64decode(weather_data['img_str']), file_name="weather_data.png", mime="image/png")
+
+            st.write(f"Antall datapunkter: {len(weather_data['timestamps'])}")
+            st.write(f"Manglende datapunkter: {len(weather_data['missing_periods'])} perioder med manglende data.")
+
+            csv_data = export_to_csv(weather_data['timestamps'], weather_data['temperatures'], weather_data['precipitations'], 
+                                     weather_data['snow_depths'], weather_data['snow_precipitations'], weather_data['wind_speeds'], weather_data['alarms'])
+            st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
+
+            # Display summary statistics
+            st.subheader("Oppsummering av data")
+            summary_df = pd.DataFrame({
+                'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
+                'Temperatur (°C)': [
+                    f"{np.nanmean(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
+                    f"{np.nanmedian(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
+                    f"{np.nanmin(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
+                    f"{np.nanmax(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A'
+                ],
+                'Nedbør (mm)': [
+                    f"{np.nanmean(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
+                    f"{np.nanmedian(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
+                    f"{np.nanmin(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
+                    f"{np.nanmax(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A'
+                ],
+                'Snødybde (cm)': [
+                    f"{np.nanmean(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
+                    f"{np.nanmedian(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
+                    f"{np.nanmin(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
+                    f"{np.nanmax(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A'
+                ],
+                'Vindhastighet (m/s)': [
+                    f"{np.nanmean(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmedian(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmin(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmax(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A'
+                ]
+            })
+            st.table(summary_df)
+
+            # Display GPS activity data
+            st.subheader("GPS aktivitet")
+            if gps_data:
+                gps_df = pd.DataFrame(gps_data)
+                st.dataframe(gps_df)
+            else:
+                st.write("Ingen GPS-aktivitet i den valgte perioden.")
+            
+            # Display snow drift alarms
+            st.subheader("Snøfokk-alarmer")
+            if weather_data['alarms']:
+                alarm_df = pd.DataFrame({
+                    'Tidspunkt': weather_data['alarms'],
+                    'Temperatur (°C)': [weather_data['temperatures'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
+                    'Vindhastighet (m/s)': [weather_data['wind_speeds'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
+                    'Snødybde (cm)': [weather_data['snow_depths'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']]
+                })
+                st.dataframe(alarm_df)
+            else:
+                st.write("Ingen snøfokk-alarmer i den valgte perioden.")
+
+        else:
+            st.error("Ingen data eller grafbilde tilgjengelig for valgt periode.")
 
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
-        st.error(f"Feil ved henting eller behandling av data: {str(e)}")
-        
-        # Vis GPS-data selv om værdataene mislykkes
-        if 'gps_data' in locals() and gps_data:
-            st.subheader("Siste GPS-aktivitet")
-            gps_df = pd.DataFrame(gps_data)
-            st.dataframe(gps_df[['BILNR', 'Formatted_Date']])
-        else:
-            st.write("Ingen GPS-aktivitet tilgjengelig.")
+        st.error(f"Feil ved henting eller behandling av data: {e}")
 
 if __name__ == "__main__":
     main()
