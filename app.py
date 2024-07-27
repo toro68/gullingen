@@ -44,8 +44,8 @@ def smooth_snow_depths(snow_depths):
     return smoothed[:, 1]
 
 # Function to handle missing data
-# Interpolasjonseksempel - sørg for at det ikke er spesifikke grenser som eliminerer negative verdier
 def handle_missing_data(timestamps, data, method='time'):
+    logger.info(f"Starting function: handle_missing_data with method {method}")
     data_series = pd.Series(data, index=timestamps)
     if method == 'time':
         interpolated = data_series.interpolate(method='time')
@@ -53,12 +53,9 @@ def handle_missing_data(timestamps, data, method='time'):
         interpolated = data_series.interpolate(method='linear')
     else:
         interpolated = data_series.interpolate(method='nearest')
-    
-    # Denne linjen kan utilsiktet fjerne negative verdier
-    # interpolated[interpolated < 0] = 0 
-    
+    interpolated[interpolated < 0] = 0
+    logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
-
 
 # Function to create a downloadable graph
 def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, start_time, end_time, data_points, missing_data_count):
@@ -68,21 +65,11 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
 
     fig.suptitle(f"Værdata for Gullingen værstasjon (SN46220)\nPeriode: {start_time.strftime('%d.%m.%Y %H:%M')} - {end_time.strftime('%d.%m.%Y %H:%M')}", fontsize=22, fontweight='bold')
 
-    # Kontrollering av temperaturen før plotting
-print(temperatures)
-
-# Plotting temperature data
-axes[0].plot(timestamps, temperatures, 'r-', linewidth=2)
-axes[0].set_ylabel('Temperatur (°C)', fontsize=16)
-axes[0].set_title('Temperatur', fontsize=18)
-axes[0].grid(True, linestyle=':', alpha=0.6)
-
-# Sett y-aksen for å inkludere negative verdier
-min_temp = np.nanmin(temperatures)
-max_temp = np.nanmax(temperatures)
-axes[0].set_ylim(min_temp - 1, max_temp + 1)
-
-
+    # Plotting temperature data
+    axes[0].plot(timestamps, temperatures, 'r-', linewidth=2)
+    axes[0].set_ylabel('Temperatur (°C)', fontsize=16)
+    axes[0].set_title('Temperatur', fontsize=18)
+    axes[0].grid(True, linestyle=':', alpha=0.6)
 
     # Plotting precipitation data
     axes[1].bar(timestamps, precipitations, width=0.02, align='center', color='b', alpha=0.7)
