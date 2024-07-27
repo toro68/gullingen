@@ -2,21 +2,64 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from dateutil import parser
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
 import logging
-import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Function to fetch GPS data
+def fetch_gps_data():
+    url = "https://kart.irute.net/fjellbergsskardet_busses.json?_=1657373465172"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        features = data.get('features', [])
+        gps_data = []
+        for feature in features:
+            properties = feature.get('properties', {})
+            bus_number = properties.get('BILNR', 'Unknown')
+            date = properties.get('Date', 'Unknown')
+            gps_data.append((bus_number, date))
+        return gps_data
+    else:
+        logger.error(f"Failed to fetch GPS data: {response.status_code}")
+        return []
+
+# Function to fetch weather data for GPS dates
+def fetch_weather_data_for_gps_dates(gps_data, client_id):
+    weather_data = []
+    for bus_number, date in gps_data:
+        params = {
+            "sources": "SN46220",
+            "elements": "air_temperature,precipitation_amount,surface_snow_thickness,wind_speed",
+            "timeresolutions": "PT1H",
+            "referencetime": date
+        }
+        response = requests.get("https://frost.met.no/observations/v0.jsonld", params=params, auth=(client_id, ""))
+        if response.status_code == 200:
+            data = response.json().get('data', [])
+            for entry in data:
+                observations = entry.get('observations', [])
+                weather_info = {
+                    'bus_number': bus_number,
+                    'timestamp': entry.get('referenceTime'),
+                    'temperature': next((obs['value'] for obs in observations if obs['elementId'] == 'air_temperature'), np.nan),
+                    'precipitation': next((obs['value'] for obs in observations if obs['elementId'] == 'precipitation_amount'), np.nan),
+                    'snow_depth': next((obs['value'] for obs in observations if obs['elementId'] == 'surface_snow_thickness'), np.nan),
+                    'wind_speed': next((obs['value'] for obs in observations if obs['elementId'] == 'wind_speed'), np.nan)
+                }
+                weather_data.append(weather_info)
+        else:
+            logger.error(f"Failed to fetch weather data for date {date}: {response.status_code}")
+    return pd.DataFrame(weather_data)
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
@@ -45,7 +88,6 @@ def smooth_snow_depths(snow_depths):
 
 # Function to handle missing data
 def handle_missing_data(timestamps, data, method='time'):
-    # Ensure negative temperatures are not set to 0 incorrectly
     logger.info(f"Starting function: handle_missing_data with method {method}")
     data_series = pd.Series(data, index=timestamps)
     if method == 'time':
@@ -54,7 +96,6 @@ def handle_missing_data(timestamps, data, method='time'):
         interpolated = data_series.interpolate(method='linear')
     else:
         interpolated = data_series.interpolate(method='nearest')
-    # Ensure negative values are preserved if they are valid (e.g., temperature)
     logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
 
