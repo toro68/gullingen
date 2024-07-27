@@ -45,6 +45,7 @@ def smooth_snow_depths(snow_depths):
 
 # Function to handle missing data
 def handle_missing_data(timestamps, data, method='time'):
+    # Ensure negative temperatures are not set to 0 incorrectly
     logger.info(f"Starting function: handle_missing_data with method {method}")
     data_series = pd.Series(data, index=timestamps)
     if method == 'time':
@@ -53,7 +54,7 @@ def handle_missing_data(timestamps, data, method='time'):
         interpolated = data_series.interpolate(method='linear')
     else:
         interpolated = data_series.interpolate(method='nearest')
-    interpolated[interpolated < 0] = 0
+    # Ensure negative values are preserved if they are valid (e.g., temperature)
     logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
 
