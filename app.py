@@ -16,6 +16,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Function to fetch GPS data
+# Function to fetch GPS data
 def fetch_gps_data():
     logger.info("Fetching GPS data")
     try:
@@ -27,9 +28,10 @@ def fetch_gps_data():
         
         gps_entries = []
         for eq_dict in all_eq_dicts:
+            date_str = eq_dict['properties']['Date']
             gps_entry = {
                 'BILNR': eq_dict['properties']['BILNR'],
-                'Date': datetime.strptime(eq_dict['properties']['Date'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo("Europe/Oslo"))
+                'Date': datetime.strptime(date_str, '%H:%M:%S %d.%m.%Y').replace(tzinfo=ZoneInfo("Europe/Oslo"))
             }
             gps_entries.append(gps_entry)
         
@@ -38,6 +40,10 @@ def fetch_gps_data():
     except requests.RequestException as e:
         logger.error(f"Error fetching GPS data: {e}")
         return []
+    except ValueError as e:
+        logger.error(f"Date parsing error: {e}")
+        return []
+
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
