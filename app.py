@@ -2,14 +2,17 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from dateutil import parser
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
+from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
 import logging
+import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -32,34 +35,6 @@ def fetch_gps_data():
     else:
         logger.error(f"Failed to fetch GPS data: {response.status_code}")
         return []
-
-# Function to fetch weather data for GPS dates
-def fetch_weather_data_for_gps_dates(gps_data, client_id):
-    weather_data = []
-    for bus_number, date in gps_data:
-        params = {
-            "sources": "SN46220",
-            "elements": "air_temperature,precipitation_amount,surface_snow_thickness,wind_speed",
-            "timeresolutions": "PT1H",
-            "referencetime": date
-        }
-        response = requests.get("https://frost.met.no/observations/v0.jsonld", params=params, auth=(client_id, ""))
-        if response.status_code == 200:
-            data = response.json().get('data', [])
-            for entry in data:
-                observations = entry.get('observations', [])
-                weather_info = {
-                    'bus_number': bus_number,
-                    'timestamp': entry.get('referenceTime'),
-                    'temperature': next((obs['value'] for obs in observations if obs['elementId'] == 'air_temperature'), np.nan),
-                    'precipitation': next((obs['value'] for obs in observations if obs['elementId'] == 'precipitation_amount'), np.nan),
-                    'snow_depth': next((obs['value'] for obs in observations if obs['elementId'] == 'surface_snow_thickness'), np.nan),
-                    'wind_speed': next((obs['value'] for obs in observations if obs['elementId'] == 'wind_speed'), np.nan)
-                }
-                weather_data.append(weather_info)
-        else:
-            logger.error(f"Failed to fetch weather data for date {date}: {response.status_code}")
-    return pd.DataFrame(weather_data)
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
@@ -88,6 +63,7 @@ def smooth_snow_depths(snow_depths):
 
 # Function to handle missing data
 def handle_missing_data(timestamps, data, method='time'):
+    # Ensure negative temperatures are not set to 0 incorrectly
     logger.info(f"Starting function: handle_missing_data with method {method}")
     data_series = pd.Series(data, index=timestamps)
     if method == 'time':
@@ -96,6 +72,7 @@ def handle_missing_data(timestamps, data, method='time'):
         interpolated = data_series.interpolate(method='linear')
     else:
         interpolated = data_series.interpolate(method='nearest')
+    # Ensure negative values are preserved if they are valid (e.g., temperature)
     logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
 
@@ -355,6 +332,15 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 def main():
     st.title("Værdata for Gullingen værstasjon (SN46220)")
 
+    # Fetch GPS data and display it
+    st.subheader("Tidspunkt for siste GPS aktivitet")
+    gps_data = fetch_gps_data()
+    if gps_data:
+        for bus_number, date in gps_data:
+            st.write(f"Buss {bus_number}: {date}")
+    else:
+        st.write("Ingen GPS-data tilgjengelig.")
+
     period = st.selectbox(
         "Velg en periode:",
         ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"]
@@ -420,13 +406,49 @@ def main():
                                      data['snow_depths'], data['snow_precipitations'], data['wind_speeds'], data['alarms'])
             st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
 
-            # Output timestamp for last GPS activity and snow depth at that time
-            st.subheader("Tidspunkt for siste GPS aktivitet og snødybde")
-            last_gps_time = data['timestamps'][-1] if np.size(data['timestamps']) else "Ingen data"
-            snow_depth_at_last_gps = data['snow_depths'][-1] if np.size(data['snow_depths']) else "Ingen data"
+            # Display summary statistics
+            st.subheader("Oppsummering av data")
+            summary_df = pd.DataFrame({
+                'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
+                'Temperatur (°C)': [
+                    f"{np.mean(data['temperatures']):.1f}",
+                    f"{np.median(data['temperatures']):.1f}",
+                    f"{np.min(data['temperatures']):.1f}",
+                    f"{np.max(data['temperatures']):.1f}"
+                ],
+                'Nedbør (mm)': [
+                    f"{np.mean(data['precipitations']):.1f}",
+                    f"{np.median(data['precipitations']):.1f}",
+                    f"{np.min(data['precipitations']):.1f}",
+                    f"{np.max(data['precipitations']):.1f}"
+                ],
+                'Snødybde (cm)': [
+                    f"{np.nanmean(data['snow_depths']):.1f}",
+                    f"{np.nanmedian(data['snow_depths']):.1f}",
+                    f"{np.nanmin(data['snow_depths']):.1f}",
+                    f"{np.nanmax(data['snow_depths']):.1f}"
+                ],
+                'Vindhastighet (m/s)': [
+                    f"{np.mean(data['wind_speeds']):.1f}",
+                    f"{np.median(data['wind_speeds']):.1f}",
+                    f"{np.min(data['wind_speeds']):.1f}",
+                    f"{np.max(data['wind_speeds']):.1f}"
+                ]
+            })
+            st.table(summary_df)
 
-            st.write(f"**Siste GPS aktivitetstidspunkt:** {last_gps_time}")
-            st.write(f"**Snødybde ved siste GPS aktivitet:** {snow_depth_at_last_gps} cm")
+            # Display snow drift alarms
+            st.subheader("Snøfokk-alarmer")
+            if data['alarms']:
+                alarm_df = pd.DataFrame({
+                    'Tidspunkt': data['alarms'],
+                    'Temperatur (°C)': [data['temperatures'][np.where(data['timestamps'] == alarm)[0][0]] for alarm in data['alarms']],
+                    'Vindhastighet (m/s)': [data['wind_speeds'][np.where(data['timestamps'] == alarm)[0][0]] for alarm in data['alarms']],
+                    'Snødybde (cm)': [data['snow_depths'][np.where(data['timestamps'] == alarm)[0][0]] for alarm in data['alarms']]
+                })
+                st.dataframe(alarm_df)
+            else:
+                st.write("Ingen snøfokk-alarmer i den valgte perioden.")
 
         else:
             st.error("Ingen data eller grafbilde tilgjengelig for valgt periode.")
@@ -437,8 +459,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
