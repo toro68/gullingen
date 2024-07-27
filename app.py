@@ -425,25 +425,25 @@ def main():
             summary_df = pd.DataFrame({
                 'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
                 'Temperatur (°C)': [
-                    f"{np.nanmean(data['temperatures']):.1f}",
-                    f"{np.nanmedian(data['temperatures']):.1f}",
-                    f"{np.nanmin(data['temperatures']):.1f}",
-                    f"{np.nanmax(data['temperatures']):.1f}"
+                    f"{np.nanmean(data['temperatures']):.1f}" if np.size(data['temperatures']) else "Ingen data",
+                    f"{np.nanmedian(data['temperatures']):.1f}" if np.size(data['temperatures']) else "Ingen data",
+                    f"{np.nanmin(data['temperatures']):.1f}" if np.size(data['temperatures']) else "Ingen data",
+                    f"{np.nanmax(data['temperatures']):.1f}" if np.size(data['temperatures']) else "Ingen data"
                 ],
                 'Nedbør (mm)': [
-                    f"{np.nansum(data['precipitations']):.1f}",
-                    f"{np.nanmedian(data['precipitations']):.1f}",
-                    f"{np.nanmin(data['precipitations']):.1f}",
-                    f"{np.nanmax(data['precipitations']):.1f}"
+                    f"{np.nansum(data['precipitations']):.1f}" if np.size(data['precipitations']) else "Ingen data",
+                    f"{np.nanmedian(data['precipitations']):.1f}" if np.size(data['precipitations']) else "Ingen data",
+                    f"{np.nanmin(data['precipitations']):.1f}" if np.size(data['precipitations']) else "Ingen data",
+                    f"{np.nanmax(data['precipitations']):.1f}" if np.size(data['precipitations']) else "Ingen data"
                 ],
                 'Snødybde (cm)': [
-                    f"{np.nanmean(data['snow_depths']):.1f}",
-                    f"{np.nanmedian(data['snow_depths']):.1f}",
-                    f"{np.nanmin(data['snow_depths']):.1f}",
-                    f"{np.nanmax(data['snow_depths']):.1f}"
+                    f"{np.nanmean(data['snow_depths']):.1f}" if np.size(data['snow_depths']) else "Ingen data",
+                    f"{np.nanmedian(data['snow_depths']):.1f}" if np.size(data['snow_depths']) else "Ingen data",
+                    f"{np.nanmin(data['snow_depths']):.1f}" if np.size(data['snow_depths']) else "Ingen data",
+                    f"{np.nanmax(data['snow_depths']):.1f}" if np.size(data['snow_depths']) else "Ingen data"
                 ],
                 'Antatt snønedbør (mm)': [
-                    f"{np.nansum(data['snow_precipitations']):.1f}",
+                    f"{np.nansum(data['snow_precipitations']):.1f}" if np.size(data['snow_precipitations']) else "Ingen data",
                     '', '', ''
                 ]
             })
@@ -451,7 +451,7 @@ def main():
 
             # Display snow drift alarms
             st.subheader("Snøfokk-alarmer")
-            if data['alarms']:
+            if np.size(data['alarms']):
                 alarm_df = pd.DataFrame({
                     'Tidspunkt': data['alarms'],
                     'Temperatur (°C)': [data['temperatures'][np.where(data['timestamps'] == alarm)[0][0]] for alarm in data['alarms']],
@@ -464,12 +464,12 @@ def main():
 
             # Output timestamp for last GPS activity and weather data summary
             st.subheader("Tidspunkt for siste GPS aktivitet og oppsummering av værdata")
-            last_gps_time = data['timestamps'][-1] if data['timestamps'] else "Ingen data"
-            avg_temperature = f"{np.nanmean(data['temperatures']):.1f} °C" if data['temperatures'] else "Ingen data"
-            total_precipitation = f"{np.nansum(data['precipitations']):.1f} mm" if data['precipitations'] else "Ingen data"
-            total_snow_precipitation = f"{np.nansum(data['snow_precipitations']):.1f} mm" if data['snow_precipitations'] else "Ingen data"
-            max_snow_depth = f"{np.nanmax(data['snow_depths']):.1f} cm" if data['snow_depths'] else "Ingen data"
-            min_snow_depth = f"{np.nanmin(data['snow_depths']):.1f} cm" if data['snow_depths'] else "Ingen data"
+            last_gps_time = data['timestamps'][-1] if np.size(data['timestamps']) else "Ingen data"
+            avg_temperature = f"{np.nanmean(data['temperatures']):.1f} °C" if np.size(data['temperatures']) else "Ingen data"
+            total_precipitation = f"{np.nansum(data['precipitations']):.1f} mm" if np.size(data['precipitations']) else "Ingen data"
+            total_snow_precipitation = f"{np.nansum(data['snow_precipitations']):.1f} mm" if np.size(data['snow_precipitations']) else "Ingen data"
+            max_snow_depth = f"{np.nanmax(data['snow_depths']):.1f} cm" if np.size(data['snow_depths']) else "Ingen data"
+            min_snow_depth = f"{np.nanmin(data['snow_depths']):.1f} cm" if np.size(data['snow_depths']) else "Ingen data"
 
             st.write(f"**Siste GPS aktivitetstidspunkt:** {last_gps_time}")
             st.write(f"**Gjennomsnittlig temperatur:** {avg_temperature}")
@@ -487,4 +487,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
