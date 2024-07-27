@@ -16,7 +16,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Function to fetch GPS data
-# Function to fetch GPS data
 def fetch_gps_data():
     logger.info("Fetching GPS data")
     try:
@@ -43,6 +42,7 @@ def fetch_gps_data():
     except ValueError as e:
         logger.error(f"Date parsing error: {e}")
         return []
+
 
 
 # Function to validate snow depths
@@ -362,7 +362,7 @@ def main():
 
     period = st.selectbox(
         "Velg en periode:",
-        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag", "Egendefinert periode"]
+        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag", "Egendefinert periode", "Siste GPS-aktivitet til nå"]
     )
 
     client_id = st.secrets["api_keys"]["client_id"]
@@ -380,6 +380,15 @@ def main():
 
         date_start_isoformat = datetime.combine(date_start, datetime.min.time()).replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
         date_end_isoformat = datetime.combine(date_end, datetime.min.time()).replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
+    elif period == "Siste GPS-aktivitet til nå":
+        gps_data = fetch_gps_data()
+        if gps_data:
+            last_gps_activity = max(gps_data, key=lambda x: x['Date'])
+            date_start_isoformat = last_gps_activity['Date'].isoformat()
+            date_end_isoformat = datetime.now(ZoneInfo("Europe/Oslo")).isoformat()
+        else:
+            st.error("Ingen GPS-aktivitet funnet.")
+            return
     else:
         choice_map = {
             "Siste 7 dager": '7d',
@@ -399,7 +408,7 @@ def main():
     try:
         with st.spinner('Henter og behandler data...'):
             weather_data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
-            gps_data = fetch_gps_data()
+            gps_data = fetch_gps_data() if period != "Siste GPS-aktivitet til nå" else gps_data
         
         if weather_data and 'img_str' in weather_data:
             st.image(f"data:image/png;base64,{weather_data['img_str']}", use_column_width=True)
