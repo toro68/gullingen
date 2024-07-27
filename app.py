@@ -95,9 +95,18 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
 
     # Plotting snow depth data
     if not np.all(np.isnan(snow_depths)):
+        valid_indices = ~np.isnan(snow_depths)
         axes[3].plot(timestamps[valid_indices], snow_depths[valid_indices], 'o', label='Rå snødybde data', markersize=4)
         axes[3].plot(timestamps[valid_indices], smoothed_snow_depths[valid_indices], '-', label='Glattet snødybde data', linewidth=2)
-        axes[3].fill_between(timestamps[valid_indices], confidence_intervals[0][valid_indices], confidence_intervals[1][valid_indices], color='gray', alpha=0.2, label='Konfidensintervall')
+        axes[3].fill_between(timestamps[valid_indices], 
+                             confidence_intervals[0][valid_indices], 
+                             confidence_intervals[1][valid_indices], 
+                             color='gray', alpha=0.2, label='Konfidensintervall')
+        
+        max_snow_depth = np.nanmax(snow_depths)
+        axes[3].set_ylim(0, max_snow_depth * 1.1 if not np.isnan(max_snow_depth) and max_snow_depth > 0 else 10)
+    else:
+        axes[3].text(0.5, 0.5, 'Ingen snødybdedata tilgjengelig', ha='center', va='center', transform=axes[3].transAxes)
 
     # Highlighting missing data periods
     for period in missing_periods:
@@ -331,30 +340,18 @@ def main():
     client_id = st.secrets["api_keys"]["client_id"]
 
     if period == "Egendefinert periode":
-        st.write("Format: DD-MM-ÅÅÅÅ TT:00 (Eksempel: 07-02-2024 07:00)")
-        date_start = st.text_input("Starttidspunkt", "")
-        date_end = st.text_input("Sluttidspunkt (eller 'nå')", "")
+        col1, col2 = st.columns(2)
+        with col1:
+            date_start = st.date_input("Startdato", datetime.now(ZoneInfo("Europe/Oslo")) - timedelta(days=7))
+        with col2:
+            date_end = st.date_input("Sluttdato", datetime.now(ZoneInfo("Europe/Oslo")))
 
-        try:
-            oslo_tz = ZoneInfo("Europe/Oslo")
-            if date_end.lower() == 'nå':
-                date_end_dt = datetime.now(oslo_tz).replace(minute=0, second=0, microsecond=0)
-            else:
-                date_end_dt = datetime.strptime(date_end, "%d-%m-%Y %H:%M").replace(tzinfo=oslo_tz)
-            
-            date_start_dt = datetime.strptime(date_start, "%d-%m-%Y %H:%M").replace(tzinfo=oslo_tz)
-
-            if date_end_dt <= date_start_dt:
-                st.error("Sluttidspunktet må være etter starttidspunktet.")
-                return
-
-            date_start_isoformat = date_start_dt.isoformat()
-            date_end_isoformat = date_end_dt.isoformat()
-            
-            logger.info(f"Custom date range: {date_start_isoformat} to {date_end_isoformat}")
-        except ValueError as e:
-            st.error(f"Ugyldig datoformat: {e}. Sørg for at minuttene er satt til 00. Prøv igjen.")
+        if date_end <= date_start:
+            st.error("Sluttdatoen må være etter startdatoen.")
             return
+
+        date_start_isoformat = datetime.combine(date_start, datetime.min.time()).replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
+        date_end_isoformat = datetime.combine(date_end, datetime.min.time()).replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
     else:
         choice_map = {
             "Siste 7 dager": '7d',
@@ -391,28 +388,28 @@ def main():
             summary_df = pd.DataFrame({
                 'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
                 'Temperatur (°C)': [
-                    f"{np.nanmean(data['temperatures']):.1f}",
-                    f"{np.nanmedian(data['temperatures']):.1f}",
-                    f"{np.nanmin(data['temperatures']):.1f}",
-                    f"{np.nanmax(data['temperatures']):.1f}"
+                    f"{np.nanmean(data['temperatures']):.1f}" if not np.all(np.isnan(data['temperatures'])) else 'N/A',
+                    f"{np.nanmedian(data['temperatures']):.1f}" if not np.all(np.isnan(data['temperatures'])) else 'N/A',
+                    f"{np.nanmin(data['temperatures']):.1f}" if not np.all(np.isnan(data['temperatures'])) else 'N/A',
+                    f"{np.nanmax(data['temperatures']):.1f}" if not np.all(np.isnan(data['temperatures'])) else 'N/A'
                 ],
                 'Nedbør (mm)': [
-                    f"{np.nanmean(data['precipitations']):.1f}",
-                    f"{np.nanmedian(data['precipitations']):.1f}",
-                    f"{np.nanmin(data['precipitations']):.1f}",
-                    f"{np.nanmax(data['precipitations']):.1f}"
+                    f"{np.nanmean(data['precipitations']):.1f}" if not np.all(np.isnan(data['precipitations'])) else 'N/A',
+                    f"{np.nanmedian(data['precipitations']):.1f}" if not np.all(np.isnan(data['precipitations'])) else 'N/A',
+                    f"{np.nanmin(data['precipitations']):.1f}" if not np.all(np.isnan(data['precipitations'])) else 'N/A',
+                    f"{np.nanmax(data['precipitations']):.1f}" if not np.all(np.isnan(data['precipitations'])) else 'N/A'
                 ],
                 'Snødybde (cm)': [
-                    f"{np.nanmean(data['snow_depths']):.1f}",
-                    f"{np.nanmedian(data['snow_depths']):.1f}",
-                    f"{np.nanmin(data['snow_depths']):.1f}",
-                    f"{np.nanmax(data['snow_depths']):.1f}"
+                    f"{np.nanmean(data['snow_depths']):.1f}" if not np.all(np.isnan(data['snow_depths'])) else 'N/A',
+                    f"{np.nanmedian(data['snow_depths']):.1f}" if not np.all(np.isnan(data['snow_depths'])) else 'N/A',
+                    f"{np.nanmin(data['snow_depths']):.1f}" if not np.all(np.isnan(data['snow_depths'])) else 'N/A',
+                    f"{np.nanmax(data['snow_depths']):.1f}" if not np.all(np.isnan(data['snow_depths'])) else 'N/A'
                 ],
                 'Vindhastighet (m/s)': [
-                    f"{np.nanmean(data['wind_speeds']):.1f}",
-                    f"{np.nanmedian(data['wind_speeds']):.1f}",
-                    f"{np.nanmin(data['wind_speeds']):.1f}",
-                    f"{np.nanmax(data['wind_speeds']):.1f}"
+                    f"{np.nanmean(data['wind_speeds']):.1f}" if not np.all(np.isnan(data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmedian(data['wind_speeds']):.1f}" if not np.all(np.isnan(data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmin(data['wind_speeds']):.1f}" if not np.all(np.isnan(data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmax(data['wind_speeds']):.1f}" if not np.all(np.isnan(data['wind_speeds'])) else 'N/A'
                 ]
             })
             st.table(summary_df)
