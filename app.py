@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from dateutil import parser
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
@@ -45,7 +44,6 @@ def smooth_snow_depths(snow_depths):
 
 # Function to handle missing data
 def handle_missing_data(timestamps, data, method='time'):
-    # Ensure negative temperatures are not set to 0 incorrectly
     logger.info(f"Starting function: handle_missing_data with method {method}")
     data_series = pd.Series(data, index=timestamps)
     if method == 'time':
@@ -54,13 +52,19 @@ def handle_missing_data(timestamps, data, method='time'):
         interpolated = data_series.interpolate(method='linear')
     else:
         interpolated = data_series.interpolate(method='nearest')
-    # Ensure negative values are preserved if they are valid (e.g., temperature)
     logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
 
 # Function to create a downloadable graph
 def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, start_time, end_time, data_points, missing_data_count):
     logger.info("Starting function: create_downloadable_graph")
+    
+    # Ensure that all series have the same number of elements as timestamps
+    assert len(timestamps) == len(temperatures) == len(precipitations) == len(snow_depths) == len(wind_speeds)
+
+    # Use only non-NaN data for plotting
+    valid_indices = ~np.isnan(snow_depths)
+
     fig, axes = plt.subplots(6, 1, figsize=(14, 28), sharex=True)
     plt.rcParams.update({'font.size': 14})
 
@@ -87,8 +91,8 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     # Plotting snow depth data
     if not np.all(np.isnan(snow_depths)):
         axes[3].plot(timestamps, snow_depths, 'o', label='Rå snødybde data', markersize=4)
-        axes[3].plot(timestamps, smoothed_snow_depths, '-', label='Glattet snødybde data', linewidth=2)
-        axes[3].fill_between(timestamps, confidence_intervals[0], confidence_intervals[1], color='gray', alpha=0.2, label='Konfidensintervall')
+        axes[3].plot(timestamps[valid_indices], smoothed_snow_depths[valid_indices], '-', label='Glattet snødybde data', linewidth=2)
+        axes[3].fill_between(timestamps[valid_indices], confidence_intervals[0][valid_indices], confidence_intervals[1][valid_indices], color='gray', alpha=0.2, label='Konfidensintervall')
 
     # Highlighting missing data periods
     for period in missing_periods:
