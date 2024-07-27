@@ -38,9 +38,14 @@ def smooth_snow_depths(snow_depths):
     if np.all(np.isnan(snow_depths)):
         return snow_depths
     timestamps = np.arange(len(snow_depths))
-    smoothed = lowess(snow_depths, timestamps, frac=0.1, missing='drop')
+    valid_indices = ~np.isnan(snow_depths)
+    if np.sum(valid_indices) < 2:
+        return snow_depths
+    smoothed = lowess(snow_depths[valid_indices], timestamps[valid_indices], frac=0.1, is_sorted=True)
+    result = np.full_like(snow_depths, np.nan)
+    result[valid_indices] = smoothed[:, 1]
     logger.info("Completed function: smooth_snow_depths")
-    return smoothed[:, 1]
+    return result
 
 # Function to handle missing data
 def handle_missing_data(timestamps, data, method='time'):
@@ -90,7 +95,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
 
     # Plotting snow depth data
     if not np.all(np.isnan(snow_depths)):
-        axes[3].plot(timestamps, snow_depths, 'o', label='Rå snødybde data', markersize=4)
+        axes[3].plot(timestamps[valid_indices], snow_depths[valid_indices], 'o', label='Rå snødybde data', markersize=4)
         axes[3].plot(timestamps[valid_indices], smoothed_snow_depths[valid_indices], '-', label='Glattet snødybde data', linewidth=2)
         axes[3].fill_between(timestamps[valid_indices], confidence_intervals[0][valid_indices], confidence_intervals[1][valid_indices], color='gray', alpha=0.2, label='Konfidensintervall')
 
@@ -320,14 +325,12 @@ def main():
 
     period = st.selectbox(
         "Velg en periode:",
-        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"]
+        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag", "Egendefinert periode"]
     )
-
-    custom_period = st.checkbox("Egendefinert periode")
 
     client_id = st.secrets["api_keys"]["client_id"]
 
-    if custom_period:
+    if period == "Egendefinert periode":
         st.write("Format: DD-MM-ÅÅÅÅ TT:00 (Eksempel: 07-02-2024 07:00)")
         date_start = st.text_input("Starttidspunkt", "")
         date_end = st.text_input("Sluttidspunkt (eller 'nå')", "")
@@ -388,16 +391,16 @@ def main():
             summary_df = pd.DataFrame({
                 'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
                 'Temperatur (°C)': [
-                    f"{np.mean(data['temperatures']):.1f}",
-                    f"{np.median(data['temperatures']):.1f}",
-                    f"{np.min(data['temperatures']):.1f}",
-                    f"{np.max(data['temperatures']):.1f}"
+                    f"{np.nanmean(data['temperatures']):.1f}",
+                    f"{np.nanmedian(data['temperatures']):.1f}",
+                    f"{np.nanmin(data['temperatures']):.1f}",
+                    f"{np.nanmax(data['temperatures']):.1f}"
                 ],
                 'Nedbør (mm)': [
-                    f"{np.mean(data['precipitations']):.1f}",
-                    f"{np.median(data['precipitations']):.1f}",
-                    f"{np.min(data['precipitations']):.1f}",
-                    f"{np.max(data['precipitations']):.1f}"
+                    f"{np.nanmean(data['precipitations']):.1f}",
+                    f"{np.nanmedian(data['precipitations']):.1f}",
+                    f"{np.nanmin(data['precipitations']):.1f}",
+                    f"{np.nanmax(data['precipitations']):.1f}"
                 ],
                 'Snødybde (cm)': [
                     f"{np.nanmean(data['snow_depths']):.1f}",
@@ -406,10 +409,10 @@ def main():
                     f"{np.nanmax(data['snow_depths']):.1f}"
                 ],
                 'Vindhastighet (m/s)': [
-                    f"{np.mean(data['wind_speeds']):.1f}",
-                    f"{np.median(data['wind_speeds']):.1f}",
-                    f"{np.min(data['wind_speeds']):.1f}",
-                    f"{np.max(data['wind_speeds']):.1f}"
+                    f"{np.nanmean(data['wind_speeds']):.1f}",
+                    f"{np.nanmedian(data['wind_speeds']):.1f}",
+                    f"{np.nanmin(data['wind_speeds']):.1f}",
+                    f"{np.nanmax(data['wind_speeds']):.1f}"
                 ]
             })
             st.table(summary_df)
