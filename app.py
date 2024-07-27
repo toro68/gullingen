@@ -71,6 +71,12 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     axes[0].set_title('Temperatur', fontsize=18)
     axes[0].grid(True, linestyle=':', alpha=0.6)
 
+    # Make sure the y-axis includes negative values
+    min_temp = np.nanmin(temperatures)
+    max_temp = np.nanmax(temperatures)
+    axes[0].set_ylim(min_temp - 1, max_temp + 1)
+
+
     # Plotting precipitation data
     axes[1].bar(timestamps, precipitations, width=0.02, align='center', color='b', alpha=0.7)
     axes[1].set_ylabel('Nedbør (mm)', fontsize=16)
