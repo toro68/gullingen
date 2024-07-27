@@ -19,22 +19,25 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Function to fetch GPS data
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Function to fetch GPS data
 def fetch_gps_data():
     url = "https://kart.irute.net/fjellbergsskardet_busses.json?_=1657373465172"
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
         features = data.get('features', [])
-        gps_data = []
-        for feature in features:
-            properties = feature.get('properties', {})
+        if features:
+            latest_feature = features[0]
+            properties = latest_feature.get('properties', {})
             bus_number = properties.get('BILNR', 'Unknown')
             date = properties.get('Date', 'Unknown')
-            gps_data.append((bus_number, date))
-        return gps_data
-    else:
-        logger.error(f"Failed to fetch GPS data: {response.status_code}")
-        return []
+            return bus_number, date
+    logger.error(f"Failed to fetch GPS data: {response.status_code}")
+    return None, None
 
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
@@ -332,19 +335,21 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 def main():
     st.title("Værdata for Gullingen værstasjon (SN46220)")
 
-    # Fetch GPS data and display it
+    # Fetch and display the most recent GPS activity
     st.subheader("Tidspunkt for siste GPS aktivitet")
-    gps_data = fetch_gps_data()
-    if gps_data:
-        for bus_number, date in gps_data:
-            st.write(f"Buss {bus_number}: {date}")
+    bus_number, date = fetch_gps_data()
+    if bus_number and date:
+        st.write(f"Buss {bus_number}: {date}")
+        last_gps_activity = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%d-%m-%Y %H:00")
     else:
         st.write("Ingen GPS-data tilgjengelig.")
+        last_gps_activity = None
 
-    period = st.selectbox(
-        "Velg en periode:",
-        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"]
-    )
+    period_options = ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag"]
+    if last_gps_activity:
+        period_options.append("Fra siste GPS-aktivitet")
+
+    period = st.selectbox("Velg en periode:", period_options)
 
     custom_period = st.checkbox("Egendefinert periode")
 
@@ -384,7 +389,13 @@ def main():
             "Siden sist fredag": 'sf',
             "Siden sist søndag": 'ss'
         }
-        date_start_isoformat, date_end_isoformat = get_date_range(choice_map[period])
+
+        if period == "Fra siste GPS-aktivitet" and last_gps_activity:
+            date_start_isoformat = datetime.strptime(last_gps_activity, "%d-%m-%Y %H:%M").replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
+            date_end_isoformat = datetime.now(ZoneInfo("Europe/Oslo")).isoformat()
+        else:
+            date_start_isoformat, date_end_isoformat = get_date_range(choice_map.get(period, '24h'))
+        
         if not date_start_isoformat or not date_end_isoformat:
             st.error("Ugyldig periodevalg.")
             return
