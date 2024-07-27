@@ -19,11 +19,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Function to fetch GPS data
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Function to fetch GPS data
 def fetch_gps_data():
     url = "https://kart.irute.net/fjellbergsskardet_busses.json?_=1657373465172"
     response = requests.get(url)
@@ -339,8 +334,9 @@ def main():
     st.subheader("Tidspunkt for siste GPS aktivitet")
     bus_number, date = fetch_gps_data()
     if bus_number and date:
-        st.write(f"Buss {bus_number}: {date}")
-        last_gps_activity = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%d-%m-%Y %H:00")
+        last_gps_activity = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=ZoneInfo("UTC"))
+        formatted_date = last_gps_activity.strftime("%d-%m-%Y %H:00")
+        st.write(f"Buss {bus_number}: {formatted_date}")
     else:
         st.write("Ingen GPS-data tilgjengelig.")
         last_gps_activity = None
@@ -391,7 +387,7 @@ def main():
         }
 
         if period == "Fra siste GPS-aktivitet" and last_gps_activity:
-            date_start_isoformat = datetime.strptime(last_gps_activity, "%d-%m-%Y %H:%M").replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
+            date_start_isoformat = last_gps_activity.isoformat()
             date_end_isoformat = datetime.now(ZoneInfo("Europe/Oslo")).isoformat()
         else:
             date_start_isoformat, date_end_isoformat = get_date_range(choice_map.get(period, '24h'))
