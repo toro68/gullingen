@@ -170,7 +170,8 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     fig.tight_layout(rect=[0, 0.03, 1, 0.97])
 
     fig.text(0.99, 0.01, f'Data hentet: {datetime.now(ZoneInfo("Europe/Oslo")).strftime("%d.%m.%Y %H:%M")}\nAntall datapunkter: {data_points}\nManglende datapunkter: {missing_data_count}', ha='right', va='bottom', fontsize=12)
-    fig.text(0.5, 0.01, 'Snøfokk-alarm: (Vind > 7 m/s, nedbør < 0.1 mm, økning i snødybde ≥ 0.2 cm) ELLER (Vind > 7 m/s, nedbør ≥ 0.1 mm, minking i snødybde ≥ 0.2 cm), og temperatur < -2°C', ha='center', va='bottom', fontsize=12, color='red')
+    fig.text(0.5, 0.01, 'Snøfokk-alarm: Vind > 7 m/s, nedbør < 0.1 mm, endring i snødybde ≥ 0.2 cm, og temperatur < -2°C', ha='center', va='bottom', fontsize=12, color='red')
+
     img_buffer = io.BytesIO()
     plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
     img_buffer.seek(0)
@@ -305,23 +306,12 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     logger.info("Starting function: snow_drift_alarm")
     alarms = []
     for i in range(1, len(timestamps)):
-        # Original condition
-        condition1 = (wind_speeds[i] > 7 and
-                      precipitations[i] < 0.1 and
-                      not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
-                      snow_depths[i] - snow_depths[i-1] >= 0.2 and
-                      not np.isnan(temperatures[i]) and temperatures[i] < -2)
-        
-        # New alternative condition
-        condition2 = (wind_speeds[i] > 7 and
-                      precipitations[i] >= 0.1 and
-                      not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
-                      snow_depths[i] - snow_depths[i-1] <= -0.2 and
-                      not np.isnan(temperatures[i]) and temperatures[i] < -2)
-        
-        if condition1 or condition2:
+        if (wind_speeds[i] > 7 and
+            precipitations[i] < 0.1 and
+            not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
+            abs(snow_depths[i] - snow_depths[i-1]) >= 0.2 and
+            not np.isnan(temperatures[i]) and temperatures[i] < -2):
             alarms.append(timestamps[i])
-    
     logger.info("Completed function: snow_drift_alarm")
     return alarms
 
