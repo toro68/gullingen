@@ -471,7 +471,7 @@ def main():
                 st.write("Ingen GPS-aktivitet i den valgte perioden.")
             
             # Display snow drift alarms
-            st.subheader("Snøfokk-alarmer: Vind > 7 m/s, (nedbør < 0.1 mm og endring i snødybde ≥ 0.2 cm) ELLER (nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.2 cm), og temperatur < -1°C'")
+            st.subheader("Snøfokk-alarmer: Vind > 7 m/s, temperatur < -1°C, nedbør < 0.1 mm og endring i snødybde ≥ 0.2 cm eller nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.2 cm'")
             if weather_data['alarms']:
                 alarm_df = pd.DataFrame({
                     'Tidspunkt': weather_data['alarms'],
