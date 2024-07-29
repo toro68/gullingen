@@ -493,14 +493,22 @@ def main():
                     'Tidspunkt': weather_data['alarms'],
                     'Temperatur (°C)': [weather_data['temperatures'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
                     'Vindhastighet (m/s)': [weather_data['wind_speeds'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
-                    'Snødybde (cm)': [weather_data['snow_depths'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']]
+                    'Snødybde (cm)': [weather_data['snow_depths'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
+                    'Nedbør (mm)': [weather_data['precipitations'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
+                    'Endring i snødybde (cm)': []
                 })
+                
+                for i, alarm in enumerate(weather_data['alarms']):
+                    alarm_index = np.where(weather_data['timestamps'] == alarm)[0][0]
+                    if alarm_index > 0:
+                        snow_depth_change = weather_data['snow_depths'][alarm_index] - weather_data['snow_depths'][alarm_index - 1]
+                        alarm_df.at[i, 'Endring i snødybde (cm)'] = round(snow_depth_change, 2)
+                    else:
+                        alarm_df.at[i, 'Endring i snødybde (cm)'] = 'N/A'
+                
                 st.dataframe(alarm_df)
             else:
                 st.write("Ingen snøfokk-alarmer i den valgte perioden.")
-
-        else:
-            st.error("Ingen data eller grafbilde tilgjengelig for valgt periode.")
 
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
