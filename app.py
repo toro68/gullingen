@@ -476,6 +476,14 @@ def main():
                 ]
             })
             st.table(summary_df)
+
+            # Display GPS activity data
+            st.subheader("GPS aktivitet")
+            if gps_data:
+                gps_df = pd.DataFrame(gps_data)
+                st.dataframe(gps_df)
+            else:
+                st.write("Ingen GPS-aktivitet i den valgte perioden.")
             
             # Display snow drift alarms
             st.subheader("Snøfokk-alarmer")
@@ -532,13 +540,7 @@ def main():
 
             else:
                 st.write("Ingen snøfokk-alarmer i den valgte perioden.")
-            # Display GPS activity data
-                        st.subheader("GPS aktivitet")
-                        if gps_data:
-                            gps_df = pd.DataFrame(gps_data)
-                            st.dataframe(gps_df)
-                        else:
-                            st.write("Ingen GPS-aktivitet i den valgte perioden.")
+
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
         st.error(f"Feil ved henting eller behandling av data: {e}")
