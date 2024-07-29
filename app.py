@@ -493,23 +493,18 @@ ulike værforhold. Scenario 1 fokuserer på situasjoner med lite nedbør, mens
 Scenario 2 tar hensyn til tilfeller med mer nedbør der snø kan blåses bort 
 til tross for nedbøren.
 """)
-            if weather_data['alarms']:
-                alarm_df = pd.DataFrame({
-                    'Tidspunkt': weather_data['alarms'],
-                    'Temperatur (°C)': [weather_data['temperatures'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
-                    'Vindhastighet (m/s)': [weather_data['wind_speeds'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
-                    'Snødybde (cm)': [weather_data['snow_depths'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']]
-                })
-                st.dataframe(alarm_df)
-            else:
-                st.write("Ingen snøfokk-alarmer i den valgte perioden.")
 
-        else:
-            st.error("Ingen data eller grafbilde tilgjengelig for valgt periode.")
-
-    except Exception as e:
-        logger.error(f"Feil ved henting eller behandling av data: {e}")
-        st.error(f"Feil ved henting eller behandling av data: {e}")
+if weather_data['alarms']:
+    alarm_df = pd.DataFrame({
+        'Tidspunkt': weather_data['alarms'],
+        'Temperatur (°C)': [weather_data['temperatures'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
+        'Vindhastighet (m/s)': [weather_data['wind_speeds'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
+        'Snødybde (cm)': [weather_data['snow_depths'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
+        'Nedbør (mm)': [weather_data['precipitations'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']]
+    })
+    st.dataframe(alarm_df)
+else:
+    st.write("Ingen snøfokk-alarmer i den valgte perioden.")
 
 if __name__ == "__main__":
     main()
