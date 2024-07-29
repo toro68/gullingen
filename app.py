@@ -500,4 +500,4 @@ def main():
         st.error(f"Feil ved henting eller behandling av data: {e}")
 
 if __name__ == "__main__":
-    main()_
+    main()
