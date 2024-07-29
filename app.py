@@ -489,28 +489,57 @@ def main():
             st.subheader("Snøfokk-alarmer")
             st.write("Kriterier: Vind > 7 m/s, temperatur ≤ -1°C, og ENTEN nedbør < 1.0 mm og endring i snødybde ≥ 0.2 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.2 cm.")
             if weather_data['alarms']:
-                alarm_data = []
-                for alarm in weather_data['alarms']:
-                    alarm_index = np.where(weather_data['timestamps'] == alarm)[0][0]
-                    if alarm_index > 0:
-                        snow_depth_change = weather_data['snow_depths'][alarm_index] - weather_data['snow_depths'][alarm_index - 1]
-                        snow_depth_change = round(snow_depth_change, 2)
-                    else:
-                        snow_depth_change = 'N/A'
+    alarm_data = []
+    for alarm in weather_data['alarms']:
+        alarm_index = np.where(weather_data['timestamps'] == alarm)[0][0]
+        if alarm_index > 0:
+            snow_depth_change = weather_data['snow_depths'][alarm_index] - weather_data['snow_depths'][alarm_index - 1]
+            snow_depth_change = round(snow_depth_change, 2)
+        else:
+            snow_depth_change = 'N/A'
 
-                    alarm_data.append({
-                        'Tidspunkt': alarm,
-                        'Temperatur (°C)': weather_data['temperatures'][alarm_index],
-                        'Vindhastighet (m/s)': weather_data['wind_speeds'][alarm_index],
-                        'Snødybde (cm)': weather_data['snow_depths'][alarm_index],
-                        'Nedbør (mm)': weather_data['precipitations'][alarm_index],
-                        'Endring i snødybde (cm)': snow_depth_change
-                    })
+        alarm_data.append({
+            'Tidspunkt': alarm,
+            'Temperatur (°C)': weather_data['temperatures'][alarm_index],
+            'Vindhastighet (m/s)': weather_data['wind_speeds'][alarm_index],
+            'Snødybde (cm)': weather_data['snow_depths'][alarm_index],
+            'Nedbør (mm)': weather_data['precipitations'][alarm_index],
+            'Endring i snødybde (cm)': snow_depth_change
+        })
 
-                alarm_df = pd.DataFrame(alarm_data)
-                st.dataframe(alarm_df)
-            else:
-                st.write("Ingen snøfokk-alarmer i den valgte perioden.")
+    alarm_df = pd.DataFrame(alarm_data)
+    
+    # Oppsummering av snøfokkalarmer
+    st.subheader("Oppsummering av snøfokkalarmer")
+    
+    # Konverter 'Tidspunkt' til datetime hvis det ikke allerede er det
+    alarm_df['Tidspunkt'] = pd.to_datetime(alarm_df['Tidspunkt'])
+    
+    # Antall alarmer per dato
+    alarms_per_date = alarm_df.groupby(alarm_df['Tidspunkt'].dt.date).size().reset_index(name='Antall alarmer')
+    alarms_per_date.columns = ['Dato', 'Antall alarmer']
+    
+    # Total antall alarmer
+    total_alarms = len(alarm_df)
+    
+    # Gjennomsnittlig vindhastighet og temperatur under alarmene
+    avg_wind_speed = alarm_df['Vindhastighet (m/s)'].mean()
+    avg_temperature = alarm_df['Temperatur (°C)'].mean()
+    
+    # Vis oppsummeringen
+    st.write(f"Totalt antall snøfokkalarmer i perioden: {total_alarms}")
+    st.write(f"Gjennomsnittlig vindhastighet under alarmer: {avg_wind_speed:.2f} m/s")
+    st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
+    
+    st.write("Antall alarmer per dato:")
+    st.table(alarms_per_date)
+    
+    # Vis detaljert alarmdata
+    st.subheader("Detaljerte alarmdata")
+    st.dataframe(alarm_df)
+
+else:
+    st.write("Ingen snøfokk-alarmer i den valgte perioden.")
 
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
