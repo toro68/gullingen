@@ -414,46 +414,69 @@ def main():
 
     st.write(f"Henter data fra {date_start_isoformat} til {date_end_isoformat}")
 
-try:
+    try:
         with st.spinner('Henter og behandler data...'):
             weather_data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
             gps_data = fetch_gps_data() if period != "Siste GPS-aktivitet til nå" else gps_data
         
         if weather_data and 'img_str' in weather_data:
-            # ... (kode for å vise graf og statistikk)
+            st.image(f"data:image/png;base64,{weather_data['img_str']}", use_column_width=True)
+            st.download_button(label="Last ned grafen", data=base64.b64decode(weather_data['img_str']), file_name="weather_data.png", mime="image/png")
 
+            st.write(f"Antall datapunkter: {len(weather_data['timestamps'])}")
+            st.write(f"Manglende datapunkter: {len(weather_data['missing_periods'])} perioder med manglende data.")
+
+            csv_data = export_to_csv(weather_data['timestamps'], weather_data['temperatures'], weather_data['precipitations'], 
+                                     weather_data['snow_depths'], weather_data['snow_precipitations'], weather_data['wind_speeds'], weather_data['alarms'])
+            st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
+
+            # Display summary statistics
+            st.subheader("Oppsummering av data")
+            summary_df = pd.DataFrame({
+                'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
+                'Temperatur (°C)': [
+                    f"{np.nanmean(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
+                    f"{np.nanmedian(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
+                    f"{np.nanmin(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
+                    f"{np.nanmax(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A'
+                ],
+                'Nedbør (mm)': [
+                    f"{np.nanmean(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
+                    f"{np.nanmedian(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
+                    f"{np.nanmin(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
+                    f"{np.nanmax(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A'
+                ],
+                'Snødybde (cm)': [
+                    f"{np.nanmean(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
+                    f"{np.nanmedian(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
+                    f"{np.nanmin(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
+                    f"{np.nanmax(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A'
+                ],
+                'Vindhastighet (m/s)': [
+                    f"{np.nanmean(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmedian(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmin(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmax(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A'
+                ]
+            })
+            st.table(summary_df)
+
+            # Display GPS activity data
+            st.subheader("GPS aktivitet")
+            if gps_data:
+                gps_df = pd.DataFrame(gps_data)
+                st.dataframe(gps_df)
+            else:
+                st.write("Ingen GPS-aktivitet i den valgte perioden.")
+            
             # Display snow drift alarms
             st.subheader("Snøfokk-alarmer")
-            st.markdown("""
-            **Vilkår for snøfokk-alarm:**
-
-            En snøfokk-alarm utløses når en av følgende to sett med kriterier er oppfylt:
-
-            1. **Scenario 1: Lav nedbør med endring i snødybde**
-               - Vindhastighet > 7 m/s
-               - Nedbør < 0.1 mm
-               - Absolutt endring i snødybde ≥ 0.2 cm (økning eller reduksjon)
-               - Temperatur < -2°C
-
-            2. **Scenario 2: Mer nedbør med reduksjon i snødybde**
-               - Vindhastighet > 7 m/s
-               - Nedbør ≥ 0.1 mm
-               - Reduksjon i snødybde ≥ 0.2 cm
-               - Temperatur < -2°C
-
-            Disse kriteriene er designet for å fange opp potensielle snøfokk-situasjoner under 
-            ulike værforhold. Scenario 1 fokuserer på situasjoner med lite nedbør, mens 
-            Scenario 2 tar hensyn til tilfeller med mer nedbør der snø kan blåses bort 
-            til tross for nedbøren.
-            """)
-
             if weather_data['alarms']:
                 alarm_df = pd.DataFrame({
                     'Tidspunkt': weather_data['alarms'],
                     'Temperatur (°C)': [weather_data['temperatures'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
                     'Vindhastighet (m/s)': [weather_data['wind_speeds'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
-                    'Snødybde (cm)': [weather_data['snow_depths'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']],
-                    'Nedbør (mm)': [weather_data['precipitations'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']]
+                    'Snødybde (cm)': [weather_data['snow_depths'][np.where(weather_data['timestamps'] == alarm)[0][0]] for alarm in weather_data['alarms']]
                 })
                 st.dataframe(alarm_df)
             else:
