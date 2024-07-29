@@ -376,23 +376,18 @@ def main():
     client_id = st.secrets["api_keys"]["client_id"]
 
     if period == "Egendefinert periode":
-    col1, col2 = st.columns(2)
-    with col1:
-        date_start = st.date_input("Startdato", datetime.now(ZoneInfo("Europe/Oslo")) - timedelta(days=7))
-        time_start = st.time_input("Starttid", datetime.min.time())
-    with col2:
-        date_end = st.date_input("Sluttdato", datetime.now(ZoneInfo("Europe/Oslo")))
-        time_end = st.time_input("Sluttid", datetime.now(ZoneInfo("Europe/Oslo")).time())
+        col1, col2 = st.columns(2)
+        with col1:
+            date_start = st.date_input("Startdato", datetime.now(ZoneInfo("Europe/Oslo")) - timedelta(days=7))
+        with col2:
+            date_end = st.date_input("Sluttdato", datetime.now(ZoneInfo("Europe/Oslo")))
 
-    start_datetime = datetime.combine(date_start, time_start)
-    end_datetime = datetime.combine(date_end, time_end)
+        if date_end <= date_start:
+            st.error("Sluttdatoen må være etter startdatoen.")
+            return
 
-    if end_datetime <= start_datetime:
-        st.error("Sluttidspunktet må være etter starttidspunktet.")
-        return
-
-    date_start_isoformat = start_datetime.replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
-    date_end_isoformat = end_datetime.replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
+        date_start_isoformat = datetime.combine(date_start, datetime.min.time()).replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
+        date_end_isoformat = datetime.combine(date_end, datetime.min.time()).replace(tzinfo=ZoneInfo("Europe/Oslo")).isoformat()
     elif period == "Siste GPS-aktivitet til nå":
         gps_data = fetch_gps_data()
         if gps_data:
