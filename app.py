@@ -482,7 +482,7 @@ def main():
             # Display snow drift alarms
             st.subheader("Snøfokk-alarmer")
             st.write("Kriterier: Vind > 7 m/s, temperatur < -1°C, og ENTEN nedbør < 0.1 mm og endring i snødybde ≥ 0.2 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.2 cm. Merk: Kriteriene for snøfokk er foreløpige og vil bli sammenholdt med faktiske observasjoner. 
-    Basert på denne sammenligningen kan kriteriene bli justert for å gi mer nøyaktige varsler i fremtiden.")
+                Basert på denne sammenligningen kan kriteriene bli justert for å gi mer nøyaktige varsler i fremtiden.")
             if weather_data['alarms']:
                 alarm_df = pd.DataFrame({
                     'Tidspunkt': weather_data['alarms'],
