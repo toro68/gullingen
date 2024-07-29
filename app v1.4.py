@@ -43,6 +43,8 @@ def fetch_gps_data():
         logger.error(f"Date parsing error: {e}")
         return []
 
+
+
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
     logger.info("Starting function: validate_snow_depths")
@@ -432,41 +434,30 @@ def main():
             # Display summary statistics
             st.subheader("Oppsummering av data")
             summary_df = pd.DataFrame({
-                'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum', 'Total'],
+                'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum'],
                 'Temperatur (°C)': [
                     f"{np.nanmean(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
                     f"{np.nanmedian(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
                     f"{np.nanmin(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
-                    f"{np.nanmax(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A',
-                    'N/A'
+                    f"{np.nanmax(weather_data['temperatures']):.1f}" if not np.all(np.isnan(weather_data['temperatures'])) else 'N/A'
                 ],
                 'Nedbør (mm)': [
                     f"{np.nanmean(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
                     f"{np.nanmedian(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
                     f"{np.nanmin(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
-                    f"{np.nanmax(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
-                    f"{np.nansum(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A'
-                ],
-                'Antatt snønedbør (mm)': [
-                    f"{np.nanmean(weather_data['snow_precipitations']):.1f}" if not np.all(np.isnan(weather_data['snow_precipitations'])) else 'N/A',
-                    f"{np.nanmedian(weather_data['snow_precipitations']):.1f}" if not np.all(np.isnan(weather_data['snow_precipitations'])) else 'N/A',
-                    f"{np.nanmin(weather_data['snow_precipitations']):.1f}" if not np.all(np.isnan(weather_data['snow_precipitations'])) else 'N/A',
-                    f"{np.nanmax(weather_data['snow_precipitations']):.1f}" if not np.all(np.isnan(weather_data['snow_precipitations'])) else 'N/A',
-                    f"{np.nansum(weather_data['snow_precipitations']):.1f}" if not np.all(np.isnan(weather_data['snow_precipitations'])) else 'N/A'
+                    f"{np.nanmax(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A'
                 ],
                 'Snødybde (cm)': [
                     f"{np.nanmean(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
                     f"{np.nanmedian(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
                     f"{np.nanmin(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
-                    f"{np.nanmax(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A',
-                    'N/A'
+                    f"{np.nanmax(weather_data['snow_depths']):.1f}" if not np.all(np.isnan(weather_data['snow_depths'])) else 'N/A'
                 ],
                 'Vindhastighet (m/s)': [
                     f"{np.nanmean(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
                     f"{np.nanmedian(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
                     f"{np.nanmin(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
-                    f"{np.nanmax(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
-                    'N/A'
+                    f"{np.nanmax(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A'
                 ]
             })
             st.table(summary_df)
@@ -500,4 +491,4 @@ def main():
         st.error(f"Feil ved henting eller behandling av data: {e}")
 
 if __name__ == "__main__":
-    main()_
+    main()
