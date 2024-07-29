@@ -305,7 +305,7 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     logger.info("Starting function: snow_drift_alarm")
     alarms = []
     for i in range(1, len(timestamps)):
-        # Condition 1: Any change in snow depth
+        # Condition 1: Any change in snow depth with low precipitation
         condition1 = (wind_speeds[i] > 7 and
                       precipitations[i] < 0.1 and
                       not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
