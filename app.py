@@ -170,6 +170,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     fig.tight_layout(rect=[0, 0.03, 1, 0.97])
 
     fig.text(0.99, 0.01, f'Data hentet: {datetime.now(ZoneInfo("Europe/Oslo")).strftime("%d.%m.%Y %H:%M")}\nAntall datapunkter: {data_points}\nManglende datapunkter: {missing_data_count}', ha='right', va='bottom', fontsize=12)
+
     img_buffer = io.BytesIO()
     plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
     img_buffer.seek(0)
