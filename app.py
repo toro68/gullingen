@@ -372,7 +372,7 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 
 # Main function to run the Streamlit app
 def main():
-    st.title("Værdata og GPS aktivitet")
+    st.title("Værdata for Gullingen")
 
     period = st.selectbox(
         "Velg en periode:",
