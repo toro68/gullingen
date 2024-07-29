@@ -116,7 +116,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     # Plotting estimated snow precipitation
     axes[2].bar(timestamps, snow_precipitations, width=0.02, align='center', color='m', alpha=0.7)
     axes[2].set_ylabel('Antatt snønedbør (mm)', fontsize=16)
-    axes[2].set_title('Antatt snønedbør (Temp ≤ 1,5°C og økende snødybde)', fontsize=18)
+    axes[2].set_title('Antatt snønedbør (Temp ≤ 1,5°C og økende snødybde, eller Temp ≤ 0°C)', fontsize=18)
     axes[2].grid(True, linestyle=':', alpha=0.6)
 
     # Plotting snow depth data
@@ -288,8 +288,14 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
     logger.info("Starting function: calculate_snow_precipitations")
     snow_precipitations = []
     for i in range(len(temperatures)):
-        if temperatures[i] is not None and temperatures[i] <= 1.5:
-            if i > 0 and snow_depths[i] > snow_depths[i-1]:
+        if temperatures[i] is not None:
+            # Condition 1: Temperature ≤ 1.5°C and increasing snow depth
+            condition1 = temperatures[i] <= 1.5 and i > 0 and snow_depths[i] > snow_depths[i-1]
+            
+            # Condition 2: Temperature ≤ 0°C and any precipitation
+            condition2 = temperatures[i] <= 0 and precipitations[i] > 0
+            
+            if condition1 or condition2:
                 snow_precipitations.append(precipitations[i])
             else:
                 snow_precipitations.append(0)
@@ -447,7 +453,7 @@ def main():
                     f"{np.nanmax(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A',
                     f"{np.nansum(weather_data['precipitations']):.1f}" if not np.all(np.isnan(weather_data['precipitations'])) else 'N/A'
                 ],
-                'Antatt snønedbør (mm)': [
+                'Antatt snønedbør (mm)\n(Temp ≤ 1,5°C og økende snødybde, eller Temp ≤ 0°C)': [
                     f"{np.nanmean(weather_data['snow_precipitations']):.1f}" if not np.all(np.isnan(weather_data['snow_precipitations'])) else 'N/A',
                     f"{np.nanmedian(weather_data['snow_precipitations']):.1f}" if not np.all(np.isnan(weather_data['snow_precipitations'])) else 'N/A',
                     f"{np.nanmin(weather_data['snow_precipitations']):.1f}" if not np.all(np.isnan(weather_data['snow_precipitations'])) else 'N/A',
@@ -481,7 +487,7 @@ def main():
             
             # Display snow drift alarms
             st.subheader("Snøfokk-alarmer")
-            st.write("Kriterier: Vind > 7 m/s, temperatur < -1°C, og ENTEN nedbør < 0.1 mm og endring i snødybde ≥ 0.2 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.2 cm.")
+            st.write("Kriterier: Vind > 7 m/s, temperatur ≤ -1°C, og ENTEN nedbør < 0.1 mm og endring i snødybde ≥ 0.2 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.2 cm.")
             if weather_data['alarms']:
                 alarm_df = pd.DataFrame({
                     'Tidspunkt': weather_data['alarms'],
