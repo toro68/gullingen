@@ -87,7 +87,7 @@ def handle_missing_data(timestamps, data, method='time'):
     return interpolated.to_numpy()
 
 # Function to create a downloadable graph
-def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, start_time, end_time, data_points, missing_data_count):
+def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, slippery_road_alarms, start_time, end_time, data_points, missing_data_count):
     logger.info("Starting function: create_downloadable_graph")
     
     # Ensure that all series have the same number of elements as timestamps
@@ -152,11 +152,13 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     axes[4].set_title('Vindhastighet', fontsize=18)
     axes[4].grid(True, linestyle=':', alpha=0.6)
 
-    # Plotting snow drift alarms
+    # Plotting snow drift alarms and slippery road alarms
     alarm_times = [mdates.date2num(alarm) for alarm in alarms]
+    slippery_road_times = [mdates.date2num(alarm) for alarm in slippery_road_alarms]
     axes[5].scatter(alarm_times, [1] * len(alarm_times), color='r', marker='x', s=100, label='Snøfokk-alarm')
+    axes[5].scatter(slippery_road_times, [0.5] * len(slippery_road_times), color='b', marker='s', s=100, label='Glatt vei / slush-alarm')
     axes[5].set_yticks([])
-    axes[5].set_title('Snøfokk-alarmer', fontsize=18)
+    axes[5].set_title('Alarmer', fontsize=18)
     axes[5].grid(True, linestyle=':', alpha=0.6)
     axes[5].legend(loc='upper right')
     
@@ -240,13 +242,14 @@ def fetch_and_process_data(client_id, date_start, date_end):
         snow_precipitations = calculate_snow_precipitations(temperatures, precipitations, snow_depths)
 
         alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
+        slippery_road_alarms = identify_slippery_roads(timestamps, temperatures, precipitations, snow_depths)
         data_points = len(timestamps)
         missing_data_count = np.isnan(snow_depths).sum()
 
         img_str = create_downloadable_graph(
             timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
             wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms,
-            pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
+            slippery_road_alarms, pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
         )
 
         logger.info("Completed function: fetch_and_process_data")
@@ -259,13 +262,15 @@ def fetch_and_process_data(client_id, date_start, date_end):
             'snow_precipitations': snow_precipitations,
             'wind_speeds': wind_speeds,
             'missing_periods': missing_periods,
-            'alarms': alarms
+            'alarms': alarms,
+            'slippery_road_alarms': slippery_road_alarms
         }
 
     except Exception as e:
         logger.error(f"Data processing error: {e}")
         return None
 
+# Function to identify missing periods in the data
 # Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
     logger.info("Starting function: identify_missing_periods")
@@ -329,6 +334,19 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     logger.info("Completed function: snow_drift_alarm")
     return alarms
 
+# Function to identify slippery roads / slush
+def identify_slippery_roads(timestamps, temperatures, precipitations, snow_depths):
+    logger.info("Starting function: identify_slippery_roads")
+    slippery_road_alarms = []
+    for i in range(1, len(timestamps)):
+        if (temperatures[i] > 0 and
+            precipitations[i] > 0.5 and
+            snow_depths[i] >= 20 and
+            snow_depths[i] < snow_depths[i-1]):
+            slippery_road_alarms.append(timestamps[i])
+    logger.info("Completed function: identify_slippery_roads")
+    return slippery_road_alarms
+
 # Function to get date range based on user choice
 def get_date_range(choice):
     logger.info(f"Starting function: get_date_range with choice {choice}")
@@ -356,7 +374,7 @@ def get_date_range(choice):
     return start_time.isoformat(), now.isoformat()
 
 # Function to export data to CSV
-def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms):
+def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms, slippery_road_alarms):
     logger.info("Starting function: export_to_csv")
     df = pd.DataFrame({
         'Timestamp': timestamps,
@@ -365,7 +383,8 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
         'Snow Depth': snow_depths,
         'Snow Precipitation': snow_precipitations,
         'Wind Speed': wind_speeds,
-        'Snow Drift Alarm': ['x' if ts in alarms else '' for ts in timestamps]
+        'Snow Drift Alarm': ['x' if ts in alarms else '' for ts in timestamps],
+        'Slippery Road Alarm': ['x' if ts in slippery_road_alarms else '' for ts in timestamps]
     })
     logger.info("Completed function: export_to_csv")
     return df.to_csv(index=False).encode('utf-8')
@@ -432,7 +451,8 @@ def main():
             st.write(f"Manglende datapunkter: {len(weather_data['missing_periods'])} perioder med manglende data.")
 
             csv_data = export_to_csv(weather_data['timestamps'], weather_data['temperatures'], weather_data['precipitations'], 
-                                     weather_data['snow_depths'], weather_data['snow_precipitations'], weather_data['wind_speeds'], weather_data['alarms'])
+                                     weather_data['snow_depths'], weather_data['snow_precipitations'], weather_data['wind_speeds'], 
+                                     weather_data['alarms'], weather_data['slippery_road_alarms'])
             st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
 
             # Display summary statistics
@@ -478,6 +498,7 @@ def main():
             st.table(summary_df)
 
             # Display GPS activity data
+            # Display GPS activity data
             st.subheader("GPS aktivitet")
             if gps_data:
                 gps_df = pd.DataFrame(gps_data)
@@ -512,7 +533,6 @@ def main():
                 # Oppsummering av snøfokkalarmer
                 st.subheader("Oppsummering av snøfokkalarmer")
                 
-                # Konverter 'Tidspunkt' til datetime hvis det ikke allerede er det
                 alarm_df['Tidspunkt'] = pd.to_datetime(alarm_df['Tidspunkt'])
                 
                 # Antall alarmer per dato
@@ -537,9 +557,60 @@ def main():
                 # Vis detaljert alarmdata
                 st.subheader("Detaljerte alarmdata")
                 st.dataframe(alarm_df)
-
             else:
                 st.write("Ingen snøfokk-alarmer i den valgte perioden.")
+
+            # Display slippery road alarms
+            st.subheader("Glatt vei / slush-alarmer")
+            st.write("Kriterier: Temperatur > 0°C, nedbør > 0.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
+            if weather_data['slippery_road_alarms']:
+                slippery_road_data = []
+                for alarm in weather_data['slippery_road_alarms']:
+                    alarm_index = np.where(weather_data['timestamps'] == alarm)[0][0]
+                    if alarm_index > 0:
+                        snow_depth_change = weather_data['snow_depths'][alarm_index] - weather_data['snow_depths'][alarm_index - 1]
+                        snow_depth_change = round(snow_depth_change, 2)
+                    else:
+                        snow_depth_change = 'N/A'
+
+                    slippery_road_data.append({
+                        'Tidspunkt': alarm,
+                        'Temperatur (°C)': weather_data['temperatures'][alarm_index],
+                        'Nedbør (mm)': weather_data['precipitations'][alarm_index],
+                        'Snødybde (cm)': weather_data['snow_depths'][alarm_index],
+                        'Endring i snødybde (cm)': snow_depth_change
+                    })
+
+                slippery_road_df = pd.DataFrame(slippery_road_data)
+                
+                # Oppsummering av glatt vei / slush-alarmer
+                st.subheader("Oppsummering av glatt vei / slush-alarmer")
+                
+                slippery_road_df['Tidspunkt'] = pd.to_datetime(slippery_road_df['Tidspunkt'])
+                
+                # Antall alarmer per dato
+                alarms_per_date = slippery_road_df.groupby(slippery_road_df['Tidspunkt'].dt.date).size().reset_index(name='Antall alarmer')
+                alarms_per_date.columns = ['Dato', 'Antall alarmer']
+                
+                # Total antall alarmer
+                total_alarms = len(slippery_road_df)
+                
+                # Gjennomsnittlig temperatur og nedbør under alarmene
+                avg_temperature = slippery_road_df['Temperatur (°C)'].mean()
+                avg_precipitation = slippery_road_df['Nedbør (mm)'].mean()
+                
+                st.write(f"Totalt antall glatt vei / slush-alarmer i perioden: {total_alarms}")
+                st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
+                st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
+                
+                st.write("Antall alarmer per dato:")
+                st.table(alarms_per_date)
+                
+                # Vis detaljert alarmdata
+                st.subheader("Detaljerte alarmdata")
+                st.dataframe(slippery_road_df)
+            else:
+                st.write("Ingen glatt vei / slush-alarmer i den valgte perioden.")
 
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
