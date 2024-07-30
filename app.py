@@ -338,22 +338,18 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     return alarms
 
 # Function to identify slippery roads and slush
-def identify_slippery_roads_and_slush(temperatures, precipitations, snow_depths):
-    logger.info("Starting function: identify_slippery_roads_and_slush")
+def identify_slippery_conditions(temperatures, precipitations, snow_depths):
+    logger.info("Starting function: identify_slippery_conditions")
     warnings = []
     for i in range(1, len(temperatures)):
-        # Glatte veier: Temperatur over 0°C og nedbør over 0.5 mm
-        if temperatures[i] > 0 and precipitations[i] > 0.5:
-            warnings.append(('slippery', i, "Glatte veier"))
-        
-        # Slush: Temperatur over 0°C, nedbør over 0.5 mm, og synkende snødybde over 20 cm
+        # Slush/Glatte veier: Temperatur over 0°C, nedbør over 0.5 mm, snødybde over 20 cm, og synkende snødybde
         if (temperatures[i] > 0 and 
             precipitations[i] > 0.5 and 
             snow_depths[i] >= 20 and 
             snow_depths[i] < snow_depths[i-1]):
-            warnings.append(('slush', i, "Slushfare"))
+            warnings.append(('slippery_conditions', i, "Fare for slush/glatte veier"))
     
-    logger.info(f"Identified {len(warnings)} warnings")
+    logger.info(f"Identified {len(warnings)} slippery condition warnings")
     return warnings
 
 # Function to get date range based on user choice
@@ -461,7 +457,7 @@ def main():
 
             csv_data = export_to_csv(weather_data['timestamps'], weather_data['temperatures'], weather_data['precipitations'], 
                                      weather_data['snow_depths'], weather_data['snow_precipitations'], weather_data['wind_speeds'], 
-                                     weather_data['alarms'], weather_data['slippery_slush_warnings'])
+                                     weather_data['alarms'], weather_data['slippery_conditions'])
             st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
 
             # Display summary statistics
@@ -570,26 +566,26 @@ def main():
             else:
                 st.write("Ingen snøfokk-alarmer i den valgte perioden.")
 
-            # Display slippery roads and slush warnings
-            st.subheader("Advarsler om glatte veier og slush")
-            st.write("Kriterier for glatte veier: Temperatur > 0°C og nedbør > 0.5 mm")
-            st.write("Kriterier for slush: Temperatur > 0°C, nedbør > 0.5 mm, snødybde ≥ 20 cm og synkende")
+            # Display slippery conditions warnings
+            st.subheader("Advarsler om slush/glatte veier")
+            st.write("Kriterier: Temperatur > 0°C, nedbør > 0.5 mm, snødybde ≥ 20 cm og synkende")
             
-            if weather_data['slippery_slush_warnings']:
+            if weather_data['slippery_conditions']:
                 warning_data = []
-                for warning_type, index, warning_text in weather_data['slippery_slush_warnings']:
+                for _, index, warning_text in weather_data['slippery_conditions']:
                     warning_data.append({
                         'Tidspunkt': weather_data['timestamps'][index],
                         'Type': warning_text,
                         'Temperatur (°C)': weather_data['temperatures'][index],
                         'Nedbør (mm)': weather_data['precipitations'][index],
-                        'Snødybde (cm)': weather_data['snow_depths'][index]
+                        'Snødybde (cm)': weather_data['snow_depths'][index],
+                        'Endring i snødybde (cm)': weather_data['snow_depths'][index] - weather_data['snow_depths'][index-1]
                     })
 
                 warning_df = pd.DataFrame(warning_data)
                 st.dataframe(warning_df)
             else:
-                st.write("Ingen advarsler om glatte veier eller slush i den valgte perioden.")
+                st.write("Ingen advarsler om slush/glatte veier i den valgte perioden.")
 
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
