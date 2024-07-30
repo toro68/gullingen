@@ -87,7 +87,7 @@ def handle_missing_data(timestamps, data, method='time'):
     return interpolated.to_numpy()
 
 # Function to create a downloadable graph
-def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, slippery_slush_warnings, start_time, end_time, data_points, missing_data_count):
+def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, start_time, end_time, data_points, missing_data_count):
     logger.info("Starting function: create_downloadable_graph")
     
     # Ensure that all series have the same number of elements as timestamps
@@ -152,16 +152,11 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     axes[4].set_title('Vindhastighet', fontsize=18)
     axes[4].grid(True, linestyle=':', alpha=0.6)
 
-    # Plotting snow drift alarms and slippery/slush warnings
+    # Plotting snow drift alarms
     alarm_times = [mdates.date2num(alarm) for alarm in alarms]
-    slippery_times = [timestamps[warning[1]] for warning in slippery_slush_warnings if warning[0] == 'slippery']
-    slush_times = [timestamps[warning[1]] for warning in slippery_slush_warnings if warning[0] == 'slush']
-    
     axes[5].scatter(alarm_times, [1] * len(alarm_times), color='r', marker='x', s=100, label='Snøfokk-alarm')
-    axes[5].scatter(slippery_times, [0.75] * len(slippery_times), color='orange', marker='s', s=100, label='Glatte veier')
-    axes[5].scatter(slush_times, [0.5] * len(slush_times), color='purple', marker='d', s=100, label='Slushfare')
     axes[5].set_yticks([])
-    axes[5].set_title('Advarsler', fontsize=18)
+    axes[5].set_title('Snøfokk-alarmer', fontsize=18)
     axes[5].grid(True, linestyle=':', alpha=0.6)
     axes[5].legend(loc='upper right')
     
@@ -245,15 +240,13 @@ def fetch_and_process_data(client_id, date_start, date_end):
         snow_precipitations = calculate_snow_precipitations(temperatures, precipitations, snow_depths)
 
         alarms = snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures)
-        slippery_slush_warnings = identify_slippery_roads_and_slush(temperatures, precipitations, snow_depths)
         data_points = len(timestamps)
         missing_data_count = np.isnan(snow_depths).sum()
 
         img_str = create_downloadable_graph(
             timestamps, temperatures, precipitations, snow_depths, snow_precipitations, 
             wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms,
-            slippery_slush_warnings, pd.to_datetime(date_start), pd.to_datetime(date_end), 
-            data_points, missing_data_count
+            pd.to_datetime(date_start), pd.to_datetime(date_end), data_points, missing_data_count
         )
 
         logger.info("Completed function: fetch_and_process_data")
@@ -266,8 +259,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
             'snow_precipitations': snow_precipitations,
             'wind_speeds': wind_speeds,
             'missing_periods': missing_periods,
-            'alarms': alarms,
-            'slippery_slush_warnings': slippery_slush_warnings
+            'alarms': alarms
         }
 
     except Exception as e:
@@ -337,25 +329,6 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     logger.info("Completed function: snow_drift_alarm")
     return alarms
 
-# Function to identify slippery roads and slush
-def identify_slippery_roads_and_slush(temperatures, precipitations, snow_depths):
-    logger.info("Starting function: identify_slippery_roads_and_slush")
-    warnings = []
-    for i in range(1, len(temperatures)):
-        # Glatte veier: Temperatur over 0°C og nedbør over 0.5 mm
-        if temperatures[i] > 0 and precipitations[i] > 0.5:
-            warnings.append(('slippery', i, "Glatte veier"))
-        
-        # Slush: Temperatur over 0°C, nedbør over 0.5 mm, og synkende snødybde over 20 cm
-        if (temperatures[i] > 0 and 
-            precipitations[i] > 0.5 and 
-            snow_depths[i] >= 20 and 
-            snow_depths[i] < snow_depths[i-1]):
-            warnings.append(('slush', i, "Slushfare"))
-    
-    logger.info(f"Identified {len(warnings)} warnings")
-    return warnings
-
 # Function to get date range based on user choice
 def get_date_range(choice):
     logger.info(f"Starting function: get_date_range with choice {choice}")
@@ -383,7 +356,7 @@ def get_date_range(choice):
     return start_time.isoformat(), now.isoformat()
 
 # Function to export data to CSV
-def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms, slippery_slush_warnings):
+def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, alarms):
     logger.info("Starting function: export_to_csv")
     df = pd.DataFrame({
         'Timestamp': timestamps,
@@ -392,8 +365,7 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
         'Snow Depth': snow_depths,
         'Snow Precipitation': snow_precipitations,
         'Wind Speed': wind_speeds,
-        'Snow Drift Alarm': ['x' if ts in alarms else '' for ts in timestamps],
-        'Slippery/Slush Warning': [next((w[2] for w in slippery_slush_warnings if w[1] == i), '') for i in range(len(timestamps))]
+        'Snow Drift Alarm': ['x' if ts in alarms else '' for ts in timestamps]
     })
     logger.info("Completed function: export_to_csv")
     return df.to_csv(index=False).encode('utf-8')
@@ -460,8 +432,7 @@ def main():
             st.write(f"Manglende datapunkter: {len(weather_data['missing_periods'])} perioder med manglende data.")
 
             csv_data = export_to_csv(weather_data['timestamps'], weather_data['temperatures'], weather_data['precipitations'], 
-                                     weather_data['snow_depths'], weather_data['snow_precipitations'], weather_data['wind_speeds'], 
-                                     weather_data['alarms'], weather_data['slippery_slush_warnings'])
+                                     weather_data['snow_depths'], weather_data['snow_precipitations'], weather_data['wind_speeds'], weather_data['alarms'])
             st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
 
             # Display summary statistics
@@ -498,4 +469,81 @@ def main():
                 ],
                 'Vindhastighet (m/s)': [
                     f"{np.nanmean(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
-                    f"{np.nanmedian(weather_data['wind_speeds']):.
+                    f"{np.nanmedian(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmin(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmax(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    'N/A'
+                ]
+            })
+            st.table(summary_df)
+
+            # Display GPS activity data
+            st.subheader("GPS aktivitet")
+            if gps_data:
+                gps_df = pd.DataFrame(gps_data)
+                st.dataframe(gps_df)
+            else:
+                st.write("Ingen GPS-aktivitet i den valgte perioden.")
+            
+            # Display snow drift alarms
+            st.subheader("Snøfokk-alarmer")
+            st.write("Kriterier: Vind > 6 m/s, temperatur ≤ -1°C, og ENTEN nedbør < 1.0 mm og endring i snødybde ≥ 1.0 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.5 cm.")
+            if weather_data['alarms']:
+                alarm_data = []
+                for alarm in weather_data['alarms']:
+                    alarm_index = np.where(weather_data['timestamps'] == alarm)[0][0]
+                    if alarm_index > 0:
+                        snow_depth_change = weather_data['snow_depths'][alarm_index] - weather_data['snow_depths'][alarm_index - 1]
+                        snow_depth_change = round(snow_depth_change, 2)
+                    else:
+                        snow_depth_change = 'N/A'
+
+                    alarm_data.append({
+                        'Tidspunkt': alarm,
+                        'Temperatur (°C)': weather_data['temperatures'][alarm_index],
+                        'Vindhastighet (m/s)': weather_data['wind_speeds'][alarm_index],
+                        'Snødybde (cm)': weather_data['snow_depths'][alarm_index],
+                        'Nedbør (mm)': weather_data['precipitations'][alarm_index],
+                        'Endring i snødybde (cm)': snow_depth_change
+                    })
+
+                alarm_df = pd.DataFrame(alarm_data)
+                
+                # Oppsummering av snøfokkalarmer
+                st.subheader("Oppsummering av snøfokkalarmer")
+                
+                # Konverter 'Tidspunkt' til datetime hvis det ikke allerede er det
+                alarm_df['Tidspunkt'] = pd.to_datetime(alarm_df['Tidspunkt'])
+                
+                # Antall alarmer per dato
+                alarms_per_date = alarm_df.groupby(alarm_df['Tidspunkt'].dt.date).size().reset_index(name='Antall alarmer')
+                alarms_per_date.columns = ['Dato', 'Antall alarmer']
+                
+                # Total antall alarmer
+                total_alarms = len(alarm_df)
+                
+                # Gjennomsnittlig vindhastighet og temperatur under alarmene
+                avg_wind_speed = alarm_df['Vindhastighet (m/s)'].mean()
+                avg_temperature = alarm_df['Temperatur (°C)'].mean()
+                
+                # Vis oppsummeringen
+                st.write(f"Totalt antall snøfokkalarmer i perioden: {total_alarms}")
+                st.write(f"Gjennomsnittlig vindhastighet under alarmer: {avg_wind_speed:.2f} m/s")
+                st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
+                
+                st.write("Antall alarmer per dato:")
+                st.table(alarms_per_date)
+                
+                # Vis detaljert alarmdata
+                st.subheader("Detaljerte alarmdata")
+                st.dataframe(alarm_df)
+
+            else:
+                st.write("Ingen snøfokk-alarmer i den valgte perioden.")
+
+    except Exception as e:
+        logger.error(f"Feil ved henting eller behandling av data: {e}")
+        st.error(f"Feil ved henting eller behandling av data: {e}")
+
+if __name__ == "__main__":
+    main()
