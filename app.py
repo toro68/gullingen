@@ -498,4 +498,102 @@ def main():
                 ],
                 'Vindhastighet (m/s)': [
                     f"{np.nanmean(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
-                    f"{np.nanmedian(weather_data['wind_speeds']):.
+                    f"{np.nanmedian(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmin(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    f"{np.nanmax(weather_data['wind_speeds']):.1f}" if not np.all(np.isnan(weather_data['wind_speeds'])) else 'N/A',
+                    'N/A'
+                ]
+            })
+            st.table(summary_df)
+
+            # Display GPS activity data
+            st.subheader("GPS aktivitet")
+            if gps_data:
+                gps_df = pd.DataFrame(gps_data)
+                st.dataframe(gps_df)
+            else:
+                st.write("Ingen GPS-aktivitet i den valgte perioden.")
+            
+            # Display snow drift alarms
+            st.subheader("Snøfokk-alarmer")
+            st.write("Kriterier: Vind > 6 m/s, temperatur ≤ -1°C, og ENTEN nedbør < 1.0 mm og endring i snødybde ≥ 1.0 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.5 cm.")
+            if weather_data['alarms']:
+                alarm_data = []
+                for alarm in weather_data['alarms']:
+                    alarm_index = np.where(weather_data['timestamps'] == alarm)[0][0]
+                    if alarm_index > 0:
+                        snow_depth_change = weather_data['snow_depths'][alarm_index] - weather_data['snow_depths'][alarm_index - 1]
+                        snow_depth_change = round(snow_depth_change, 2)
+                    else:
+                        snow_depth_change = 'N/A'
+
+                    alarm_data.append({
+                        'Tidspunkt': alarm,
+                        'Temperatur (°C)': weather_data['temperatures'][alarm_index],
+                        'Vindhastighet (m/s)': weather_data['wind_speeds'][alarm_index],
+                        'Snødybde (cm)': weather_data['snow_depths'][alarm_index],
+                        'Nedbør (mm)': weather_data['precipitations'][alarm_index],
+                        'Endring i snødybde (cm)': snow_depth_change
+                    })
+
+                alarm_df = pd.DataFrame(alarm_data)
+                
+                # Oppsummering av snøfokkalarmer
+                st.subheader("Oppsummering av snøfokkalarmer")
+                
+                # Konverter 'Tidspunkt' til datetime hvis det ikke allerede er det
+                alarm_df['Tidspunkt'] = pd.to_datetime(alarm_df['Tidspunkt'])
+                
+                # Antall alarmer per dato
+                alarms_per_date = alarm_df.groupby(alarm_df['Tidspunkt'].dt.date).size().reset_index(name='Antall alarmer')
+                alarms_per_date.columns = ['Dato', 'Antall alarmer']
+                
+                # Total antall alarmer
+                total_alarms = len(alarm_df)
+                
+                # Gjennomsnittlig vindhastighet og temperatur under alarmene
+                avg_wind_speed = alarm_df['Vindhastighet (m/s)'].mean()
+                avg_temperature = alarm_df['Temperatur (°C)'].mean()
+                
+                # Vis oppsummeringen
+                st.write(f"Totalt antall snøfokkalarmer i perioden: {total_alarms}")
+                st.write(f"Gjennomsnittlig vindhastighet under alarmer: {avg_wind_speed:.2f} m/s")
+                st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
+                
+                st.write("Antall alarmer per dato:")
+                st.table(alarms_per_date)
+                
+                # Vis detaljert alarmdata
+                st.subheader("Detaljerte alarmdata")
+                st.dataframe(alarm_df)
+
+            else:
+                st.write("Ingen snøfokk-alarmer i den valgte perioden.")
+
+            # Display slippery roads and slush warnings
+            st.subheader("Advarsler om glatte veier og slush")
+            st.write("Kriterier for glatte veier: Temperatur > 0°C og nedbør > 0.5 mm")
+            st.write("Kriterier for slush: Temperatur > 0°C, nedbør > 0.5 mm, snødybde ≥ 20 cm og synkende")
+            
+            if weather_data['slippery_slush_warnings']:
+                warning_data = []
+                for warning_type, index, warning_text in weather_data['slippery_slush_warnings']:
+                    warning_data.append({
+                        'Tidspunkt': weather_data['timestamps'][index],
+                        'Type': warning_text,
+                        'Temperatur (°C)': weather_data['temperatures'][index],
+                        'Nedbør (mm)': weather_data['precipitations'][index],
+                        'Snødybde (cm)': weather_data['snow_depths'][index]
+                    })
+
+                warning_df = pd.DataFrame(warning_data)
+                st.dataframe(warning_df)
+            else:
+                st.write("Ingen advarsler om glatte veier eller slush i den valgte perioden.")
+
+    except Exception as e:
+        logger.error(f"Feil ved henting eller behandling av data: {e}")
+        st.error(f"Feil ved henting eller behandling av data: {e}")
+
+if __name__ == "__main__":
+    main()
