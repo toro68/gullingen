@@ -154,14 +154,19 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
 
     # Plotting snow drift alarms and slippery/slush warnings
     alarm_times = [mdates.date2num(alarm) for alarm in alarms]
-    slippery_times = [timestamps[warning[1]] for warning in slippery_slush_warnings if warning[0] == 'slippery_conditions']
-
-        axes[5].scatter(alarm_times, [1] * len(alarm_times), color='r', marker='x', s=100, label='Snøfokk-alarm')
-        axes[5].scatter(slippery_times, [0.75] * len(slippery_times), color='orange', marker='s', s=100, label='Slush/Glatte veier')
-        axes[5].set_yticks([])
-        axes[5].set_title('Advarsler', fontsize=18)
-        axes[5].grid(True, linestyle=':', alpha=0.6)
-        axes[5].legend(loc='upper right')
+    slippery_times = [timestamps[warning[1]] for warning in slippery_conditions]
+    
+    axes[5].scatter(alarm_times, [1] * len(alarm_times), color='r', marker='x', s=100, label='Snøfokk-alarm')
+    axes[5].scatter(slippery_times, [0.75] * len(slippery_times), color='orange', marker='s', s=100, label='Slush/Glatte veier')
+    axes[5].set_yticks([])
+    axes[5].set_title('Advarsler', fontsize=18)
+    axes[5].grid(True, linestyle=':', alpha=0.6)
+    axes[5].legend(loc='upper right')
+    
+    for ax in axes[:6]:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m %H:%M'))
+        ax.tick_params(axis='x', rotation=45, labelsize=12)
+        ax.tick_params(axis='y', labelsize=12)
     
     for ax in axes[:6]:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m %H:%M'))
