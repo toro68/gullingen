@@ -499,7 +499,7 @@ def main():
 
             # Display GPS activity data
             # Display GPS activity data
-            st.subheader("GPS aktivitet")
+            st.subheader("Siste GPS aktivitet")
             if gps_data:
                 gps_df = pd.DataFrame(gps_data)
                 st.dataframe(gps_df)
@@ -562,6 +562,7 @@ def main():
 
             # Display slippery road alarms
             st.subheader("Glatt vei / slush-alarmer")
+            st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
             st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
             if weather_data['slippery_road_alarms']:
                 slippery_road_data = []
