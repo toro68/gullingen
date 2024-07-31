@@ -179,6 +179,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     plt.close(fig)
 
     logger.info("Completed function: create_downloadable_graph")
+    logger.info(f"Image string length: {len(img_str)}")
     return img_str
 
 # Function to fetch and process weather data
@@ -392,6 +393,13 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 def main():
     st.title("Værdata for Gullingen")
 
+    # Test Matplotlib
+    logger.info("Testing Matplotlib")
+    fig, ax = plt.subplots()
+    ax.plot([1, 2, 3, 4], [1, 4, 2, 3])
+    st.pyplot(fig)
+    logger.info("Matplotlib test completed")
+
     period = st.selectbox(
         "Velg en periode:",
         ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag", "Egendefinert periode", "Siste GPS-aktivitet til nå"]
@@ -443,6 +451,7 @@ def main():
             gps_data = fetch_gps_data() if period != "Siste GPS-aktivitet til nå" else gps_data
         
         if weather_data and 'img_str' in weather_data:
+            logger.info(f"Attempting to display image. Image string length: {len(weather_data['img_str'])}")
             st.image(f"data:image/png;base64,{weather_data['img_str']}", use_column_width=True)
             st.download_button(label="Last ned grafen", data=base64.b64decode(weather_data['img_str']), file_name="weather_data.png", mime="image/png")
 
@@ -609,6 +618,31 @@ def main():
                 st.dataframe(slippery_road_df)
             else:
                 st.write("Ingen glatt vei / slush-alarmer i den valgte perioden.")
+        else:
+            logger.error("No image data available")
+            st.error("Kunne ikke generere graf. Vennligst sjekk loggene for mer informasjon.")
+
+            # If we don't have an image, let's try to plot the data using Streamlit's native plotting functions
+            if weather_data:
+                df = pd.DataFrame({
+                    'timestamp': weather_data['timestamps'],
+                    'temperature': weather_data['temperatures'],
+                    'precipitation': weather_data['precipitations'],
+                    'snow_depth': weather_data['snow_depths'],
+                    'wind_speed': weather_data['wind_speeds']
+                }).set_index('timestamp')
+
+                st.subheader("Temperatur")
+                st.line_chart(df['temperature'])
+
+                st.subheader("Nedbør")
+                st.bar_chart(df['precipitation'])
+
+                st.subheader("Snødybde")
+                st.line_chart(df['snow_depth'])
+
+                st.subheader("Vindhastighet")
+                st.line_chart(df['wind_speed'])
 
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
