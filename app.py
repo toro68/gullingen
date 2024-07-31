@@ -116,7 +116,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     # Plotting estimated snow precipitation
     axes[2].bar(timestamps, snow_precipitations, width=0.02, align='center', color='m', alpha=0.7)
     axes[2].set_ylabel('Antatt snønedbør (mm)', fontsize=16)
-    axes[2].set_title('Antatt snønedbør (Temp ≤ 1,5°C og økende snødybde, eller Temp ≤ 0°C)', fontsize=18)
+    axes[2].set_title('Antatt snønedbør (Temp ≤ 1,5°C og økende snødybde, eller Temp ≤ 0°C og nedbør)', fontsize=18)
     axes[2].grid(True, linestyle=':', alpha=0.6)
 
     # Plotting snow depth data
@@ -562,7 +562,6 @@ def main():
 
             # Display slippery road alarms
             st.subheader("Glatt vei / slush-alarmer")
-            st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
             st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
             if weather_data['slippery_road_alarms']:
                 slippery_road_data = []
