@@ -398,12 +398,12 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 def main():
     st.title("Værdata for Gullingen")
 
-    # Test Matplotlib
-    logger.info("Testing Matplotlib")
-    fig, ax = plt.subplots()
-    ax.plot([1, 2, 3, 4], [1, 4, 2, 3])
-    st.pyplot(fig)
-    logger.info("Matplotlib test completed")
+    # # Test Matplotlib
+    # logger.info("Testing Matplotlib")
+    # fig, ax = plt.subplots()
+    # ax.plot([1, 2, 3, 4], [1, 4, 2, 3])
+    # st.pyplot(fig)
+    # logger.info("Matplotlib test completed")
 
     period = st.selectbox(
         "Velg en periode:",
