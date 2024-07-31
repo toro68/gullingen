@@ -271,6 +271,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
         return None
 
 # Function to identify missing periods in the data
+# Function to identify missing periods in the data
 def identify_missing_periods(timestamps, snow_depths):
     logger.info("Starting function: identify_missing_periods")
     missing_periods = []
@@ -496,6 +497,7 @@ def main():
             })
             st.table(summary_df)
 
+            # Display GPS activity data
             # Display GPS activity data
             st.subheader("Siste GPS aktivitet")
             if gps_data:
