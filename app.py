@@ -46,7 +46,7 @@ def fetch_gps_data():
 # Function to validate snow depths
 def validate_snow_depths(snow_depths):
     logger.info("Starting function: validate_snow_depths")
-    snow_depths = np.array(snow_depths)
+    snow_depths = np.array(snow_depths, dtype=float)  # Ensure float type
     snow_depths[snow_depths < 0] = np.nan
     if np.all(np.isnan(snow_depths)):
         return snow_depths
@@ -67,7 +67,7 @@ def smooth_snow_depths(snow_depths):
     valid_indices = ~np.isnan(snow_depths)
     if np.sum(valid_indices) < 2:
         return snow_depths
-    smoothed = lowess(snow_depths[valid_indices], timestamps[valid_indices], frac=0.1, is_sorted=True)
+    smoothed = lowess(snow_depths[valid_indices], timestamps[valid_indices], frac=0.1, it=0)
     result = np.full_like(snow_depths, np.nan)
     result[valid_indices] = smoothed[:, 1]
     logger.info("Completed function: smooth_snow_depths")
@@ -178,8 +178,8 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     img_str = base64.b64encode(img_buffer.getvalue()).decode()
     plt.close(fig)
 
-    logger.info("Completed function: create_downloadable_graph")
     logger.info(f"Image string length: {len(img_str)}")
+    logger.info("Completed function: create_downloadable_graph")
     return img_str
 
 # Function to fetch and process weather data
@@ -220,6 +220,11 @@ def fetch_and_process_data(client_id, date_start, date_end):
         logger.info(f"Sample of temperature data: {df['temperature'].head()}")
 
         df.index = pd.to_datetime(df.index).tz_localize(ZoneInfo("Europe/Oslo"), nonexistent='shift_forward', ambiguous='NaT')
+
+        df['temperature'] = pd.to_numeric(df['temperature'], errors='coerce')
+        df['precipitation'] = pd.to_numeric(df['precipitation'], errors='coerce')
+        df['snow_depth'] = pd.to_numeric(df['snow_depth'], errors='coerce')
+        df['wind_speed'] = pd.to_numeric(df['wind_speed'], errors='coerce')
 
         df['temperature'] = handle_missing_data(df.index, df['temperature'], method='time')
         df['precipitation'] = handle_missing_data(df.index, df['precipitation'], method='nearest')
@@ -293,15 +298,15 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
     logger.info("Starting function: calculate_snow_precipitations")
     snow_precipitations = []
     for i in range(len(temperatures)):
-        if temperatures[i] is not None:
+        if temperatures[i] is not None and not np.isnan(temperatures[i]):
             # Condition 1: Temperature ≤ 1.5°C and increasing snow depth
-            condition1 = temperatures[i] <= 1.5 and i > 0 and snow_depths[i] > snow_depths[i-1]
+            condition1 = temperatures[i] <= 1.5 and i > 0 and not np.isnan(snow_depths[i]) and not np.isnan(snow_depths[i-1]) and snow_depths[i] > snow_depths[i-1]
             
             # Condition 2: Temperature ≤ 0°C and any precipitation
-            condition2 = temperatures[i] <= 0 and precipitations[i] > 0
+            condition2 = temperatures[i] <= 0 and not np.isnan(precipitations[i]) and precipitations[i] > 0
             
             if condition1 or condition2:
-                snow_precipitations.append(precipitations[i])
+                snow_precipitations.append(precipitations[i] if not np.isnan(precipitations[i]) else 0)
             else:
                 snow_precipitations.append(0)
         else:
@@ -315,15 +320,15 @@ def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, tempe
     alarms = []
     for i in range(1, len(timestamps)):
         # Condition 1: Any change in snow depth with low precipitation
-        condition1 = (wind_speeds[i] > 6 and
-                      precipitations[i] < 0.1 and
+        condition1 = (not np.isnan(wind_speeds[i]) and wind_speeds[i] > 6 and
+                      not np.isnan(precipitations[i]) and precipitations[i] < 0.1 and
                       not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
                       abs(snow_depths[i] - snow_depths[i-1]) >= 1.0 and
                       not np.isnan(temperatures[i]) and temperatures[i] <= -1.0)
         
         # Condition 2: Precipitation with decreasing snow depth
-        condition2 = (wind_speeds[i] > 6 and
-                      precipitations[i] >= 0.1 and
+        condition2 = (not np.isnan(wind_speeds[i]) and wind_speeds[i] > 6 and
+                      not np.isnan(precipitations[i]) and precipitations[i] >= 0.1 and
                       not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
                       snow_depths[i] - snow_depths[i-1] <= -0.5 and
                       not np.isnan(temperatures[i]) and temperatures[i] <= -1)
@@ -339,10 +344,10 @@ def identify_slippery_roads(timestamps, temperatures, precipitations, snow_depth
     logger.info("Starting function: identify_slippery_roads")
     slippery_road_alarms = []
     for i in range(1, len(timestamps)):
-        if (temperatures[i] > 0 and
-            precipitations[i] > 0.5 and
-            snow_depths[i] >= 20 and
-            snow_depths[i] < snow_depths[i-1]):
+        if (not np.isnan(temperatures[i]) and temperatures[i] > 0 and
+            not np.isnan(precipitations[i]) and precipitations[i] > 0.5 and
+            not np.isnan(snow_depths[i]) and snow_depths[i] >= 20 and
+            not np.isnan(snow_depths[i-1]) and snow_depths[i] < snow_depths[i-1]):
             slippery_road_alarms.append(timestamps[i])
     logger.info("Completed function: identify_slippery_roads")
     return slippery_road_alarms
