@@ -277,26 +277,21 @@ def fetch_and_process_data(client_id, date_start, date_end):
         return None
 
 # Function to identify missing periods in the data
-def identify_slippery_roads(timestamps, temperatures, precipitations, snow_depths):
-    logger.info("Starting function: identify_slippery_roads")
-    slippery_road_alarms = []
-    rain_hours = 0
-    rain_threshold = 3  # Number of consecutive hours with rain to trigger an alarm
-
-    for i in range(1, len(timestamps)):
-        if (not np.isnan(temperatures[i]) and temperatures[i] > 0 and
-            not np.isnan(precipitations[i]) and precipitations[i] > 0.5):
-            rain_hours += 1
-        else:
-            rain_hours = 0
-
-        if (rain_hours >= rain_threshold and
-            not np.isnan(snow_depths[i]) and snow_depths[i] >= 20 and
-            not np.isnan(snow_depths[i-1]) and snow_depths[i] < snow_depths[i-1]):
-            slippery_road_alarms.append(timestamps[i])
-
-    logger.info("Completed function: identify_slippery_roads")
-    return slippery_road_alarms
+def identify_missing_periods(timestamps, snow_depths):
+    logger.info("Starting function: identify_missing_periods")
+    missing_periods = []
+    nan_indices = np.where(np.isnan(snow_depths))[0]
+    if len(nan_indices) > 0:
+        current_period = [timestamps[nan_indices[0]], timestamps[nan_indices[0]]]
+        for idx in nan_indices[1:]:
+            if np.abs(timestamps[idx] - current_period[1]) <= np.timedelta64(1, 'h'):
+                current_period[1] = timestamps[idx]
+            else:
+                missing_periods.append(current_period)
+                current_period = [timestamps[idx], timestamps[idx]]
+        missing_periods.append(current_period)
+    logger.info("Completed function: identify_missing_periods")
+    return missing_periods
 
 # Function to calculate snow precipitation
 def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
@@ -579,64 +574,61 @@ def main():
                 st.write("Ingen snøfokk-alarmer i den valgte perioden.")
 
             # Display slippery road alarms
-    st.subheader("Regn 👉🏻👉🏻👉🏻 Glatt vei / slush-alarmer")
-    st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
-    st.write("Kriterier: Temperatur > 0°C, nedbør > 0.5 mm for minst 3 sammenhengende timer, snødybde ≥ 20 cm, og synkende snødybde.")
-    st.write("(Kriteriene vil bli videreutviklet på grunnlag av observasjoner)")
+            st.subheader("Regn 👉🏻👉🏻👉🏻 Glatt vei / slush-alarmer")
+            st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
+            st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
+            st.write("Kriteriene vil bli videreutviklet på grunnlag av observasjoner)")
+            if weather_data['slippery_road_alarms']:
+                slippery_road_data = []
+                for alarm in weather_data['slippery_road_alarms']:
+                    alarm_index = np.where(weather_data['timestamps'] == alarm)[0][0]
+                    if alarm_index > 0:
+                        snow_depth_change = weather_data['snow_depths'][alarm_index] - weather_data['snow_depths'][alarm_index - 1]
+                        snow_depth_change = round(snow_depth_change, 2)
+                    else:
+                        snow_depth_change = 'N/A'
 
-    if weather_data['slippery_road_alarms']:
-        slippery_road_data = []
-        for alarm in weather_data['slippery_road_alarms']:
-            alarm_index = np.where(weather_data['timestamps'] == alarm)[0][0]
-            if alarm_index > 0:
-                snow_depth_change = weather_data['snow_depths'][alarm_index] - weather_data['snow_depths'][alarm_index - 1]
-                snow_depth_change = round(snow_depth_change, 2)
+                    slippery_road_data.append({
+                        'Tidspunkt': alarm,
+                        'Temperatur (°C)': weather_data['temperatures'][alarm_index],
+                        'Nedbør (mm)': weather_data['precipitations'][alarm_index],
+                        'Snødybde (cm)': weather_data['snow_depths'][alarm_index],
+                        'Endring i snødybde (cm)': snow_depth_change
+                    })
+
+                slippery_road_df = pd.DataFrame(slippery_road_data)
+                
+                # Oppsummering av glatt vei / slush-alarmer
+                st.subheader("Oppsummering av glatt vei / slush-alarmer")
+                
+                slippery_road_df['Tidspunkt'] = pd.to_datetime(slippery_road_df['Tidspunkt'])
+                
+                # Antall alarmer per dato
+                alarms_per_date = slippery_road_df.groupby(slippery_road_df['Tidspunkt'].dt.date).size().reset_index(name='Antall alarmer')
+                alarms_per_date.columns = ['Dato', 'Antall alarmer']
+                
+                # Total antall alarmer
+                total_alarms = len(slippery_road_df)
+                
+                # Gjennomsnittlig temperatur og nedbør under alarmene
+                avg_temperature = slippery_road_df['Temperatur (°C)'].mean()
+                avg_precipitation = slippery_road_df['Nedbør (mm)'].mean()
+                
+                st.write(f"Totalt antall glatt vei / slush-alarmer i perioden: {total_alarms}")
+                st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
+                st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
+                
+                st.write("Antall alarmer per dato:")
+                st.table(alarms_per_date)
+                
+                # Vis detaljert alarmdata
+                st.subheader("Detaljerte alarmdata")
+                st.dataframe(slippery_road_df)
             else:
-                snow_depth_change = 'N/A'
-
-            slippery_road_data.append({
-                'Tidspunkt': alarm,
-                'Temperatur (°C)': weather_data['temperatures'][alarm_index],
-                'Nedbør (mm)': weather_data['precipitations'][alarm_index],
-                'Snødybde (cm)': weather_data['snow_depths'][alarm_index],
-                'Endring i snødybde (cm)': snow_depth_change
-            })
-
-        slippery_road_df = pd.DataFrame(slippery_road_data)
-        
-        # Oppsummering av glatt vei / slush-alarmer
-        st.subheader("Oppsummering av glatt vei / slush-alarmer")
-        
-        slippery_road_df['Tidspunkt'] = pd.to_datetime(slippery_road_df['Tidspunkt'])
-        
-        # Antall alarmer per dato
-        alarms_per_date = slippery_road_df.groupby(slippery_road_df['Tidspunkt'].dt.date).size().reset_index(name='Antall alarmer')
-        alarms_per_date.columns = ['Dato', 'Antall alarmer']
-        
-        # Total antall alarmer
-        total_alarms = len(slippery_road_df)
-        
-        # Sjekk om det er mer enn 10 alarmer fordelt på 1 til 2 døgn
-        if total_alarms > 10 and len(alarms_per_date) <= 2:
-            # Gjennomsnittlig temperatur og nedbør under alarmene
-            avg_temperature = slippery_road_df['Temperatur (°C)'].mean()
-            avg_precipitation = slippery_road_df['Nedbør (mm)'].mean()
-            
-            st.write(f"Totalt antall glatt vei / slush-alarmer i perioden: {total_alarms}")
-            st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
-            st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
-            
-            st.write("Antall alarmer per dato:")
-            st.table(alarms_per_date)
-            
-            # Vis detaljert alarmdata
-            st.subheader("Detaljerte alarmdata")
-            st.dataframe(slippery_road_df)
+                st.write("Ingen glatt vei / slush-alarmer i den valgte perioden.")
         else:
-            st.write("Ingen signifikante glatt vei / slush-alarmer i den valgte perioden.")
-    else:
-        st.write("Ingen glatt vei / slush-alarmer i den valgte perioden.")
-
+            logger.error("No image data available")
+            st.error("Kunne ikke generere graf. Vennligst sjekk loggene for mer informasjon.")
 
             # If we don't have an image, let's try to plot the data using Streamlit's native plotting functions
             if weather_data:
