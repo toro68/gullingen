@@ -398,13 +398,6 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 def main():
     st.title("Værdata for Gullingen")
 
-    # # Test Matplotlib
-    # logger.info("Testing Matplotlib")
-    # fig, ax = plt.subplots()
-    # ax.plot([1, 2, 3, 4], [1, 4, 2, 3])
-    # st.pyplot(fig)
-    # logger.info("Matplotlib test completed")
-
     period = st.selectbox(
         "Velg en periode:",
         ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag", "Egendefinert periode", "Siste GPS-aktivitet til nå"]
@@ -577,7 +570,7 @@ def main():
             st.subheader("Regn 👉🏻👉🏻👉🏻 Glatt vei / slush-alarmer")
             st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
             st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
-            st.write("Foreløpig vurdering: Over 10 alarmer over 1-2 døgn kan medføre glatt vei/slush")
+            st.write("(Kriteriene vil bli videreutviklet på grunnlag av observasjoner)")
             if weather_data['slippery_road_alarms']:
                 slippery_road_data = []
                 for alarm in weather_data['slippery_road_alarms']:
@@ -613,10 +606,12 @@ def main():
                 # Gjennomsnittlig temperatur og nedbør under alarmene
                 avg_temperature = slippery_road_df['Temperatur (°C)'].mean()
                 avg_precipitation = slippery_road_df['Nedbør (mm)'].mean()
+                total_precipitation = slippery_road_df['Nedbør (mm)'].sum()
                 
                 st.write(f"Totalt antall glatt vei / slush-alarmer i perioden: {total_alarms}")
                 st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
                 st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
+                st.write(f"Total nedbør under alarmer: {total_precipitation:.2f} mm")
                 
                 st.write("Antall alarmer per dato:")
                 st.table(alarms_per_date)
