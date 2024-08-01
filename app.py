@@ -592,30 +592,31 @@ def main():
                 slippery_road_df = pd.DataFrame(slippery_road_data)
                 
                 # Oppsummering av glatt vei / slush-alarmer
+                # Oppsummering av glatt vei / slush-alarmer
                 st.subheader("Oppsummering av glatt vei / slush-alarmer")
-                
+
                 slippery_road_df['Tidspunkt'] = pd.to_datetime(slippery_road_df['Tidspunkt'])
-                
+
                 # Antall alarmer og sum nedbør per dato
                 alarms_per_date = slippery_road_df.groupby(slippery_road_df['Tidspunkt'].dt.date).agg({
-                    'Tidspunkt': 'count',
+                    'Tidspunkt': 'size',
                     'Nedbør (mm)': 'sum'
                 }).reset_index()
                 alarms_per_date.columns = ['Dato', 'Antall alarmer', 'Sum nedbør (mm)']
-                
+
                 # Total antall alarmer
                 total_alarms = len(slippery_road_df)
-                
+
                 # Gjennomsnittlig temperatur og nedbør under alarmene
                 avg_temperature = slippery_road_df['Temperatur (°C)'].mean()
                 avg_precipitation = slippery_road_df['Nedbør (mm)'].mean()
                 total_precipitation = slippery_road_df['Nedbør (mm)'].sum()
-                
+
                 st.write(f"Totalt antall glatt vei / slush-alarmer i perioden: {total_alarms}")
                 st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
                 st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
                 st.write(f"Total nedbør under alarmer: {total_precipitation:.2f} mm")
-                
+
                 st.write("Antall alarmer og sum nedbør per dato:")
                 st.table(alarms_per_date)
                 
