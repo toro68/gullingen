@@ -592,8 +592,6 @@ def main():
                 slippery_road_df = pd.DataFrame(slippery_road_data)
                 
                 # Oppsummering av glatt vei / slush-alarmer
-                # Oppsummering av glatt vei / slush-alarmer
-                # Oppsummering av glatt vei / slush-alarmer
                 st.subheader("Oppsummering av glatt vei / slush-alarmer")
 
                 slippery_road_df['Dato'] = pd.to_datetime(slippery_road_df['Tidspunkt']).dt.date
@@ -605,6 +603,9 @@ def main():
                 }).reset_index()
                 alarms_per_date.columns = ['Dato', 'Antall alarmer', 'Sum nedbør (mm)']
 
+                # Formater 'Sum nedbør (mm)' til én desimal
+                alarms_per_date['Sum nedbør (mm)'] = alarms_per_date['Sum nedbør (mm)'].apply(lambda x: f"{x:.1f}")
+
                 # Total antall alarmer
                 total_alarms = len(slippery_road_df)
 
@@ -614,9 +615,9 @@ def main():
                 total_precipitation = slippery_road_df['Nedbør (mm)'].sum()
 
                 st.write(f"Totalt antall glatt vei / slush-alarmer i perioden: {total_alarms}")
-                st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
-                st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
-                st.write(f"Total nedbør under alarmer: {total_precipitation:.2f} mm")
+                st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.1f}°C")
+                st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.1f} mm")
+                st.write(f"Total nedbør under alarmer: {total_precipitation:.1f} mm")
 
                 st.write("Antall alarmer og sum nedbør per dato:")
                 st.table(alarms_per_date)
