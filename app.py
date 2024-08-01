@@ -574,7 +574,7 @@ def main():
                 st.write("Ingen snøfokk-alarmer i den valgte perioden.")
 
             # Display slippery road alarms
-            st.subheader("Glatt vei / slush-alarmer")
+            st.subheader("Regn => Glatt vei / slush-alarmer")
             st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
             st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
             if weather_data['slippery_road_alarms']:
