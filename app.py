@@ -592,6 +592,7 @@ def main():
                 slippery_road_df = pd.DataFrame(slippery_road_data)
                 
                 # Oppsummering av glatt vei / slush-alarmer
+                # Oppsummering av glatt vei / slush-alarmer
                 st.subheader("Oppsummering av glatt vei / slush-alarmer")
 
                 slippery_road_df['Dato'] = pd.to_datetime(slippery_road_df['Tidspunkt']).dt.date
