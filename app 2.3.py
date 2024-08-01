@@ -315,29 +315,7 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
     return snow_precipitations
 
 # Function to identify snow drift alarms with new criteria
-def snow_drift_alarm(timestamps, wind_speeds, precipitations, snow_depths, temperatures):
-    logger.info("Starting function: snow_drift_alarm")
-    alarms = []
-    for i in range(1, len(timestamps)):
-        # Condition 1: Any change in snow depth with low precipitation
-        condition1 = (not np.isnan(wind_speeds[i]) and wind_speeds[i] > 6 and
-                      not np.isnan(precipitations[i]) and precipitations[i] < 0.1 and
-                      not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
-                      abs(snow_depths[i] - snow_depths[i-1]) >= 1.0 and
-                      not np.isnan(temperatures[i]) and temperatures[i] <= -1.0)
-        
-        # Condition 2: Precipitation with decreasing snow depth
-        condition2 = (not np.isnan(wind_speeds[i]) and wind_speeds[i] > 6 and
-                      not np.isnan(precipitations[i]) and precipitations[i] >= 0.1 and
-                      not np.isnan(snow_depths[i-1]) and not np.isnan(snow_depths[i]) and
-                      snow_depths[i] - snow_depths[i-1] <= -0.5 and
-                      not np.isnan(temperatures[i]) and temperatures[i] <= -1)
-        
-        if condition1 or condition2:
-            alarms.append(timestamps[i])
-    
-    logger.info("Completed function: snow_drift_alarm")
-    return alarms
+app.py
 
 # Function to identify slippery roads / slush
 def identify_slippery_roads(timestamps, temperatures, precipitations, snow_depths):
