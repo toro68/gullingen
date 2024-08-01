@@ -596,9 +596,12 @@ def main():
                 
                 slippery_road_df['Tidspunkt'] = pd.to_datetime(slippery_road_df['Tidspunkt'])
                 
-                # Antall alarmer per dato
-                alarms_per_date = slippery_road_df.groupby(slippery_road_df['Tidspunkt'].dt.date).size().reset_index(name='Antall alarmer')
-                alarms_per_date.columns = ['Dato', 'Antall alarmer']
+                # Antall alarmer og sum nedbør per dato
+                alarms_per_date = slippery_road_df.groupby(slippery_road_df['Tidspunkt'].dt.date).agg({
+                    'Tidspunkt': 'count',
+                    'Nedbør (mm)': 'sum'
+                }).reset_index()
+                alarms_per_date.columns = ['Dato', 'Antall alarmer', 'Sum nedbør (mm)']
                 
                 # Total antall alarmer
                 total_alarms = len(slippery_road_df)
@@ -613,7 +616,7 @@ def main():
                 st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
                 st.write(f"Total nedbør under alarmer: {total_precipitation:.2f} mm")
                 
-                st.write("Antall alarmer per dato:")
+                st.write("Antall alarmer og sum nedbør per dato:")
                 st.table(alarms_per_date)
                 
                 # Vis detaljert alarmdata
