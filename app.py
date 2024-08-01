@@ -277,26 +277,21 @@ def fetch_and_process_data(client_id, date_start, date_end):
         return None
 
 # Function to identify missing periods in the data
-def identify_slippery_roads(timestamps, temperatures, precipitations, snow_depths):
-    logger.info("Starting function: identify_slippery_roads")
-    slippery_road_alarms = []
-    rain_hours = 0
-    rain_threshold = 3  # Number of consecutive hours with rain to trigger an alarm
-
-    for i in range(1, len(timestamps)):
-        if (not np.isnan(temperatures[i]) and temperatures[i] > 0 and
-            not np.isnan(precipitations[i]) and precipitations[i] > 0.5):
-            rain_hours += 1
-        else:
-            rain_hours = 0
-
-        if (rain_hours >= rain_threshold and
-            not np.isnan(snow_depths[i]) and snow_depths[i] >= 20 and
-            not np.isnan(snow_depths[i-1]) and snow_depths[i] < snow_depths[i-1]):
-            slippery_road_alarms.append(timestamps[i])
-
-    logger.info("Completed function: identify_slippery_roads")
-    return slippery_road_alarms
+def identify_missing_periods(timestamps, snow_depths):
+    logger.info("Starting function: identify_missing_periods")
+    missing_periods = []
+    nan_indices = np.where(np.isnan(snow_depths))[0]
+    if len(nan_indices) > 0:
+        current_period = [timestamps[nan_indices[0]], timestamps[nan_indices[0]]]
+        for idx in nan_indices[1:]:
+            if np.abs(timestamps[idx] - current_period[1]) <= np.timedelta64(1, 'h'):
+                current_period[1] = timestamps[idx]
+            else:
+                missing_periods.append(current_period)
+                current_period = [timestamps[idx], timestamps[idx]]
+        missing_periods.append(current_period)
+    logger.info("Completed function: identify_missing_periods")
+    return missing_periods
 
 # Function to calculate snow precipitation
 def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
@@ -402,6 +397,13 @@ def export_to_csv(timestamps, temperatures, precipitations, snow_depths, snow_pr
 # Main function to run the Streamlit app
 def main():
     st.title("Værdata for Gullingen")
+
+    # # Test Matplotlib
+    # logger.info("Testing Matplotlib")
+    # fig, ax = plt.subplots()
+    # ax.plot([1, 2, 3, 4], [1, 4, 2, 3])
+    # st.pyplot(fig)
+    # logger.info("Matplotlib test completed")
 
     period = st.selectbox(
         "Velg en periode:",
@@ -574,8 +576,8 @@ def main():
             # Display slippery road alarms
             st.subheader("Regn 👉🏻👉🏻👉🏻 Glatt vei / slush-alarmer")
             st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
-            st.write("Kriterier: Temperatur > 0°C, nedbør > 0.5 mm for minst 3 sammenhengende timer, snødybde ≥ 20 cm, og synkende snødybde.")
-            st.write("(Kriteriene vil bli videreutviklet på grunnlag av observasjoner)")
+            st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
+            st.write("Foreløpig vurdering: Mer enn 10 alarmer på 1-2 døgn medfører glatt vei/slush")
             if weather_data['slippery_road_alarms']:
                 slippery_road_data = []
                 for alarm in weather_data['slippery_road_alarms']:
@@ -608,24 +610,20 @@ def main():
                 # Total antall alarmer
                 total_alarms = len(slippery_road_df)
                 
-                # Sjekk om det er mer enn 10 alarmer fordelt på 1 til 2 døgn
-                if total_alarms > 10 and len(alarms_per_date) <= 2:
-                    # Gjennomsnittlig temperatur og nedbør under alarmene
-                    avg_temperature = slippery_road_df['Temperatur (°C)'].mean()
-                    avg_precipitation = slippery_road_df['Nedbør (mm)'].mean()
-                    
-                    st.write(f"Totalt antall glatt vei / slush-alarmer i perioden: {total_alarms}")
-                    st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
-                    st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
-                    
-                    st.write("Antall alarmer per dato:")
-                    st.table(alarms_per_date)
-                    
-                    # Vis detaljert alarmdata
-                    st.subheader("Detaljerte alarmdata")
-                    st.dataframe(slippery_road_df)
-                else:
-                    st.write("Ingen signifikante glatt vei / slush-alarmer i den valgte perioden.")
+                # Gjennomsnittlig temperatur og nedbør under alarmene
+                avg_temperature = slippery_road_df['Temperatur (°C)'].mean()
+                avg_precipitation = slippery_road_df['Nedbør (mm)'].mean()
+                
+                st.write(f"Totalt antall glatt vei / slush-alarmer i perioden: {total_alarms}")
+                st.write(f"Gjennomsnittlig temperatur under alarmer: {avg_temperature:.2f}°C")
+                st.write(f"Gjennomsnittlig nedbør under alarmer: {avg_precipitation:.2f} mm")
+                
+                st.write("Antall alarmer per dato:")
+                st.table(alarms_per_date)
+                
+                # Vis detaljert alarmdata
+                st.subheader("Detaljerte alarmdata")
+                st.dataframe(slippery_road_df)
             else:
                 st.write("Ingen glatt vei / slush-alarmer i den valgte perioden.")
         else:
