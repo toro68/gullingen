@@ -593,13 +593,14 @@ def main():
                 
                 # Oppsummering av glatt vei / slush-alarmer
                 # Oppsummering av glatt vei / slush-alarmer
+                # Oppsummering av glatt vei / slush-alarmer
                 st.subheader("Oppsummering av glatt vei / slush-alarmer")
 
-                slippery_road_df['Tidspunkt'] = pd.to_datetime(slippery_road_df['Tidspunkt'])
+                slippery_road_df['Dato'] = pd.to_datetime(slippery_road_df['Tidspunkt']).dt.date
 
                 # Antall alarmer og sum nedbør per dato
-                alarms_per_date = slippery_road_df.groupby(slippery_road_df['Tidspunkt'].dt.date).agg({
-                    'Tidspunkt': 'size',
+                alarms_per_date = slippery_road_df.groupby('Dato').agg({
+                    'Tidspunkt': 'count',
                     'Nedbør (mm)': 'sum'
                 }).reset_index()
                 alarms_per_date.columns = ['Dato', 'Antall alarmer', 'Sum nedbør (mm)']
