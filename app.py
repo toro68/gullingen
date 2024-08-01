@@ -520,8 +520,8 @@ def main():
             
             # Display snow drift alarms
             st.subheader("Snøfokk-alarmer")
-            st.write("Kriterier: Vind > 6 m/s, temperatur ≤ -1°C, og ENTEN nedbør < 1.0 mm og endring i snødybde ≥ 1.0 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.5 cm.")
-            st.write("Selv ")
+            st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
+            st.write("Kriterier: Vind > 6 m/s, temperatur ≤ -1°C, minst 6 cm akkumulert løssnø, og ENTEN nedbør < 1.0 mm og endring i snødybde ≥ 1.0 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.5 cm.")
             if weather_data['alarms']:
                 alarm_data = []
                 for alarm in weather_data['alarms']:
@@ -575,6 +575,7 @@ def main():
 
             # Display slippery road alarms
             st.subheader("Glatt vei / slush-alarmer")
+            st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
             st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
             if weather_data['slippery_road_alarms']:
                 slippery_road_data = []
