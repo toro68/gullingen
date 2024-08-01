@@ -577,7 +577,7 @@ def main():
             st.subheader("Regn 👉🏻👉🏻👉🏻 Glatt vei / slush-alarmer")
             st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
             st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
-            st.write("Foreløpig vurdering: Mer enn 10 alarmer på 1-2 døgn medfører glatt vei/slush")
+            st.write("Foreløpig vurdering: Over 10 alarmer over 1-2 døgn kan medføre glatt vei/slush")
             if weather_data['slippery_road_alarms']:
                 slippery_road_data = []
                 for alarm in weather_data['slippery_road_alarms']:
