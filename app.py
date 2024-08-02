@@ -97,37 +97,34 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     fig.suptitle(f"Værdata for Gullingen værstasjon (SN46220)\nPeriode: {start_time.strftime('%d.%m.%Y %H:%M')} - {end_time.strftime('%d.%m.%Y %H:%M')}", 
                  fontsize=24, fontweight='bold', y=0.95)
 
-    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F']
     titles = ['Temperatur', 'Nedbør', 'Antatt snønedbør', 'Snødybde', 'Vindhastighet', 'Alarmer']
     ylabels = ['Temperatur (°C)', 'Nedbør (mm)', 'Antatt snønedbør (mm)', 'Snødybde (cm)', 'Vindhastighet (m/s)', '']
 
-    for ax, title, ylabel, color in zip(axes, titles, ylabels, colors):
-        ax.set_title(title, fontsize=18, fontweight='bold', color=color, 
-                     bbox=dict(facecolor='white', edgecolor=color, boxstyle='round,pad=0.5'))
-        ax.set_ylabel(ylabel, fontsize=14, fontweight='bold', color=color)
+    for ax, title, ylabel in zip(axes, titles, ylabels):
+        ax.set_title(title, fontsize=18, fontweight='bold', 
+                     bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+        ax.set_ylabel(ylabel, fontsize=14, fontweight='bold')
         ax.grid(True, linestyle=':', alpha=0.6)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
 
     # Temperatur
-    axes[0].plot(timestamps, temperatures, color=colors[0], linewidth=2)
-    axes[0].fill_between(timestamps, temperatures, alpha=0.3, color=colors[0])
+    above_zero = temperatures >= 0
+    axes[0].plot(timestamps[above_zero], temperatures[above_zero], color='red', linewidth=2)
+    axes[0].plot(timestamps[~above_zero], temperatures[~above_zero], color='blue', linewidth=2)
+    axes[0].axhline(y=0, color='k', linestyle='--', linewidth=1)
 
     # Nedbør
-    axes[1].bar(timestamps, precipitations, width=0.02, align='center', color=colors[1], alpha=0.7)
+    axes[1].bar(timestamps, precipitations, width=0.02, align='center', color='blue', edgecolor='black', linewidth=0.5)
 
     # Antatt snønedbør
-    axes[2].bar(timestamps, snow_precipitations, width=0.02, align='center', color=colors[2], alpha=0.7)
+    axes[2].bar(timestamps, snow_precipitations, width=0.02, align='center', color='lightblue', edgecolor='black', linewidth=0.5)
 
     # Snødybde
     if not np.all(np.isnan(snow_depths)):
         valid_indices = ~np.isnan(snow_depths)
-        axes[3].plot(timestamps[valid_indices], snow_depths[valid_indices], '.', label='Rå data', markersize=4, color=colors[3], alpha=0.5)
-        axes[3].plot(timestamps[valid_indices], smoothed_snow_depths[valid_indices], '-', label='Glattet data', linewidth=2, color=colors[3])
-        axes[3].fill_between(timestamps[valid_indices], 
-                             confidence_intervals[0][valid_indices], 
-                             confidence_intervals[1][valid_indices], 
-                             color=colors[3], alpha=0.2, label='Konfidensintervall')
+        axes[3].plot(timestamps[valid_indices], snow_depths[valid_indices], '.', label='Rå data', markersize=4, color='blue', alpha=0.5)
+        axes[3].plot(timestamps[valid_indices], smoothed_snow_depths[valid_indices], '-', label='Glattet data', linewidth=2, color='red')
         
         max_snow_depth = np.nanmax(snow_depths)
         axes[3].set_ylim(0, max_snow_depth * 1.1 if not np.isnan(max_snow_depth) and max_snow_depth > 0 else 10)
@@ -140,7 +137,7 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     axes[3].legend(loc='upper right', fancybox=True, shadow=True)
 
     # Vindhastighet
-    axes[4].plot(timestamps, wind_speeds, color=colors[4], linewidth=2)
+    axes[4].plot(timestamps, wind_speeds, color='green', linewidth=2)
 
     # Alarmer
     alarm_times = [mdates.date2num(alarm) for alarm in alarms]
