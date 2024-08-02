@@ -90,44 +90,50 @@ def handle_missing_data(timestamps, data, method='time'):
 def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, slippery_road_alarms, start_time, end_time, data_points, missing_data_count):
     logger.info("Starting function: create_downloadable_graph")
     
-    # Ensure that all series have the same number of elements as timestamps
-    assert len(timestamps) == len(temperatures) == len(precipitations) == len(snow_depths) == len(wind_speeds)
+    # Set the style to a more modern look
+    plt.style.use('seaborn-whitegrid')
+    
+    fig, axes = plt.subplots(6, 1, figsize=(16, 32), sharex=True, facecolor='#F0F0F0')
+    plt.rcParams.update({'font.size': 12, 'font.weight': 'bold'})
 
-    # Use only non-NaN data for plotting
-    valid_indices = ~np.isnan(snow_depths)
+    fig.suptitle(f"Værdata for Gullingen værstasjon (SN46220)\nPeriode: {start_time.strftime('%d.%m.%Y %H:%M')} - {end_time.strftime('%d.%m.%Y %H:%M')}", 
+                 fontsize=24, fontweight='bold', y=0.95)
 
-    fig, axes = plt.subplots(6, 1, figsize=(14, 28), sharex=True)
-    plt.rcParams.update({'font.size': 14})
+    # Define a color palette
+    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F']
 
-    fig.suptitle(f"Værdata for Gullingen værstasjon (SN46220)\nPeriode: {start_time.strftime('%d.%m.%Y %H:%M')} - {end_time.strftime('%d.%m.%Y %H:%M')}", fontsize=22, fontweight='bold')
+    for i, (ax, title, ylabel, color) in enumerate(zip(
+        axes,
+        ['Temperatur', 'Nedbør', 'Antatt snønedbør', 'Snødybde', 'Vindhastighet', 'Alarmer'],
+        ['Temperatur (°C)', 'Nedbør (mm)', 'Antatt snønedbør (mm)', 'Snødybde (cm)', 'Vindhastighet (m/s)', ''],
+        colors
+    )):
+        ax.set_title(title, fontsize=18, fontweight='bold', color=color, 
+                     bbox=dict(facecolor='white', edgecolor=color, boxstyle='round,pad=0.5'))
+        ax.set_ylabel(ylabel, fontsize=14, fontweight='bold', color=color)
+        ax.grid(True, linestyle=':', alpha=0.6)
+        for spine in ax.spines.values():
+            spine.set_edgecolor(color)
 
     # Plotting temperature data
-    axes[0].plot(timestamps, temperatures, 'r-', linewidth=2)
-    axes[0].set_ylabel('Temperatur (°C)', fontsize=16)
-    axes[0].set_title('Temperatur', fontsize=18)
-    axes[0].grid(True, linestyle=':', alpha=0.6)
+    axes[0].plot(timestamps, temperatures, color=colors[0], linewidth=2, marker='o', markersize=4)
+    axes[0].fill_between(timestamps, temperatures, alpha=0.3, color=colors[0])
 
     # Plotting precipitation data
-    axes[1].bar(timestamps, precipitations, width=0.02, align='center', color='b', alpha=0.7)
-    axes[1].set_ylabel('Nedbør (mm)', fontsize=16)
-    axes[1].set_title('Nedbør', fontsize=18)
-    axes[1].grid(True, linestyle=':', alpha=0.6)
+    axes[1].bar(timestamps, precipitations, width=0.02, align='center', color=colors[1], alpha=0.7)
 
     # Plotting estimated snow precipitation
-    axes[2].bar(timestamps, snow_precipitations, width=0.02, align='center', color='m', alpha=0.7)
-    axes[2].set_ylabel('Antatt snønedbør (mm)', fontsize=16)
-    axes[2].set_title('Antatt snønedbør (Temp ≤ 1,5°C og økende snødybde, eller Temp ≤ 0°C og nedbør)', fontsize=18)
-    axes[2].grid(True, linestyle=':', alpha=0.6)
+    axes[2].bar(timestamps, snow_precipitations, width=0.02, align='center', color=colors[2], alpha=0.7)
 
     # Plotting snow depth data
     if not np.all(np.isnan(snow_depths)):
         valid_indices = ~np.isnan(snow_depths)
-        axes[3].plot(timestamps[valid_indices], snow_depths[valid_indices], 'o', label='Rå snødybde data', markersize=4)
-        axes[3].plot(timestamps[valid_indices], smoothed_snow_depths[valid_indices], '-', label='Glattet snødybde data', linewidth=2)
+        axes[3].plot(timestamps[valid_indices], snow_depths[valid_indices], 'o', label='Rå snødybde data', markersize=4, color=colors[3])
+        axes[3].plot(timestamps[valid_indices], smoothed_snow_depths[valid_indices], '-', label='Glattet snødybde data', linewidth=2, color=colors[3])
         axes[3].fill_between(timestamps[valid_indices], 
                              confidence_intervals[0][valid_indices], 
                              confidence_intervals[1][valid_indices], 
-                             color='gray', alpha=0.2, label='Konfidensintervall')
+                             color=colors[3], alpha=0.2, label='Konfidensintervall')
         
         max_snow_depth = np.nanmax(snow_depths)
         axes[3].set_ylim(0, max_snow_depth * 1.1 if not np.isnan(max_snow_depth) and max_snow_depth > 0 else 10)
@@ -138,38 +144,41 @@ def create_downloadable_graph(timestamps, temperatures, precipitations, snow_dep
     for period in missing_periods:
         axes[3].axvspan(period[0], period[1], color='yellow', alpha=0.3, label='Manglende data' if period == missing_periods[0] else "")
 
-    axes[3].set_ylabel('Snødybde (cm)', fontsize=16)
-    axes[3].set_title('Snødybde', fontsize=18)
-    axes[3].grid(True, linestyle=':', alpha=0.6)
-    axes[3].legend(loc='best')
-
-    max_snow_depth = np.nanmax(snow_depths)
-    axes[3].set_ylim(0, max_snow_depth * 1.1 if not np.isnan(max_snow_depth) and max_snow_depth > 0 else 10)
+    axes[3].legend(loc='upper right', fancybox=True, shadow=True)
 
     # Plotting wind speed data
-    axes[4].plot(timestamps, wind_speeds, 'g-', linewidth=2)
-    axes[4].set_ylabel('Vindhastighet (m/s)', fontsize=16)
-    axes[4].set_title('Vindhastighet', fontsize=18)
-    axes[4].grid(True, linestyle=':', alpha=0.6)
+    axes[4].plot(timestamps, wind_speeds, color=colors[4], linewidth=2, marker='s', markersize=4)
 
     # Plotting snow drift alarms and slippery road alarms
     alarm_times = [mdates.date2num(alarm) for alarm in alarms]
     slippery_road_times = [mdates.date2num(alarm) for alarm in slippery_road_alarms]
-    axes[5].scatter(alarm_times, [1] * len(alarm_times), color='r', marker='x', s=100, label='Snøfokk-alarm')
-    axes[5].scatter(slippery_road_times, [0.5] * len(slippery_road_times), color='b', marker='s', s=100, label='Glatt vei / slush-alarm')
+    axes[5].scatter(alarm_times, [1] * len(alarm_times), color='red', marker='x', s=100, label='Snøfokk-alarm')
+    axes[5].scatter(slippery_road_times, [0.5] * len(slippery_road_times), color='blue', marker='s', s=100, label='Glatt vei / slush-alarm')
     axes[5].set_yticks([])
-    axes[5].set_title('Alarmer', fontsize=18)
-    axes[5].grid(True, linestyle=':', alpha=0.6)
-    axes[5].legend(loc='upper right')
-    
-    for ax in axes[:6]:
+    axes[5].legend(loc='upper right', fancybox=True, shadow=True)
+
+    for ax in axes:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m %H:%M'))
-        ax.tick_params(axis='x', rotation=45, labelsize=12)
-        ax.tick_params(axis='y', labelsize=12)
+        ax.tick_params(axis='x', rotation=45, labelsize=10)
+        ax.tick_params(axis='y', labelsize=10)
 
-    fig.tight_layout(rect=[0, 0.03, 1, 0.97])
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
-    fig.text(0.99, 0.01, f'Data hentet: {datetime.now(ZoneInfo("Europe/Oslo")).strftime("%d.%m.%Y %H:%M")}\nAntall datapunkter: {data_points}\nManglende datapunkter: {missing_data_count}', ha='right', va='bottom', fontsize=12)
+    # Add annotations for key events
+    for alarm in alarms:
+        axes[5].annotate('Snøfokk', (mdates.date2num(alarm), 1), xytext=(0, 10), 
+                         textcoords='offset points', ha='center', va='bottom',
+                         bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
+                         arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+
+    for alarm in slippery_road_alarms:
+        axes[5].annotate('Glatt', (mdates.date2num(alarm), 0.5), xytext=(0, -10), 
+                         textcoords='offset points', ha='center', va='top',
+                         bbox=dict(boxstyle='round,pad=0.5', fc='lightblue', alpha=0.5),
+                         arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+
+    fig.text(0.99, 0.01, f'Data hentet: {datetime.now(ZoneInfo("Europe/Oslo")).strftime("%d.%m.%Y %H:%M")}\nAntall datapunkter: {data_points}\nManglende datapunkter: {missing_data_count}', 
+             ha='right', va='bottom', fontsize=10, style='italic')
 
     img_buffer = io.BytesIO()
     plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
