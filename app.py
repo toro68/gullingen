@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import seaborn as sns
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import matplotlib.pyplot as plt
@@ -90,7 +91,7 @@ def handle_missing_data(timestamps, data, method='time'):
 def create_downloadable_graph(timestamps, temperatures, precipitations, snow_depths, snow_precipitations, wind_speeds, smoothed_snow_depths, confidence_intervals, missing_periods, alarms, slippery_road_alarms, start_time, end_time, data_points, missing_data_count):
     logger.info("Starting function: create_downloadable_graph")
     
-    plt.style.use('seaborn-whitegrid')
+    plt.style.use('seaborn-v0_8-whitegrid')
     fig, axes = plt.subplots(6, 1, figsize=(16, 32), sharex=True, facecolor='#F0F0F0')
     plt.rcParams.update({'font.size': 12, 'font.weight': 'bold'})
 
@@ -188,7 +189,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
         url = "https://frost.met.no/observations/v0.jsonld"
         params = {
             "sources": "SN46220",
-            "elements": "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_speed,relative_humidity,dew_point_temperature",
+            "elements": "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_speed,surface_temperature,relative_humidity,dew_point_temperature",
             "timeresolutions": "PT1H",
             "referencetime": f"{date_start}/{date_end}"
         }
@@ -510,7 +511,7 @@ def main():
                 st.write("Ingen GPS-aktivitet i den valgte perioden.")
             
             # Display snow drift alarms
-            st.subheader("Snøfokk-alarmer")
+            st.subheader("Sterk vind+løssnø 👉🏻👉🏻👉🏻 Snøfokk-alarmer")
             st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
             st.write("Kriterier: Vind > 6 m/s, temperatur ≤ -1°C, minst 6 cm akkumulert løssnø, og ENTEN nedbør < 1.0 mm og endring i snødybde ≥ 1.0 cm ELLER nedbør ≥ 0.1 mm og minking i snødybde ≥ 0.5 cm.")
             if weather_data['alarms']:
@@ -566,9 +567,9 @@ def main():
 
             # Display slippery road alarms
             st.subheader("Regn 👉🏻👉🏻👉🏻 Glatt vei / slush-alarmer")
-            st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
             st.write("Alarmene er basert på værdata og ikke direkte observasjoner.")
-            st.write("(Kriteriene vil bli videreutviklet: Hvor mye regn utløser glatte veier/slush?)")
+            st.write("Kriterier: Temperatur > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, og synkende snødybde.")
+
             if weather_data['slippery_road_alarms']:
                 slippery_road_data = []
                 for alarm in weather_data['slippery_road_alarms']:
