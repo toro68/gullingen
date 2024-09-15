@@ -188,7 +188,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
         url = "https://frost.met.no/observations/v0.jsonld"
         params = {
             "sources": "SN46220",
-            "elements": "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_speed",
+            "elements": "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_speed,relative_humidity,dew_point_temperature",
             "timeresolutions": "PT1H",
             "referencetime": f"{date_start}/{date_end}"
         }
