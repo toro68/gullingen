@@ -10,3 +10,4 @@ pytz==2024.2
 scipy==1.14.1
 altair==5.4.1
 pillow==10.4.0
+plotly==5.15.0
