@@ -152,14 +152,6 @@ def create_improved_graph(df):
     # Update layout
     fig.update_layout(
         height=1800,
-        title={
-            'text': "Værdata for Gullingen værstasjon",
-            'y':0.95,
-            'x':0.5,
-            'xanchor': 'center',
-            'yanchor': 'top'
-        },
-        title_font=dict(size=24),
         plot_bgcolor='rgba(240,240,240,0.8)',
         barmode='stack',
         legend=dict(
@@ -240,30 +232,38 @@ def fetch_and_process_data(client_id, date_start, date_end):
 
         df.index = pd.to_datetime(df.index).tz_localize(TZ, nonexistent='shift_forward', ambiguous='NaT')
 
+        # Create a new dictionary to store processed data
+        processed_data = {}
+
         for column in df.columns:
-            df[column] = pd.to_numeric(df[column], errors='coerce')
-            df[column] = validate_data(df[column].values)
-            df[column] = handle_missing_data(df.index, df[column].values, method='time')
+            processed_data[column] = pd.to_numeric(df[column], errors='coerce')
+            processed_data[column] = validate_data(processed_data[column])
+            processed_data[column] = handle_missing_data(df.index, processed_data[column], method='time')
+
+        # Create a new DataFrame with processed data
+        processed_df = pd.DataFrame(processed_data, index=df.index)
 
         # Calculate snow precipitation
-        df['snow_precipitation'] = calculate_snow_precipitations(df['air_temperature'].values, df['precipitation_amount'].values, df['surface_snow_thickness'].values)
+        processed_df['snow_precipitation'] = calculate_snow_precipitations(
+            processed_df['air_temperature'].values,
+            processed_df['precipitation_amount'].values,
+            processed_df['surface_snow_thickness'].values
+        )
 
-        # Calculate alarms using raw data
-        df = calculate_snow_drift_alarms(df)
-        df = calculate_slippery_road_alarms(df)
+        # Calculate alarms using processed data
+        processed_df = calculate_snow_drift_alarms(processed_df)
+        processed_df = calculate_slippery_road_alarms(processed_df)
         
-        # Then smooth the data for visualization
-        smoothed_columns = {}
-        for column in df.columns:
+        # Smooth the data for visualization
+        smoothed_data = {}
+        for column in processed_df.columns:
             if column not in ['snow_drift_alarm', 'slippery_road_alarm', 'snow_precipitation']:
-                smoothed_columns[column] = smooth_data(df[column].values)
+                smoothed_data[column] = smooth_data(processed_df[column].values)
+            else:
+                smoothed_data[column] = processed_df[column]
         
         # Create a new DataFrame with smoothed data
-        smoothed_df = pd.DataFrame(smoothed_columns, index=df.index)
-        
-        # Add non-smoothed columns back
-        for column in ['snow_drift_alarm', 'slippery_road_alarm', 'snow_precipitation']:
-            smoothed_df[column] = df[column]
+        smoothed_df = pd.DataFrame(smoothed_data, index=processed_df.index)
 
         logger.info("Completed function: fetch_and_process_data")
         return {'df': smoothed_df}
@@ -354,13 +354,43 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
 
 def main():
     st.set_page_config(layout="wide")
+    
+    # Oppdatert CSS for å øke høyden på dropdown-menyen og sikre at den vises fullstendig
+    st.markdown("""
+    <style>
+    div[data-baseweb="select"] {
+        z-index: 999;
+    }
+    div[data-baseweb="select"] > div {
+        max-height: none !important;
+    }
+    div[data-baseweb="select"] ul {
+        max-height: 300px !important;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    div[data-baseweb="select"] li {
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+    }
+    .stSelectbox div [data-testid="stMarkdownContainer"] p {
+        font-size: 14px;
+        margin-bottom: 0px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     st.title("Værdata for Gullingen")
 
     period = st.selectbox(
         "Velg en periode:",
-        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", "Siden sist fredag", "Siden sist søndag", "Egendefinert periode", "Siste GPS-aktivitet til nå"]
+        ["Siste 24 timer", "Siste 7 dager", "Siste 12 timer", "Siste 4 timer", 
+         "Siden sist fredag", "Siden sist søndag", "Egendefinert periode", 
+         "Siste GPS-aktivitet til nå"]
     )
 
+    # Rest of the function remains the same
     client_id = st.secrets["api_keys"]["client_id"]
 
     if period == "Egendefinert periode":
@@ -416,9 +446,6 @@ def main():
             # Create and display the improved graph
             fig = create_improved_graph(df)
             st.plotly_chart(fig, use_container_width=True)
-
-            csv_data = export_to_csv(df)
-            st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
 
             # Display summary statistics
             st.subheader("Oppsummering av data")
@@ -512,6 +539,17 @@ def main():
                     st.write(f"Totalt antall glatt vei / slush-alarmer: {len(slippery_road_alarms)}")
                 else:
                     st.write("Ingen glatt vei / slush-alarmer i den valgte perioden.")
+
+            # Move the CSV download button to the bottom
+            st.write("") # Add some space
+            st.write("") # Add more space
+            csv_data = export_to_csv(df)
+            st.download_button(
+                label="Last ned data som CSV",
+                data=csv_data,
+                file_name="weather_data.csv",
+                mime="text/csv"
+            )
 
         else:
             logger.error("No data available")
