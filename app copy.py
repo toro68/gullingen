@@ -1,15 +1,16 @@
 import streamlit as st
 import requests
+import seaborn as sns
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import io
 import base64
 import logging
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -27,7 +28,6 @@ TZ = ZoneInfo("Europe/Oslo")
 
 def fetch_gps_data():
     logger.info("Fetching GPS data")
-    
     try:
         response = requests.get(GPS_URL)
         response.raise_for_status()
@@ -52,18 +52,21 @@ def fetch_gps_data():
         logger.error(f"Date parsing error: {e}")
         return []
 
+
 def validate_data(data):
     logger.info("Starting function: validate_data")
     data = np.array(data, dtype=float)
+    # Removed the -100 threshold
     if np.all(np.isnan(data)):
         return data
     median = np.nanmedian(data)
     std = np.nanstd(data)
-    lower_bound = median - 5 * std
+    lower_bound = median - 5 * std  # Increased from 3 to 5
     upper_bound = median + 5 * std
     data[(data < lower_bound) | (data > upper_bound)] = np.nan
     logger.info("Completed function: validate_data")
     return data
+
 
 def smooth_data(data):
     logger.info("Starting function: smooth_data")
@@ -79,6 +82,7 @@ def smooth_data(data):
     logger.info("Completed function: smooth_data")
     return result
 
+
 def handle_missing_data(timestamps, data, method='time'):
     logger.info(f"Starting function: handle_missing_data with method {method}")
     data_series = pd.Series(data, index=timestamps)
@@ -91,116 +95,71 @@ def handle_missing_data(timestamps, data, method='time'):
     logger.info("Completed function: handle_missing_data")
     return interpolated.to_numpy()
 
-def create_improved_graph(df):
-    fig = make_subplots(
-        rows=6, cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.08,
-        subplot_titles=(
-            "Temperatur (°C)", "Nedbør (mm)", "Antatt snønedbør (mm)", "Snødybde (cm)", "Vindhastighet (m/s)", "Alarmer"
-        )
-    )
 
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
-
-    # Temperatur
-    temp_above_zero = [t if t > 0 else None for t in df['air_temperature']]
-    temp_below_zero = [t if t <= 0 else None for t in df['air_temperature']]
+def create_downloadable_graph(df, start_time, end_time):
+    logger.info("Starting function: create_downloadable_graph")
     
-    fig.add_trace(go.Scatter(x=df.index, y=temp_above_zero, mode='lines', name='Over 0°C',
-                             line=dict(color='red', width=2)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=temp_below_zero, mode='lines', name='Under 0°C',
-                             line=dict(color='blue', width=2)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=[df.index[0], df.index[-1]], y=[0, 0], mode='lines', name='0°C',
-                             line=dict(color='black', width=1, dash='dash')), row=1, col=1)
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, axes = plt.subplots(8, 1, figsize=(16, 40), sharex=True, facecolor='#F0F0F0')
+    plt.rcParams.update({'font.size': 12, 'font.weight': 'bold'})
 
-    # Nedbør
-    precip_rain = [p if t > 0.3 else 0 for p, t in zip(df['precipitation_amount'], df['air_temperature'])]
-    precip_snow = [p if t <= 0 else 0 for p, t in zip(df['precipitation_amount'], df['air_temperature'])]
-    precip_sleet = [p if 0 < t <= 0.3 else 0 for p, t in zip(df['precipitation_amount'], df['air_temperature'])]
+    fig.suptitle(f"Værdata for Gullingen værstasjon ({STATION_ID})\nPeriode: {start_time.strftime('%d.%m.%Y %H:%M')} - {end_time.strftime('%d.%m.%Y %H:%M')}", 
+                 fontsize=24, fontweight='bold', y=0.95)
 
-    fig.add_trace(go.Bar(x=df.index, y=precip_rain, name='Regn (>0.3°C)',
-                         marker_color='red'), row=2, col=1)
-    fig.add_trace(go.Bar(x=df.index, y=precip_snow, name='Snø (≤0°C)',
-                         marker_color='blue'), row=2, col=1)
-    fig.add_trace(go.Bar(x=df.index, y=precip_sleet, name='Sludd (0-0.3°C)',
-                         marker_color='purple'), row=2, col=1)
-    
-    # Antatt snønedbør
-    fig.add_trace(go.Bar(x=df.index, y=df['snow_precipitation'], name='Antatt snønedbør',
-                         marker_color=colors[2]), row=3, col=1)
-    
-    # Snødybde
-    fig.add_trace(go.Scatter(x=df.index, y=df['surface_snow_thickness'], mode='lines', name='Snødybde',
-                             line=dict(color=colors[3], width=2)), row=4, col=1)
-    
-    # Vindhastighet
-    fig.add_trace(go.Scatter(x=df.index, y=df['wind_speed'], mode='lines', name='Vindhastighet',
-                             line=dict(color=colors[4], width=2)), row=5, col=1)
-    
-    # Alarmer
-    snow_drift_alarms = df[df['snow_drift_alarm'] == 1].index
-    slippery_road_alarms = df[df['slippery_road_alarm'] == 1].index
-    
-    fig.add_trace(go.Scatter(x=snow_drift_alarms, y=[1]*len(snow_drift_alarms), mode='markers', 
-                             name='Snøfokk-alarm', marker=dict(symbol='triangle-up', size=10, color='blue')),
-                  row=6, col=1)
-    fig.add_trace(go.Scatter(x=slippery_road_alarms, y=[0]*len(slippery_road_alarms), mode='markers', 
-                             name='Glatt vei-alarm', marker=dict(symbol='triangle-down', size=10, color='red')),
-                  row=6, col=1)
+    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#C39BD3', '#7FB3D5']
+    titles = ['Temperatur', 'Nedbør', 'Snødybde', 'Vindhastighet', 'Overflatetemperatur', 'Relativ luftfuktighet', 'Duggpunkt', 'Alarmer']
+    ylabels = ['Temperatur (°C)', 'Nedbør (mm)', 'Snødybde (cm)', 'Vindhastighet (m/s)', 'Temperatur (°C)', 'Luftfuktighet (%)', 'Temperatur (°C)', '']
 
-    # Update layout
-    fig.update_layout(
-        height=1800,
-        title={
-            'text': "Værdata for Gullingen værstasjon",
-            'y':0.95,
-            'x':0.5,
-            'xanchor': 'center',
-            'yanchor': 'top'
-        },
-        title_font=dict(size=24),
-        plot_bgcolor='rgba(240,240,240,0.8)',
-        barmode='stack',
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="center",
-            x=0.5,
-            font=dict(size=10)
-        )
-    )
-    
-    fig.update_xaxes(
-        tickformat="%d.%m %H:%M",
-        gridcolor='rgba(0,0,0,0.1)',
-        title_text="Dato og tid",
-        title_font=dict(size=12),
-        title_standoff=15
-    )
+    for ax, title, ylabel, color, column in zip(axes, titles, ylabels, colors, 
+                                                ['air_temperature', 'precipitation_amount', 'surface_snow_thickness', 'wind_speed', 
+                                                 'surface_temperature', 'relative_humidity', 'dew_point_temperature', 'alarms']):
+        ax.set_title(title, fontsize=18, fontweight='bold', color=color, 
+                     bbox=dict(facecolor='white', edgecolor=color, boxstyle='round,pad=0.5'))
+        ax.set_ylabel(ylabel, fontsize=14, fontweight='bold', color=color)
+        ax.grid(True, linestyle=':', alpha=0.6)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
 
-    # Update y-axes
-    for i in range(1, 7):
-        fig.update_yaxes(
-            row=i, col=1,
-            gridcolor='rgba(0,0,0,0.1)',
-            title_font=dict(size=14),
-            title_standoff=10
-        )
+        if column != 'alarms':
+            if column == 'precipitation_amount':
+                ax.bar(df.index, df[column], width=0.02, align='center', color=color, alpha=0.7)
+            else:
+                ax.plot(df.index, df[column], color=color, linewidth=2)
+                ax.fill_between(df.index, df[column], alpha=0.3, color=color)
+        else:
+            snow_drift_alarms = df[df['snow_drift_alarm'] == 1].index
+            slippery_road_alarms = df[df['slippery_road_alarm'] == 1].index
+            ax.eventplot(snow_drift_alarms, lineoffsets=1, linelengths=0.5, linewidths=2, colors='red', label='Snøfokk-alarm')
+            ax.eventplot(slippery_road_alarms, lineoffsets=0.5, linelengths=0.5, linewidths=2, colors='blue', label='Glatt vei / slush-alarm')
+            ax.set_ylim(0, 1.5)
+            ax.set_yticks([])
+            ax.legend(loc='upper right', fancybox=True, shadow=True)
 
-    # Add dividing lines between graphs
-    for i in range(1, 6):  # We don't add a line after the last graph
-        fig.add_shape(
-            type="line",
-            x0=0, x1=1, y0=1 - (i/6), y1=1 - (i/6),
-            xref="paper", yref="paper",
-            line=dict(color="Black", width=1),
-            layer="below"
-        )
+    for ax in axes:
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m %H:%M'))
+        ax.tick_params(axis='x', rotation=45, labelsize=10)
+        ax.tick_params(axis='y', labelsize=10)
 
-    return fig
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
 
+    fig.text(0.01, 0.01, 'Snøfokk-alarm: Vind > 6 m/s, temp ≤ -1°C, lite nedbør, endring i snødybde\n'
+                         'Glatt vei / slush-alarm: Temp > 0°C, nedbør > 1.5 mm, snødybde ≥ 20 cm, synkende snødybde', 
+             ha='left', va='bottom', fontsize=10, style='italic')
+
+    fig.text(0.99, 0.01, f'Data hentet: {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}\n'
+                         f'Antall datapunkter: {len(df)}\nManglende datapunkter: {df.isna().sum().sum()}', 
+             ha='right', va='bottom', fontsize=10, style='italic')
+
+    img_buffer = io.BytesIO()
+    plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+    img_buffer.seek(0)
+
+    img_str = base64.b64encode(img_buffer.getvalue()).decode()
+    plt.close(fig)
+
+    logger.info(f"Image string length: {len(img_str)}")
+    logger.info("Completed function: create_downloadable_graph")
+    return img_str
 
 def fetch_and_process_data(client_id, date_start, date_end):
     logger.info("Starting function: fetch_and_process_data")
@@ -242,36 +201,27 @@ def fetch_and_process_data(client_id, date_start, date_end):
 
         for column in df.columns:
             df[column] = pd.to_numeric(df[column], errors='coerce')
-            df[column] = validate_data(df[column].values)
-            df[column] = handle_missing_data(df.index, df[column].values, method='time')
-
-        # Calculate snow precipitation
-        df['snow_precipitation'] = calculate_snow_precipitations(df['air_temperature'].values, df['precipitation_amount'].values, df['surface_snow_thickness'].values)
-
+            df[column] = validate_data(df[column])
+            df[column] = handle_missing_data(df.index, df[column], method='time')
+        
         # Calculate alarms using raw data
         df = calculate_snow_drift_alarms(df)
         df = calculate_slippery_road_alarms(df)
         
         # Then smooth the data for visualization
-        smoothed_columns = {}
         for column in df.columns:
-            if column not in ['snow_drift_alarm', 'slippery_road_alarm', 'snow_precipitation']:
-                smoothed_columns[column] = smooth_data(df[column].values)
-        
-        # Create a new DataFrame with smoothed data
-        smoothed_df = pd.DataFrame(smoothed_columns, index=df.index)
-        
-        # Add non-smoothed columns back
-        for column in ['snow_drift_alarm', 'slippery_road_alarm', 'snow_precipitation']:
-            smoothed_df[column] = df[column]
+            if column not in ['snow_drift_alarm', 'slippery_road_alarm']:
+                df[column] = smooth_data(df[column])
+
+        img_str = create_downloadable_graph(df, pd.to_datetime(date_start), pd.to_datetime(date_end))
 
         logger.info("Completed function: fetch_and_process_data")
-        return {'df': smoothed_df}
+        return {'df': df, 'img_str': img_str}
 
     except Exception as e:
         logger.error(f"Data processing error: {e}")
         return None
-    
+
 def get_date_range(choice):
     logger.info(f"Starting function: get_date_range with choice {choice}")
     now = datetime.now(TZ).replace(minute=0, second=0, microsecond=0)
@@ -297,11 +247,13 @@ def get_date_range(choice):
     logger.info(f"Date range: {start_time.isoformat()} to {now.isoformat()}")
     return start_time.isoformat(), now.isoformat()
 
+
 def export_to_csv(df):
     logger.info("Starting function: export_to_csv")
     csv_data = df.to_csv(index=True).encode('utf-8')
     logger.info("Completed function: export_to_csv")
     return csv_data
+
 
 def calculate_snow_drift_alarms(df):
     logger.info("Starting function: calculate_snow_drift_alarms")
@@ -334,21 +286,6 @@ def calculate_slippery_road_alarms(df):
     
     return df
 
-def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
-    logger.info("Starting function: calculate_snow_precipitations")
-    snow_precipitations = np.zeros_like(temperatures)
-    for i in range(len(temperatures)):
-        if temperatures[i] is not None and not np.isnan(temperatures[i]):
-            # Condition 1: Temperature ≤ 1.5°C and increasing snow depth
-            condition1 = temperatures[i] <= 1.5 and i > 0 and not np.isnan(snow_depths[i]) and not np.isnan(snow_depths[i-1]) and snow_depths[i] > snow_depths[i-1]
-            
-            # Condition 2: Temperature ≤ 0°C and any precipitation
-            condition2 = temperatures[i] <= 0 and not np.isnan(precipitations[i]) and precipitations[i] > 0
-            
-            if condition1 or condition2:
-                snow_precipitations[i] = precipitations[i] if not np.isnan(precipitations[i]) else 0
-    logger.info("Completed function: calculate_snow_precipitations")
-    return snow_precipitations
 
 # --- Main App ---
 
@@ -406,16 +343,20 @@ def main():
             weather_data = fetch_and_process_data(client_id, date_start_isoformat, date_end_isoformat)
             gps_data = fetch_gps_data() if period != "Siste GPS-aktivitet til nå" else gps_data
         
-        if weather_data and 'df' in weather_data:
+        if weather_data and 'img_str' in weather_data:
+            logger.info(f"Attempting to display image. Image string length: {len(weather_data['img_str'])}")
+            st.image(f"data:image/png;base64,{weather_data['img_str']}", use_column_width=True)
+            st.download_button(label="Last ned grafen", data=base64.b64decode(weather_data['img_str']), file_name="weather_data.png", mime="image/png")
+
             df = weather_data['df']
             st.write(f"Antall datapunkter: {len(df)}")
             st.write(f"Manglende datapunkter: {df.isna().sum().sum()}")
             st.write(f"Antall snøfokk-alarmer: {df['snow_drift_alarm'].sum()}")
             st.write(f"Antall glatt vei / slush-alarmer: {df['slippery_road_alarm'].sum()}")
             
-            # Create and display the improved graph
-            fig = create_improved_graph(df)
-            st.plotly_chart(fig, use_container_width=True)
+            # Display a sample of the data
+            st.write("Sample of the data:")
+            st.write(df.head())
 
             csv_data = export_to_csv(df)
             st.download_button(label="Last ned data som CSV", data=csv_data, file_name="weather_data.csv", mime="text/csv")
@@ -438,13 +379,6 @@ def main():
                     f"{df['precipitation_amount'].max():.1f}",
                     f"{df['precipitation_amount'].sum():.1f}"
                 ],
-                'Antatt snønedbør (mm)': [
-                    f"{df['snow_precipitation'].mean():.1f}",
-                    f"{df['snow_precipitation'].median():.1f}",
-                    f"{df['snow_precipitation'].min():.1f}",
-                    f"{df['snow_precipitation'].max():.1f}",
-                    f"{df['snow_precipitation'].sum():.1f}"
-                ],
                 'Snødybde (cm)': [
                     f"{df['surface_snow_thickness'].mean():.1f}",
                     f"{df['surface_snow_thickness'].median():.1f}",
@@ -464,7 +398,7 @@ def main():
 
             # Collapsible sections for additional data
             with st.expander("Overflatetemperatur"):
-                st.line_chart(df['surface_temperature'])
+                st.line_chart(df['surface_snow_thickness'])
                 st.write(f"Gjennomsnitt: {df['surface_temperature'].mean():.1f}°C")
                 st.write(f"Minimum: {df['surface_temperature'].min():.1f}°C")
                 st.write(f"Maksimum: {df['surface_temperature'].max():.1f}°C")
@@ -513,9 +447,10 @@ def main():
                 else:
                     st.write("Ingen glatt vei / slush-alarmer i den valgte perioden.")
 
+
         else:
-            logger.error("No data available")
-            st.error("Kunne ikke hente værdata. Vennligst sjekk loggene for mer informasjon.")
+            logger.error("No image data available")
+            st.error("Kunne ikke generere graf. Vennligst sjekk loggene for mer informasjon.")
 
     except Exception as e:
         logger.error(f"Feil ved henting eller behandling av data: {e}")
