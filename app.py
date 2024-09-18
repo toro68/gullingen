@@ -161,18 +161,27 @@ def create_improved_graph(df):
                              line=dict(color='blue', width=1)), row=5, col=1)
     
     # Vindretning
-    colors = {'N': 'red', 'NØ': 'orange', 'Ø': 'yellow', 'SØ': 'green', 
-              'S': 'cyan', 'SV': 'blue', 'V': 'purple', 'NV': 'pink', 'Ukjent': 'gray'}
+    wind_direction_counts = df['wind_direction_category'].value_counts()
+    directions = ['N', 'NØ', 'Ø', 'SØ', 'S', 'SV', 'V', 'NV']
+    values = [wind_direction_counts.get(d, 0) for d in directions]
     
-    for direction in colors.keys():
+    for direction in directions:
         direction_data = df[df['wind_direction_category'] == direction]
         fig.add_trace(go.Scatter(
             x=direction_data.index, 
             y=direction_data['wind_from_direction'],
             mode='markers',
             name=direction,
-            marker=dict(color=colors[direction], size=5, symbol='triangle-up')
+            marker=dict(size=5, symbol='triangle-up')
         ), row=6, col=1)
+
+    # Oppdater y-aksen for vindretning
+    fig.update_yaxes(row=6, col=1, 
+                     range=[0, 360],
+                     dtick=45,
+                     ticktext=directions, 
+                     tickvals=[0, 45, 90, 135, 180, 225, 270, 315],
+                     title_text="Vindretning")
 
     # Alarmer
     snow_drift_alarms = df[df['snow_drift_alarm'] == 1].index
@@ -589,11 +598,21 @@ def main():
                 st.plotly_chart(wind_fig)
                 
                 st.subheader("Vindretningsfordeling")
-                wind_direction_counts = df['wind_from_direction'].value_counts().sort_index()
+                wind_direction_counts = df['wind_direction_category'].value_counts()
                 directions = ['N', 'NØ', 'Ø', 'SØ', 'S', 'SV', 'V', 'NV']
-                direction_labels = [f"{d} ({i*45}°-{(i+1)*45}°)" for i, d in enumerate(directions)]
-                wind_direction_fig = go.Figure(data=[go.Pie(labels=direction_labels, values=wind_direction_counts, hole=.3)])
-                wind_direction_fig.update_layout(title='Fordeling av vindretninger')
+                values = [wind_direction_counts.get(d, 0) for d in directions]
+                wind_direction_fig = go.Figure(data=[go.Barpolar(
+                    r=values,
+                    theta=directions,
+                    marker_color='rgb(106,81,163)'
+                )])
+                wind_direction_fig.update_layout(
+                    title='Fordeling av vindretninger',
+                    polar=dict(
+                        radialaxis=dict(visible=True, range=[0, max(values)]),
+                        angularaxis=dict(direction="clockwise")
+                    )
+                )
                 st.plotly_chart(wind_direction_fig)
 
             # Display GPS activity data
