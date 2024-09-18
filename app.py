@@ -5,8 +5,6 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 from statsmodels.nonparametric.smoothers_lowess import lowess
-import io
-import base64
 import logging
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -18,12 +16,31 @@ logger = logging.getLogger(__name__)
 # --- Constants ---
 STATION_ID = "SN46220"
 API_URL = "https://frost.met.no/observations/v0.jsonld"
-ELEMENTS = "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_speed,surface_temperature,relative_humidity,dew_point_temperature"
+ELEMENTS = "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),max_wind_speed(wind_from_direction PT1H),max(wind_speed_of_gust PT1H),min(wind_speed P1M),wind_speed,surface_temperature,relative_humidity,dew_point_temperature"
 TIME_RESOLUTION = "PT1H"
 GPS_URL = "https://kart.irute.net/fjellbergsskardet_busses.json?_=1657373465172"
 TZ = ZoneInfo("Europe/Oslo")
 
 # --- Helper Functions ---
+
+# Definer vindretningskategorier
+wind_directions = {
+    'N': (337.5, 22.5),
+    'NØ': (22.5, 67.5),
+    'Ø': (67.5, 112.5),
+    'SØ': (112.5, 157.5),
+    'S': (157.5, 202.5),
+    'SV': (202.5, 247.5),
+    'V': (247.5, 292.5),
+    'NV': (292.5, 337.5)
+}
+
+# Funksjon for å kategorisere vindretninger
+def categorize_direction(degree):
+    for direction, (min_deg, max_deg) in wind_directions.items():
+        if min_deg <= degree < max_deg or (direction == 'N' and (degree >= 337.5 or degree < 22.5)):
+            return direction
+    return 'Ukjent'
 
 def fetch_gps_data():
     logger.info("Fetching GPS data")
@@ -93,11 +110,12 @@ def handle_missing_data(timestamps, data, method='time'):
 
 def create_improved_graph(df):
     fig = make_subplots(
-        rows=6, cols=1,
+        rows=7, cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.08,
+        vertical_spacing=0.05,
         subplot_titles=(
-            "Temperatur (°C)", "Nedbør (mm)", "Antatt snønedbør (mm)", "Snødybde (cm)", "Vindhastighet (m/s)", "Alarmer"
+            "Temperatur (°C)", "Nedbør (mm)", "Antatt snønedbør (mm)", 
+            "Snødybde (cm)", "Vindhastighet (m/s)", "Vindretning", "Alarmer"
         )
     )
 
@@ -135,29 +153,47 @@ def create_improved_graph(df):
                              line=dict(color=colors[3], width=2)), row=4, col=1)
     
     # Vindhastighet
-    fig.add_trace(go.Scatter(x=df.index, y=df['wind_speed'], mode='lines', name='Vindhastighet',
-                             line=dict(color=colors[4], width=2)), row=5, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['wind_speed'], mode='lines', name='Gjennomsnittlig vindhastighet',
+                             line=dict(color='purple', width=2)), row=5, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['max_wind_speed'], mode='lines', name='Maks vindhastighet',
+                             line=dict(color='red', width=1)), row=5, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['min_wind_speed'], mode='lines', name='Min vindhastighet',
+                             line=dict(color='blue', width=1)), row=5, col=1)
     
+    # Vindretning
+    colors = {'N': 'red', 'NØ': 'orange', 'Ø': 'yellow', 'SØ': 'green', 
+              'S': 'cyan', 'SV': 'blue', 'V': 'purple', 'NV': 'pink', 'Ukjent': 'gray'}
+    
+    for direction in colors.keys():
+        direction_data = df[df['wind_direction_category'] == direction]
+        fig.add_trace(go.Scatter(
+            x=direction_data.index, 
+            y=direction_data['wind_from_direction'],
+            mode='markers',
+            name=direction,
+            marker=dict(color=colors[direction], size=5, symbol='triangle-up')
+        ), row=6, col=1)
+
     # Alarmer
     snow_drift_alarms = df[df['snow_drift_alarm'] == 1].index
     slippery_road_alarms = df[df['slippery_road_alarm'] == 1].index
     
     fig.add_trace(go.Scatter(x=snow_drift_alarms, y=[1]*len(snow_drift_alarms), mode='markers', 
                              name='Snøfokk-alarm', marker=dict(symbol='triangle-up', size=10, color='blue')),
-                  row=6, col=1)
+                  row=7, col=1)
     fig.add_trace(go.Scatter(x=slippery_road_alarms, y=[0]*len(slippery_road_alarms), mode='markers', 
                              name='Glatt vei-alarm', marker=dict(symbol='triangle-down', size=10, color='red')),
-                  row=6, col=1)
+                  row=7, col=1)
 
     # Update layout
     fig.update_layout(
-        height=1800,
+        height=2100,
         plot_bgcolor='rgba(240,240,240,0.8)',
         barmode='stack',
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
+            y=-0.1,
             xanchor="center",
             x=0.5,
             font=dict(size=10)
@@ -173,26 +209,42 @@ def create_improved_graph(df):
     )
 
     # Update y-axes
-    for i in range(1, 7):
+    for i in range(1, 8):
         fig.update_yaxes(
             row=i, col=1,
             gridcolor='rgba(0,0,0,0.1)',
             title_font=dict(size=14),
             title_standoff=10
         )
+    
+    # Specific updates for wind direction y-axis
+    fig.update_yaxes(row=6, col=1, 
+                     range=[360, 0],  # Inverterer aksen
+                     dtick=45,  # Endret fra 90 til 45 for å vise alle hovedretninger
+                     ticktext=['N', 'NØ', 'Ø', 'SØ', 'S', 'SV', 'V', 'NV'], 
+                     tickvals=[0, 45, 90, 135, 180, 225, 270, 315],
+                     title_text="Vindretning")
 
     # Add dividing lines between graphs
-    for i in range(1, 6):  # We don't add a line after the last graph
+    for i in range(1, 7):
         fig.add_shape(
             type="line",
-            x0=0, x1=1, y0=1 - (i/6), y1=1 - (i/6),
+            x0=0, x1=1, y0=1 - (i/7), y1=1 - (i/7),
             xref="paper", yref="paper",
             line=dict(color="Black", width=1),
             layer="below"
         )
 
+    # Legg til forklarende tekst for vindretning
+    fig.add_annotation(
+        text="Vindretning vises i grader og kategorier. Triangler peker i vindretningen.",
+        xref="paper", yref="paper",
+        x=0.5, y=0.86,  # Justert posisjon for å passe inn i layouten
+        showarrow=False,
+        font=dict(size=10)
+    )
+    
     return fig
-
 
 def fetch_and_process_data(client_id, date_start, date_end):
     logger.info("Starting function: fetch_and_process_data")
@@ -208,11 +260,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
         response.raise_for_status()
         data = response.json()
         logger.info(f"Received data with {len(data.get('data', []))} entries")
-    except requests.RequestException as e:
-        logger.error(f"Request error: {e}")
-        return None
 
-    try:
         df = pd.DataFrame([
             {
                 'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
@@ -220,6 +268,9 @@ def fetch_and_process_data(client_id, date_start, date_end):
                 'precipitation_amount': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
                 'surface_snow_thickness': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
                 'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan),
+                'max_wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'max(wind_speed_of_gust PT1H)'), np.nan),
+                'min_wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'min(wind_speed P1M)'), np.nan),
+                'wind_from_direction': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'max_wind_speed(wind_from_direction PT1H)'), np.nan),
                 'surface_temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_temperature'), np.nan),
                 'relative_humidity': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'relative_humidity'), np.nan),
                 'dew_point_temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'dew_point_temperature'), np.nan)
@@ -265,9 +316,15 @@ def fetch_and_process_data(client_id, date_start, date_end):
         # Create a new DataFrame with smoothed data
         smoothed_df = pd.DataFrame(smoothed_data, index=processed_df.index)
 
+        # Kategoriser vindretninger
+        smoothed_df['wind_direction_category'] = smoothed_df['wind_from_direction'].apply(categorize_direction)
+
         logger.info("Completed function: fetch_and_process_data")
         return {'df': smoothed_df}
 
+    except requests.RequestException as e:
+        logger.error(f"Request error: {e}")
+        return None
     except Exception as e:
         logger.error(f"Data processing error: {e}")
         return None
@@ -355,7 +412,7 @@ def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
 def main():
     st.set_page_config(layout="wide")
     
-    # Oppdatert CSS for å øke høyden på dropdown-menyen og sikre at den vises fullstendig
+    # Updated CSS for dropdown menu
     st.markdown("""
     <style>
     div[data-baseweb="select"] {
@@ -390,7 +447,6 @@ def main():
          "Siste GPS-aktivitet til nå"]
     )
 
-    # Rest of the function remains the same
     client_id = st.secrets["api_keys"]["client_id"]
 
     if period == "Egendefinert periode":
@@ -451,7 +507,7 @@ def main():
             st.subheader("Oppsummering av data")
             summary_df = pd.DataFrame({
                 'Statistikk': ['Gjennomsnitt', 'Median', 'Minimum', 'Maksimum', 'Total'],
-                'Temperatur (°C)': [
+                'Lufttemperatur (°C)': [
                     f"{df['air_temperature'].mean():.1f}",
                     f"{df['air_temperature'].median():.1f}",
                     f"{df['air_temperature'].min():.1f}",
@@ -479,34 +535,66 @@ def main():
                     f"{df['surface_snow_thickness'].max():.1f}",
                     'N/A'
                 ],
-                'Vindhastighet (m/s)': [
+                'Gjennomsnittlig vindhastighet (m/s)': [
                     f"{df['wind_speed'].mean():.1f}",
                     f"{df['wind_speed'].median():.1f}",
                     f"{df['wind_speed'].min():.1f}",
                     f"{df['wind_speed'].max():.1f}",
+                    'N/A'
+                ],
+                'Maks vindhastighet (m/s)': [
+                    f"{df['max_wind_speed'].mean():.1f}",
+                    f"{df['max_wind_speed'].median():.1f}",
+                    f"{df['max_wind_speed'].min():.1f}",
+                    f"{df['max_wind_speed'].max():.1f}",
+                    'N/A'
+                ],
+                'Min vindhastighet (m/s)': [
+                    f"{df['min_wind_speed'].mean():.1f}",
+                    f"{df['min_wind_speed'].median():.1f}",
+                    f"{df['min_wind_speed'].min():.1f}",
+                    f"{df['min_wind_speed'].max():.1f}",
                     'N/A'
                 ]
             })
             st.table(summary_df)
 
             # Collapsible sections for additional data
-            with st.expander("Overflatetemperatur"):
+            with st.expander("Overflatetemperatur - på bakken"):
                 st.line_chart(df['surface_temperature'])
                 st.write(f"Gjennomsnitt: {df['surface_temperature'].mean():.1f}°C")
                 st.write(f"Minimum: {df['surface_temperature'].min():.1f}°C")
                 st.write(f"Maksimum: {df['surface_temperature'].max():.1f}°C")
 
-            with st.expander("Relativ luftfuktighet"):
+            with st.expander("Relativ luftfuktighet - Høy luftfuktighet i kombinasjon med lave temperaturer øker risikoen for ising"):
                 st.line_chart(df['relative_humidity'])
                 st.write(f"Gjennomsnitt: {df['relative_humidity'].mean():.1f}%")
                 st.write(f"Minimum: {df['relative_humidity'].min():.1f}%")
                 st.write(f"Maksimum: {df['relative_humidity'].max():.1f}%")
 
-            with st.expander("Duggpunkt"):
+            with st.expander("Duggpunkt - Temperaturen hvor luften blir mettet og dugg eller frost kan dannes."):
                 st.line_chart(df['dew_point_temperature'])
                 st.write(f"Gjennomsnitt: {df['dew_point_temperature'].mean():.1f}°C")
                 st.write(f"Minimum: {df['dew_point_temperature'].min():.1f}°C")
                 st.write(f"Maksimum: {df['dew_point_temperature'].max():.1f}°C")
+
+            # New expander for detailed wind data
+            with st.expander("Detaljert vinddata"):
+                st.subheader("Vindhastighetsprofil")
+                wind_fig = go.Figure()
+                wind_fig.add_trace(go.Scatter(x=df.index, y=df['wind_speed'], mode='lines', name='Gjennomsnittlig vindhastighet'))
+                wind_fig.add_trace(go.Scatter(x=df.index, y=df['max_wind_speed'], mode='lines', name='Maks vindhastighet'))
+                wind_fig.add_trace(go.Scatter(x=df.index, y=df['min_wind_speed'], mode='lines', name='Min vindhastighet'))
+                wind_fig.update_layout(title='Vindhastighetsprofil over tid', xaxis_title='Tid', yaxis_title='Vindhastighet (m/s)')
+                st.plotly_chart(wind_fig)
+                
+                st.subheader("Vindretningsfordeling")
+                wind_direction_counts = df['wind_from_direction'].value_counts().sort_index()
+                directions = ['N', 'NØ', 'Ø', 'SØ', 'S', 'SV', 'V', 'NV']
+                direction_labels = [f"{d} ({i*45}°-{(i+1)*45}°)" for i, d in enumerate(directions)]
+                wind_direction_fig = go.Figure(data=[go.Pie(labels=direction_labels, values=wind_direction_counts, hole=.3)])
+                wind_direction_fig.update_layout(title='Fordeling av vindretninger')
+                st.plotly_chart(wind_direction_fig)
 
             # Display GPS activity data
             with st.expander("Siste GPS aktivitet"):
