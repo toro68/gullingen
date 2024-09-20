@@ -170,6 +170,7 @@ def create_improved_graph(df):
                              line=dict(color='red', width=1)), row=6, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['min_wind_speed'], mode='lines', name='Min vindhastighet',
                              line=dict(color='blue', width=1)), row=6, col=1)
+
     
     # Vindretning
     wind_direction_counts = df['wind_direction_category'].value_counts()
@@ -579,6 +580,7 @@ def main():
                 st.write(f"Maksimum: {df['dew_point_temperature'].max():.1f}°C")
 
             # New expander for detailed wind data
+            # I hovedfunksjonen, oppdater den detaljerte vinddataseksjonen:
             with st.expander("Detaljert vinddata"):
                 st.subheader("Vindhastighetsprofil")
                 wind_fig = go.Figure()
