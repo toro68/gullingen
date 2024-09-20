@@ -114,23 +114,34 @@ def create_improved_graph(df):
         shared_xaxes=True,
         vertical_spacing=0.05,
         subplot_titles=(
-            "Temperatur (°C)", "Nedbør (mm)", "Antatt snønedbør (mm)", 
-            "Snødybde (cm)", "Vindhastighet (m/s)", "Vindretning", "Alarmer"
+            "Alarmer", "Temperatur (°C)", "Nedbør (mm)", "Antatt snønedbør (mm)", 
+            "Snødybde (cm)", "Vindhastighet (m/s)", "Vindretning"
         )
     )
 
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+
+    # Alarmer (moved to the top)
+    snow_drift_alarms = df[df['snow_drift_alarm'] == 1].index
+    slippery_road_alarms = df[df['slippery_road_alarm'] == 1].index
+    
+    fig.add_trace(go.Scatter(x=snow_drift_alarms, y=[1]*len(snow_drift_alarms), mode='markers', 
+                             name='Snøfokk-alarm', marker=dict(symbol='triangle-up', size=10, color='blue')),
+                  row=1, col=1)
+    fig.add_trace(go.Scatter(x=slippery_road_alarms, y=[0]*len(slippery_road_alarms), mode='markers', 
+                             name='Glatt vei-alarm', marker=dict(symbol='triangle-down', size=10, color='red')),
+                  row=1, col=1)
 
     # Temperatur
     temp_above_zero = [t if t > 0 else None for t in df['air_temperature']]
     temp_below_zero = [t if t <= 0 else None for t in df['air_temperature']]
     
     fig.add_trace(go.Scatter(x=df.index, y=temp_above_zero, mode='lines', name='Over 0°C',
-                             line=dict(color='red', width=2)), row=1, col=1)
+                             line=dict(color='red', width=2)), row=2, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=temp_below_zero, mode='lines', name='Under 0°C',
-                             line=dict(color='blue', width=2)), row=1, col=1)
+                             line=dict(color='blue', width=2)), row=2, col=1)
     fig.add_trace(go.Scatter(x=[df.index[0], df.index[-1]], y=[0, 0], mode='lines', name='0°C',
-                             line=dict(color='black', width=1, dash='dash')), row=1, col=1)
+                             line=dict(color='black', width=1, dash='dash')), row=2, col=1)
 
     # Nedbør
     precip_rain = [p if t > 0.3 else 0 for p, t in zip(df['precipitation_amount'], df['air_temperature'])]
@@ -138,27 +149,27 @@ def create_improved_graph(df):
     precip_sleet = [p if 0 < t <= 0.3 else 0 for p, t in zip(df['precipitation_amount'], df['air_temperature'])]
 
     fig.add_trace(go.Bar(x=df.index, y=precip_rain, name='Regn (>0.3°C)',
-                         marker_color='red'), row=2, col=1)
+                         marker_color='red'), row=3, col=1)
     fig.add_trace(go.Bar(x=df.index, y=precip_snow, name='Snø (≤0°C)',
-                         marker_color='blue'), row=2, col=1)
+                         marker_color='blue'), row=3, col=1)
     fig.add_trace(go.Bar(x=df.index, y=precip_sleet, name='Sludd (0-0.3°C)',
-                         marker_color='purple'), row=2, col=1)
+                         marker_color='purple'), row=3, col=1)
     
     # Antatt snønedbør
     fig.add_trace(go.Bar(x=df.index, y=df['snow_precipitation'], name='Antatt snønedbør',
-                         marker_color=colors[2]), row=3, col=1)
+                         marker_color=colors[2]), row=4, col=1)
     
     # Snødybde
     fig.add_trace(go.Scatter(x=df.index, y=df['surface_snow_thickness'], mode='lines', name='Snødybde',
-                             line=dict(color=colors[3], width=2)), row=4, col=1)
+                             line=dict(color=colors[3], width=2)), row=5, col=1)
     
     # Vindhastighet
     fig.add_trace(go.Scatter(x=df.index, y=df['wind_speed'], mode='lines', name='Gjennomsnittlig vindhastighet',
-                             line=dict(color='purple', width=2)), row=5, col=1)
+                             line=dict(color='purple', width=2)), row=6, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['max_wind_speed'], mode='lines', name='Maks vindhastighet',
-                             line=dict(color='red', width=1)), row=5, col=1)
+                             line=dict(color='red', width=1)), row=6, col=1)
     fig.add_trace(go.Scatter(x=df.index, y=df['min_wind_speed'], mode='lines', name='Min vindhastighet',
-                             line=dict(color='blue', width=1)), row=5, col=1)
+                             line=dict(color='blue', width=1)), row=6, col=1)
     
     # Vindretning
     wind_direction_counts = df['wind_direction_category'].value_counts()
@@ -173,26 +184,15 @@ def create_improved_graph(df):
             mode='markers',
             name=direction,
             marker=dict(size=5, symbol='triangle-up')
-        ), row=6, col=1)
+        ), row=7, col=1)
 
-    # Oppdater y-aksen for vindretning
-    fig.update_yaxes(row=6, col=1, 
+    # Update y-axis for wind direction
+    fig.update_yaxes(row=7, col=1, 
                      range=[0, 360],
                      dtick=45,
                      ticktext=directions, 
                      tickvals=[0, 45, 90, 135, 180, 225, 270, 315],
                      title_text="Vindretning")
-
-    # Alarmer
-    snow_drift_alarms = df[df['snow_drift_alarm'] == 1].index
-    slippery_road_alarms = df[df['slippery_road_alarm'] == 1].index
-    
-    fig.add_trace(go.Scatter(x=snow_drift_alarms, y=[1]*len(snow_drift_alarms), mode='markers', 
-                             name='Snøfokk-alarm', marker=dict(symbol='triangle-up', size=10, color='blue')),
-                  row=7, col=1)
-    fig.add_trace(go.Scatter(x=slippery_road_alarms, y=[0]*len(slippery_road_alarms), mode='markers', 
-                             name='Glatt vei-alarm', marker=dict(symbol='triangle-down', size=10, color='red')),
-                  row=7, col=1)
 
     # Update layout
     fig.update_layout(
@@ -206,7 +206,8 @@ def create_improved_graph(df):
             xanchor="center",
             x=0.5,
             font=dict(size=10)
-        )
+        ),
+        margin=dict(l=50, r=50, t=100, b=100)  # Increase bottom margin to accommodate legend
     )
     
     fig.update_xaxes(
@@ -227,28 +228,18 @@ def create_improved_graph(df):
         )
     
     # Specific updates for wind direction y-axis
-    fig.update_yaxes(row=6, col=1, 
-                     range=[360, 0],  # Inverterer aksen
-                     dtick=45,  # Endret fra 90 til 45 for å vise alle hovedretninger
+    fig.update_yaxes(row=7, col=1, 
+                     range=[360, 0],  # Invert the axis
+                     dtick=45,
                      ticktext=['N', 'NØ', 'Ø', 'SØ', 'S', 'SV', 'V', 'NV'], 
                      tickvals=[0, 45, 90, 135, 180, 225, 270, 315],
                      title_text="Vindretning")
 
-    # Add dividing lines between graphs
-    for i in range(1, 7):
-        fig.add_shape(
-            type="line",
-            x0=0, x1=1, y0=1 - (i/7), y1=1 - (i/7),
-            xref="paper", yref="paper",
-            line=dict(color="Black", width=1),
-            layer="below"
-        )
-
-    # Legg til forklarende tekst for vindretning
+    # Add explanatory text for wind direction
     fig.add_annotation(
         text="Vindretning vises i grader og kategorier. Triangler peker i vindretningen.",
         xref="paper", yref="paper",
-        x=0.5, y=0.86,  # Justert posisjon for å passe inn i layouten
+        x=0.5, y=0.01,  # Adjusted position to bottom of the figure
         showarrow=False,
         font=dict(size=10)
     )
