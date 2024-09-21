@@ -171,19 +171,25 @@ def create_improved_graph(df):
     fig.add_trace(go.Scatter(x=df.index, y=df['min_wind_speed'], mode='lines', name='Min vindhastighet',
                              line=dict(color='blue', width=1)), row=6, col=1)
 
+
     
     # Vindretning
     wind_direction_counts = df['wind_direction_category'].value_counts()
     directions = ['N', 'NØ', 'Ø', 'SØ', 'S', 'SV', 'V', 'NV']
     values = [wind_direction_counts.get(d, 0) for d in directions]
     
-    for direction in directions:
+    # Beregn prosentandel for hver retning
+    total_counts = sum(values)
+    percentages = [count / total_counts * 100 for count in values]
+    
+    # Lag et scatter plot for vindretning
+    for direction, percentage in zip(directions, percentages):
         direction_data = df[df['wind_direction_category'] == direction]
         fig.add_trace(go.Scatter(
             x=direction_data.index, 
             y=direction_data['wind_from_direction'],
             mode='markers',
-            name=direction,
+            name=f"{direction} ({percentage:.1f}%)",
             marker=dict(size=5, symbol='triangle-up')
         ), row=7, col=1)
 
@@ -246,6 +252,15 @@ def create_improved_graph(df):
     )
     
     return fig
+
+def categorize_direction(degree):
+    if pd.isna(degree):
+        return 'Ukjent'
+    degree = float(degree)
+    for direction, (min_deg, max_deg) in wind_directions.items():
+        if min_deg <= degree < max_deg or (direction == 'N' and (degree >= 337.5 or degree < 22.5)):
+            return direction
+    return 'Ukjent'
 
 def fetch_and_process_data(client_id, date_start, date_end):
     logger.info("Starting function: fetch_and_process_data")
