@@ -407,7 +407,7 @@ def login_page():
             st.session_state.authenticated = True
             st.session_state.username = username
             st.success(f"Innlogget som {username}")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("Ugyldig kode")
 
@@ -943,7 +943,7 @@ def handle_observations():
                 if st.button("Slett", key=f"delete_{row['id']}"):
                     delete_feedback(row['id'])
                     st.success("Observasjon slettet.")
-                    st.experimental_rerun()
+                    st.rerun()
 
             st.write("---")
 
@@ -978,7 +978,7 @@ def vis_bestillinger():
             if st.button(f"Slett bestilling {row['id']}"):
                 slett_bestilling(row['id'])
                 st.success(f"Bestilling {row['id']} slettet.")
-                st.experimental_rerun()
+                st.rerun()
 
 def admin_stroing_page():
     st.title("Administrer Strøing-bestillinger")
@@ -1009,7 +1009,7 @@ def admin_stroing_page():
                 if new_status != row['status']:
                     update_stroing_status(row['id'], new_status)
                     st.success(f"Status oppdatert for bestilling {row['id']}")
-                    st.experimental_rerun()
+                    st.rerun()
                     
 def download_reports():
     st.subheader("Last ned rapporter og påloggingshistorikk")
@@ -1171,7 +1171,7 @@ def main():
         if st.sidebar.button("Logg ut"):
             st.session_state.authenticated = False
             st.session_state.username = None
-            st.experimental_rerun()
+            st.rerun()
 
 if __name__ == "__main__":
     main()
