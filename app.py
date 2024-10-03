@@ -614,8 +614,8 @@ def bestill_stroing():
     
     Tips ved glatte forhold:
     - Bruk piggdekk/kjetting
-    - Ha med strøsand
-    - Bruk brodder på beina
+    - Ha med strøsand, spade og tau. Bruk strøsandkassene
+    - Brodder til beina
     """)
 
     # Radioknapper for bestillingstype
