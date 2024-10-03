@@ -654,7 +654,8 @@ def bestill_stroing():
             st.error("Det oppstod en feil ved registrering av bestillingen. Vennligst prøv igjen senere.")
         
         st.info("Merk: Du vil bli fakturert kun hvis strøing utføres.")
-
+        pass
+    
     st.subheader("Dine tidligere strøing-bestillinger")
     display_stroing_bookings(st.session_state.username)
 
