@@ -44,7 +44,7 @@ from db_utils import (
     send_credentials_email, load_customer_database, get_feedback, check_session_timeout,
     check_cabin_user_consistency, validate_customers_and_passwords, authenticate_user,
     get_customer_by_id, get_date_range, get_weather_data_for_period, fetch_gps_data, get_status_display,
-    is_active_booking, get_max_bestilling_id, initialize_database,
+    is_active_booking, get_max_bestilling_id, initialize_database, hent_bruker_bestillinger,
     slett_stroing_bestilling, update_stroing_bestillinger_table, verify_stroing_data, count_stroing_bestillinger,
     initialize_database, hent_dagens_bestillinger, hent_aktive_bestillinger, hent_bestillinger, hent_bestilling,
     filter_tunbroyting_bestillinger
@@ -1091,7 +1091,7 @@ def show_dashboard(include_hidden=False):
         with col3:
             try:
                 if 'status' not in stroing_data.columns:
-                    st.warning("'status' kolonne mangler i strøing-data. Viser totalt antall bestillinger.")
+                    #st.warning("'status' kolonne mangler i strøing-data. Viser totalt antall bestillinger.")
                     st.metric("Totale strøingsbestillinger", len(stroing_data))
                 else:
                     pending_stroing = stroing_data[stroing_data['status'] == 'Pending']
