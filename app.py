@@ -42,14 +42,15 @@ from db_utils import (
     save_alert, update_alert_status, delete_alert, hent_tunbroyting_bestillinger, count_bestillinger,
     hent_stroing_bestillinger, hent_bruker_stroing_bestillinger, lagre_stroing_bestilling,
     send_credentials_email, load_customer_database, get_feedback, check_session_timeout,
-    check_cabin_user_consistency, validate_customers_and_passwords, authenticate_user,
+    check_cabin_user_consistency, validate_customers_and_passwords, authenticate_user, neste_fredag,
     get_customer_by_id, get_date_range, get_weather_data_for_period, fetch_gps_data, get_status_display,
     is_active_booking, get_max_bestilling_id, initialize_database, hent_bruker_bestillinger,
-    slett_stroing_bestilling, update_stroing_bestillinger_table, verify_stroing_data, count_stroing_bestillinger,
+    hent_bestillinger_for_periode, update_feedback_status, hent_stroingsbestillinger_for_kart,
+    slett_stroingsbestilling, update_stroing_bestillinger_table, verify_stroing_data, count_stroing_bestillinger,
     initialize_database, hent_dagens_bestillinger, hent_aktive_bestillinger, hent_bestillinger, hent_bestilling,
-    filter_tunbroyting_bestillinger
+    filter_tunbroyting_bestillinger, hent_stroingsbestillinger_for_kart, vis_tunbroyting_statistikk
 )# Database utilities
-from map_utils import vis_tunkart, vis_stroingskart
+from map_utils import vis_dagens_tunkart, vis_kommende_tunbestillinger, vis_stroingskart_kommende
 from cryptography.fernet import Fernet
 
 # Set up logging
@@ -581,7 +582,7 @@ def bestill_tunbroyting():
 
     if st.button("Bestill Tunbrøyting"):
         if naa >= bestillingsfrist:
-            st.error(f"Beklager, fristen for å bestille tunbrøyting for {ankomst_dato.strftime('%d.%m.%Y')} var {bestillingsfrist.strftime('%d.%m.%Y kl. %H:%M')}. Vennligst velg en senere dato.")
+            st.error(f"Beklager, fristen for å bestille tunbrøyting for {ankomst_dato.strftime('%d.%m.%Y')} var {bestillingsfrist.strftime('%d.%m.%Y kl. %H:%M')}. ")
         else:
             if lagre_bestilling(
                 user_id,  # Bruk user_id i stedet for customer['Id']
@@ -654,10 +655,9 @@ def bestill_stroing():
             st.error("Det oppstod en feil ved registrering av bestillingen. Vennligst prøv igjen senere.")
         
         st.info("Merk: Du vil bli fakturert kun hvis strøing utføres.")
-        pass
     
-    st.subheader("Dine tidligere strøing-bestillinger")
-    display_stroing_bookings(st.session_state.username)
+    # Vis tidligere bestillinger én gang, med overskrift
+    display_stroing_bookings(st.session_state.username, show_header=True)
 
 def vis_daglige_broytinger(bestillinger):
     if bestillinger.empty:
@@ -665,7 +665,7 @@ def vis_daglige_broytinger(bestillinger):
         return
 
     # Konverter 'ankomst_dato' til datetime hvis det ikke allerede er det
-    bestillinger['ankomst_dato'] = pd.to_datetime(bestillinger['ankomst_dato'])
+    bestillinger['ankomst_dato'] = pd.to_datetime(bestillinger['ankomst_dato'], errors='coerce')
 
     # Grupper bestillinger per dag
     daglige_broytinger = bestillinger.groupby(bestillinger['ankomst_dato'].dt.date).size().reset_index(name='antall')
@@ -711,61 +711,31 @@ def vis_tunbroyting_oversikt():
         abonnement_type = st.multiselect("Abonnement type", options=bestillinger['abonnement_type'].unique())
 
     # Filtrer bestillinger basert på dato og abonnement type
-    filtered_bestillinger = bestillinger[
-        (bestillinger['ankomst_dato'].dt.date >= start_date) & 
-        (bestillinger['ankomst_dato'].dt.date <= end_date)
-    ]
-
-    if abonnement_type:
-        filtered_bestillinger = filtered_bestillinger[filtered_bestillinger['abonnement_type'].isin(abonnement_type)]
+    filters = {
+        'start_date': start_date,
+        'end_date': end_date,
+        'abonnement_type': abonnement_type if abonnement_type else None
+    }
+    
+    filtered_bestillinger = filter_tunbroyting_bestillinger(bestillinger, filters)
 
     # Vis kart for dagens bestillinger
     st.subheader("Dagens bestillinger")
-    dagens_bestillinger = filtered_bestillinger[filtered_bestillinger['ankomst_dato'].dt.date == current_date]
+    dagens_bestillinger = filter_tunbroyting_bestillinger(filtered_bestillinger, {'vis_type': 'today'})
     st.write(f"Antall bestillinger for i dag: {len(dagens_bestillinger)}")
-    fig_today, _ = vis_tunkart(dagens_bestillinger, 
-                            st.secrets["mapbox"]["access_token"],
-                            "Kart over dagens tunbrøytingsbestillinger", 
-                            vis_type='today')
+    fig_today = vis_dagens_tunkart(dagens_bestillinger, 
+                                   st.secrets["mapbox"]["access_token"],
+                                   "Dagens tunbrøyting")
     st.plotly_chart(fig_today, use_container_width=True)
-
-    # Forklaring for dagens bestillinger
-    st.write("Forklaring:")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.color_picker("Aktiv bestilling", "#FF0000", disabled=True)
-        st.write("Aktiv bestilling")
-    with col2:
-        st.color_picker("Årsabonnement", "#0000FF", disabled=True)
-        st.write("Årsabonnement")
-    with col3:
-        st.color_picker("Ingen aktiv bestilling", "#CCCCCC", disabled=True)
-        st.write("Ingen aktiv bestilling")
 
     # Vis kart for aktive bestillinger
     st.subheader("Aktive bestillinger de neste syv dagene")
-    aktive_bestillinger = filtered_bestillinger[
-        (filtered_bestillinger['ankomst_dato'].dt.date >= current_date) & 
-        (filtered_bestillinger['ankomst_dato'].dt.date <= current_date + timedelta(days=7))
-    ]
+    aktive_bestillinger = filter_tunbroyting_bestillinger(filtered_bestillinger, {'vis_type': 'active'})
     st.write(f"Antall aktive bestillinger: {len(aktive_bestillinger)}")
-    fig_active, color_scale = vis_tunkart(aktive_bestillinger, 
-                             st.secrets["mapbox"]["access_token"],
-                             "Kart over aktive tunbrøytingsbestillinger de neste syv dagene", 
-                             vis_type='active')
+    fig_active = vis_kommende_tunbestillinger(aktive_bestillinger, 
+                                              st.secrets["mapbox"]["access_token"],
+                                              "Tunbrøyting neste 7 dager")
     st.plotly_chart(fig_active, use_container_width=True)
-
-    # Forklaring for aktive bestillinger
-    st.write("Forklaring:")
-    cols = st.columns(7)
-    for i, col in enumerate(cols):
-        with col:
-            if i < 6:
-                st.color_picker(f"Dag {i+1}", color_scale[i], disabled=True)
-                st.write(f"Dag {i+1}")
-            else:
-                st.color_picker("Inaktiv", "#CCCCCC", disabled=True)
-                st.write("Inaktiv")
 
     # Vis statistikk
     st.subheader("Bestillingsstatistikk")
@@ -782,7 +752,7 @@ def vis_tunbroyting_oversikt():
     # Vis graf over daglige brøytinger
     st.subheader("Oversikt over daglige brøytinger")
     vis_daglige_broytinger(filtered_bestillinger)
-
+    
 def give_feedback():
     st.title("Gi feedback")
     
@@ -906,71 +876,74 @@ def admin_broytefirma_page():
 def admin_stroing_page():
     st.title("Administrer Strøing-bestillinger")
 
-    # Dato-range velger
-    today = datetime.now(TZ).date()
+    # Datovelgere
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Fra dato", value=today, min_value=today)
+        start_date = st.date_input("Fra dato", value=datetime.now(TZ).date())
     with col2:
-        end_date = st.date_input("Til dato", value=today + timedelta(days=30), min_value=start_date)
+        end_date = st.date_input("Til dato", value=start_date + timedelta(days=7))
 
-    # Hent alle strøingsbestillinger
-    bestillinger = hent_stroing_bestillinger()
+    if start_date > end_date:
+        st.error("Feil: Startdato må være før eller lik sluttdato.")
+        return
 
-    # Konverter dato-kolonner til datetime
-    for col in ['bestillings_dato', 'onske_dato']:
-        if col in bestillinger.columns:
-            bestillinger[col] = pd.to_datetime(bestillinger[col], utc=True).dt.tz_convert(TZ)
+    try:
+        # Hent strøingsbestillinger for valgt periode
+        bestillinger = hent_stroingsbestillinger_for_kart(start_date, end_date)
 
-    # Filtrer bestillinger basert på dato-range
-    filtered_bestillinger = bestillinger[
-        (bestillinger['onske_dato'].dt.date >= start_date) &
-        (bestillinger['onske_dato'].dt.date <= end_date)
-    ]
+        if bestillinger.empty:
+            st.warning(f"Ingen strøingsbestillinger funnet for perioden {start_date} til {end_date}.")
+        else:
+            # Vis kart over bestillinger
+            #st.subheader(f"Kart over strøingsbestillinger fra {start_date} til {end_date}")
+            mapbox_token = st.secrets["mapbox"]["access_token"]
+            fig = vis_stroingskart_kommende(bestillinger, mapbox_token, f"Strøingsbestillinger {start_date} til {end_date}")
+            st.plotly_chart(fig, use_container_width=True)
 
-    # Vis kart over bestillinger
-    st.subheader("Kart over strøingsbestillinger")
-    mapbox_token = st.secrets["mapbox"]["access_token"]
-    fig = vis_stroingskart(filtered_bestillinger, mapbox_token, "Kart over strøingsbestillinger")
-    st.plotly_chart(fig, use_container_width=True)
+            # Vis daglig oppsummering
+            st.subheader("Daglig oppsummering")
+            daily_summary = bestillinger.groupby(bestillinger['onske_dato'].dt.date).size().reset_index(name='antall')
+            for _, row in daily_summary.iterrows():
+                st.write(f"{row['onske_dato']}: {row['antall']} bestilling(er)")
 
-    # Filtreringsmuligheter
-    hytte_id_filter = st.text_input("Filtrer på hytte-ID")
+            # Vis bestillinger i en tabell med mulighet for sletting
+            st.subheader("Detaljert oversikt over strøingsbestillinger")
+            for _, row in bestillinger.iterrows():
+                col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 2, 1])
+                with col1:
+                    st.write(f"Hytte: {row['Name']}")
+                with col2:
+                    st.write(f"Dato: {row['onske_dato'].strftime('%Y-%m-%d')}")
+                with col3:
+                    st.write(f"Dager til: {row['dager_til']}")
+                with col4:
+                    st.write(f"Status: {row['status']}")
+                with col5:
+                    if st.button("Slett", key=f"slett_{row['id']}"):
+                        if slett_stroingsbestilling(row['id']):
+                            st.success(f"Bestilling for hytte {row['Name']} er slettet.")
+                            st.rerun()
+                        else:
+                            st.error(f"Kunne ikke slette bestilling for hytte {row['Name']}.")
 
-    # Anvend filtre
-    if hytte_id_filter:
-        filtered_bestillinger = filtered_bestillinger[filtered_bestillinger['bruker'].astype(str).str.contains(hytte_id_filter)]
+            # Legg til mulighet for å laste ned bestillingene som CSV
+            csv = bestillinger.to_csv(index=False)
+            st.download_button(
+                label="Last ned som CSV",
+                data=csv,
+                file_name=f"stroingsbestillinger_{start_date}_til_{end_date}.csv",
+                mime="text/csv",
+            )
 
-    # Sortering
-    sort_column = st.selectbox("Sorter etter", options=['onske_dato', 'bestillings_dato', 'bruker'])
-    sort_order = st.radio("Sorteringsrekkefølge", options=['Stigende', 'Synkende'])
-    filtered_bestillinger = filtered_bestillinger.sort_values(by=sort_column, ascending=(sort_order == 'Stigende'))
-
-    # Vis bestillinger
-    st.subheader("Strøingsbestillinger")
-    for index, row in filtered_bestillinger.iterrows():
-        with st.expander(f"Bestilling - Hytte {row['bruker']} - Ønsket dato: {row['onske_dato'].strftime('%Y-%m-%d')}"):
-            st.write(f"Bestilt: {row['bestillings_dato'].strftime('%Y-%m-%d %H:%M')}")
-            st.write(f"Ønsket dato for strøing: {row['onske_dato'].strftime('%Y-%m-%d')}")
-            if st.button("Slett bestilling", key=f"delete_{row['id']}"):
-                if slett_stroing_bestilling(row['id']):
-                    st.success(f"Bestilling for Hytte {row['bruker']} er slettet")
-                    st.rerun()
-                else:
-                    st.error(f"Feil ved sletting av bestilling for Hytte {row['bruker']}")
-
-    # Vis antall viste bestillinger
-    st.info(f"Viser {len(filtered_bestillinger)} av totalt {len(bestillinger)} bestillinger")
-
-    # Legg til mulighet for å laste ned bestillingene som CSV
-    if not filtered_bestillinger.empty:
-        csv = filtered_bestillinger.to_csv(index=False)
-        st.download_button(
-            label="Last ned som CSV",
-            data=csv,
-            file_name="stroingsbestillinger.csv",
-            mime="text/csv",
-        )
+    except Exception as e:
+        st.error(f"En feil oppstod: {str(e)}")
+        st.write("Feilsøkingsinformasjon:")
+        st.write(f"Start dato: {start_date}")
+        st.write(f"Slutt dato: {end_date}")
+        st.write(f"Feiltype: {type(e).__name__}")
+        st.write(f"Feilmelding: {str(e)}")
+        st.write("\nStack trace:")
+        st.code(traceback.format_exc())
 
 def admin_alert():
     st.title("Administrer varsler")
@@ -1032,7 +1005,7 @@ def admin_alert():
     alert_type = st.selectbox("Type varsel", ["Generelt", "Brøyting", "Strøing", "Vedlikehold", "Annet"])
     message = st.text_area("Skriv varselmelding")
     expiry_date = st.date_input("Utløpsdato for varselet", min_value=datetime.now(TZ).date())
-    target_group = st.multiselect("Målgruppe", ["Alle brukere", "Årsabonnenter", "Ukentlige abonnenter", "Ikke-abonnenter"])
+    target_group = st.multiselect("Målgruppe", ["Alle brukere", "Årsabonnenter", "Ukentlig ved bestilling", "Ikke-abonnenter"])
     
     if st.button("Send varsel"):
         if message and target_group:
@@ -1338,22 +1311,36 @@ def download_reports(include_hidden=False):
 
 def handle_tun():
     st.title("Håndter tunbrøyting bestillinger")
-    
+
     # Vis statistikk
     total_bestillinger = count_bestillinger()
     st.write(f"Totalt antall bestillinger: {total_bestillinger}")
-    
+
     # Rediger bestilling
     vis_rediger_bestilling()
 
     # Slett bestilling
     st.subheader("Slett bestilling")
-    bestilling_id_slett = st.number_input("Skriv inn ID på bestillingen du vil slette", min_value=1, key="slett_id")
-    if st.button("Slett bestilling"):
-        if slett_bestilling(bestilling_id_slett):
-            st.success(f"Bestilling {bestilling_id_slett} er slettet.")
-        else:
-            st.error("Kunne ikke slette bestillingen. Vennligst sjekk ID og prøv igjen.")
+    with st.form("slett_bestilling_form"):
+        slett_id = st.number_input("Skriv inn ID på bestillingen du vil slette", min_value=1)
+        slett_bruker = st.text_input("Skriv inn brukernavn for å slette alle bestillinger fra brukeren (valgfritt)")
+        slett_dato_fra = st.date_input("Slett bestillinger fra dato (valgfritt)")
+        slett_dato_til = st.date_input("Slett bestillinger til dato (valgfritt)")
+        submitted = st.form_submit_button("Slett bestilling(er)")
+        if submitted:
+            if slett_id and not slett_bruker and not slett_dato_fra and not slett_dato_til:
+                if slett_bestilling(slett_id):
+                    st.success(f"Bestilling {slett_id} er slettet.")
+                else:
+                    st.error("Kunne ikke slette bestillingen. Vennligst sjekk ID og prøv igjen.")
+            elif slett_bruker and not slett_id and not slett_dato_fra and not slett_dato_til:
+                # Implementer sletting basert på brukernavn
+                pass  
+            elif slett_dato_fra and slett_dato_til and not slett_id and not slett_bruker:
+                # Implementer sletting basert på datointervall
+                pass  
+            else:
+                st.error("Vennligst velg kun én slettingsmetode.")
 
     # Vis statistikk
     if total_bestillinger > 0:
@@ -1424,7 +1411,7 @@ def manage_alerts():
     alert_type = st.selectbox("Varseltype", ["Generelt", "Brøyting", "Strøing", "Vedlikehold", "Annet"])
     message = st.text_area("Varselmelding")
     expiry_date = st.date_input("Utløpsdato", min_value=datetime.now().date())
-    target_group = st.multiselect("Målgruppe", ["Alle brukere", "Årsabonnenter", "Ukentlige abonnenter", "Ikke-abonnenter"])
+    target_group = st.multiselect("Målgruppe", ["Alle brukere", "Årsabonnenter", "Ukentlig ved bestilling", "Ikke-abonnenter"])
 
     if st.button("Opprett varsel"):
         if message and target_group:
@@ -1442,8 +1429,9 @@ def vis_tunbroyting_statistikk(bestillinger):
     st.write(f"Totalt antall bestillinger: {len(bestillinger)}")
 
     # Konverter datoer til datetime
-    bestillinger['ankomst_dato'] = pd.to_datetime(bestillinger['ankomst_dato']).dt.date
-    bestillinger['avreise_dato'] = pd.to_datetime(bestillinger['avreise_dato']).dt.date
+    # Konverter datoer til datetime
+    bestillinger['ankomst_dato'] = pd.to_datetime(bestillinger['ankomst_dato'], errors='coerce').dt.date
+    bestillinger['avreise_dato'] = pd.to_datetime(bestillinger['avreise_dato'], errors='coerce').dt.date
 
     # Antall bestillinger per dag
     daily_counts = bestillinger['ankomst_dato'].value_counts().sort_index().reset_index()
@@ -1494,7 +1482,7 @@ def vis_tunbroyting_statistikk(bestillinger):
     # Vis rådata for feilsøking
     st.subheader("Rådata for feilsøking")
     st.write(bestillinger)
-  
+
 def vis_rediger_bestilling():
     st.header("Rediger bestilling")
     
@@ -1512,12 +1500,30 @@ def vis_rediger_bestilling():
         with st.form("rediger_bestilling_form"):
             nye_data = {}
             nye_data['bruker'] = st.text_input("Bruker", value=eksisterende_data['bruker'])
-            nye_data['ankomst_dato'] = st.date_input("Ankomstdato", value=pd.to_datetime(eksisterende_data['ankomst_dato']).date())
-            nye_data['ankomst_tid'] = st.time_input("Ankomsttid", value=pd.to_datetime(eksisterende_data['ankomst_tid']).time())
-            nye_data['avreise_dato'] = st.date_input("Avreisetato", value=pd.to_datetime(eksisterende_data['avreise_dato']).date() if pd.notnull(eksisterende_data['avreise_dato']) else None)
-            nye_data['avreise_tid'] = st.time_input("Avreisetid", value=pd.to_datetime(eksisterende_data['avreise_tid']).time() if pd.notnull(eksisterende_data['avreise_tid']) else None)
-            nye_data['abonnement_type'] = st.selectbox("Abonnementstype", options=['Ukentlig ved bestilling', 'Årsabonnement'], index=['Ukentlig ved bestilling', 'Årsabonnement'].index(eksisterende_data['abonnement_type']))
             
+            # Håndter ankomst_dato
+            ankomst_dato = pd.to_datetime(eksisterende_data['ankomst_dato']).date() if pd.notnull(eksisterende_data['ankomst_dato']) else datetime.now().date()
+            nye_data['ankomst_dato'] = st.date_input("Ankomstdato", value=ankomst_dato)
+            
+            # Håndter ankomst_tid
+            ankomst_tid = eksisterende_data['ankomst_tid'] if pd.notnull(eksisterende_data['ankomst_tid']) else datetime.now().time()
+            nye_data['ankomst_tid'] = st.time_input("Ankomsttid", value=ankomst_tid)
+            
+            # Håndter avreise_dato
+            avreise_dato = pd.to_datetime(eksisterende_data['avreise_dato']).date() if pd.notnull(eksisterende_data['avreise_dato']) else None
+            nye_data['avreise_dato'] = st.date_input("Avreisetato", value=avreise_dato or ankomst_dato)
+            
+            # Håndter avreise_tid
+            avreise_tid = eksisterende_data['avreise_tid'] if pd.notnull(eksisterende_data['avreise_tid']) else datetime.now().time()
+            nye_data['avreise_tid'] = st.time_input("Avreisetid", value=avreise_tid)
+            
+            # Håndter abonnement_type
+            nye_data['abonnement_type'] = st.selectbox(
+                "Abonnementstype", 
+                options=['Ukentlig ved bestilling', 'Årsabonnement'],
+                index=['Ukentlig ved bestilling', 'Årsabonnement'].index(eksisterende_data['abonnement_type'])
+            )
+
             submitted = st.form_submit_button("Oppdater bestilling")
             
             if submitted:
@@ -1531,58 +1537,20 @@ def vis_rediger_bestilling():
     else:
         st.warning(f"Ingen aktiv bestilling funnet med ID {bestilling_id}")
     
-    # Velg periode for visning av bestillinger
+    # Vis bestillinger for en periode
     st.subheader("Vis bestillinger for periode")
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Fra dato", value=datetime.now(TZ).date())
+        start_date = st.date_input("Fra dato", value=datetime.now().date())
     with col2:
         end_date = st.date_input("Til dato", value=start_date + timedelta(days=7))
 
-    # Hent og vis bestillinger for valgt periode
     bestillinger = hent_bestillinger_for_periode(start_date, end_date)
     if not bestillinger.empty:
         st.dataframe(bestillinger)
     else:
         st.info("Ingen bestillinger funnet for valgt periode.")
-
-def hent_bestillinger_for_periode(start_date, end_date):
-    try:
-        with get_tunbroyting_connection() as conn:
-            query = """
-            SELECT * FROM tunbroyting_bestillinger 
-            WHERE (ankomst_dato BETWEEN ? AND ?) OR (avreise_dato BETWEEN ? AND ?)
-            ORDER BY ankomst_dato, ankomst_tid
-            """
-            df = pd.read_sql_query(query, conn, params=(start_date, end_date, start_date, end_date))
         
-        if df.empty:
-            logger.info("Ingen bestillinger funnet for valgt periode.")
-            return pd.DataFrame()
-
-        logger.info(f"Hentet {len(df)} bestillinger for perioden {start_date} til {end_date}.")
-
-        # Konverter dato- og tidskolonner
-        for col in ['ankomst_dato', 'avreise_dato']:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
-        
-        for col in ['ankomst_tid', 'avreise_tid']:
-            df[col] = pd.to_datetime(df[col], format='%H:%M:%S', errors='coerce').dt.time
-        
-        # Kombiner dato og tid til datetime-objekter
-        df['ankomst'] = df.apply(lambda row: pd.Timestamp.combine(row['ankomst_dato'], row['ankomst_tid']) if pd.notnull(row['ankomst_dato']) and pd.notnull(row['ankomst_tid']) else pd.NaT, axis=1)
-        df['avreise'] = df.apply(lambda row: pd.Timestamp.combine(row['avreise_dato'], row['avreise_tid']) if pd.notnull(row['avreise_dato']) and pd.notnull(row['avreise_tid']) else pd.NaT, axis=1)
-        
-        # Sett tidssone
-        for col in ['ankomst', 'avreise']:
-            df[col] = df[col].dt.tz_localize(TZ, ambiguous='NaT', nonexistent='NaT')
-
-        return df
-
-    except Exception as e:
-        logger.error(f"Feil ved henting av bestillinger for periode: {str(e)}", exc_info=True)
-        return pd.DataFrame()
-
 def validere_bestilling(data):
     if data['avreise_dato'] is None or data['avreise_tid'] is None:
         return True  # Hvis avreisedato eller -tid ikke er satt, er bestillingen gyldig
@@ -1628,98 +1596,6 @@ def vis_aktive_bestillinger():
     st.write(f"Totalt antall aktive bestillinger: {len(filtered_bestillinger)}")
     st.write(f"Antall årsabonnementer: {len(filtered_bestillinger[filtered_bestillinger['abonnement_type'] == 'Årsabonnement'])}")
     st.write(f"Antall ukentlige bestillinger: {len(filtered_bestillinger[filtered_bestillinger['abonnement_type'] == 'Ukentlig ved bestilling'])}")
-
-# def vis_stroing_kart(bestillinger, mapbox_token):
-#     cabin_coordinates = get_cabin_coordinates()
-#     current_date = datetime.now(TZ).date()
-    
-#     # Debug: Vis antall bestillinger og koordinater
-#     st.write(f"Debug: Antall bestillinger: {len(bestillinger)}")
-#     st.write(f"Debug: Antall koordinater: {len(cabin_coordinates)}")
-
-#     # Prepare data for the map
-#     latitudes, longitudes, texts, colors, sizes = [], [], [], [], []
-#     color_map = {
-#         "Pending": "orange",
-#         "Completed": "green",
-#         "Cancelled": "red"
-#     }
-
-#     for coord in cabin_coordinates:
-#         cabin_id = coord['cabin_id']
-#         lat, lon = float(coord['latitude']), float(coord['longitude'])
-        
-#         if lat != 0 and lon != 0 and not (pd.isna(lat) or pd.isna(lon)):
-#             latitudes.append(lat)
-#             longitudes.append(lon)
-            
-#             cabin_bookings = bestillinger[bestillinger['bruker'] == str(cabin_id)]
-#             if not cabin_bookings.empty:
-#                 latest_booking = cabin_bookings.iloc[0]
-#                 status = latest_booking['status']
-#                 color = color_map.get(status, "gray")
-#                 size = 12 if status == "Pending" else 10
-#                 text = f"Hytte: {cabin_id}<br>Status: {status}<br>Dato: {latest_booking['onske_dato'].strftime('%Y-%m-%d')}"
-#             else:
-#                 color = "gray"
-#                 size = 8
-#                 text = f"Hytte: {cabin_id}<br>Ingen bestilling"
-            
-#             colors.append(color)
-#             sizes.append(size)
-#             texts.append(text)
-
-#     # Create the map
-#     fig = go.Figure()
-
-#     fig.add_trace(go.Scattermapbox(
-#         lat=latitudes,
-#         lon=longitudes,
-#         mode='markers',
-#         marker=go.scattermapbox.Marker(
-#             size=sizes,
-#             color=colors,
-#             opacity=0.8,
-#         ),
-#         text=texts,
-#         hoverinfo='text'
-#     ))
-
-#     fig.update_layout(
-#         title="Kart over strøingsbestillinger",
-#         mapbox_style="streets",
-#         mapbox=dict(
-#             accesstoken=mapbox_token,
-#             center=dict(lat=sum(latitudes)/len(latitudes), lon=sum(longitudes)/len(longitudes)),
-#             zoom=13
-#         ),
-#         showlegend=False,
-#         height=600,
-#         margin={"r":0,"t":30,"l":0,"b":0}
-#     )
-
-#     st.plotly_chart(fig, use_container_width=True)
-#     # Debug: Vis data brukt for kartet
-#     st.write("Debug: Data brukt for kartet:")
-#     st.write(pd.DataFrame({
-#         'latitude': latitudes,
-#         'longitude': longitudes,
-#         'text': texts,
-#         'color': colors,
-#         'size': sizes
-#     }))
-
-#     # Legend
-#     st.write("Forklaring på fargekoder:")
-#     col1, col2, col3, col4 = st.columns(4)
-#     with col1:
-#         st.markdown('<div style="background-color: orange; height: 20px; width: 20px; display: inline-block;"></div> Venter', unsafe_allow_html=True)
-#     with col2:
-#         st.markdown('<div style="background-color: green; height: 20px; width: 20px; display: inline-block;"></div> Utført', unsafe_allow_html=True)
-#     with col3:
-#         st.markdown('<div style="background-color: red; height: 20px; width: 20px; display: inline-block;"></div> Kansellert', unsafe_allow_html=True)
-#     with col4:
-#         st.markdown('<div style="background-color: gray; height: 20px; width: 20px; display: inline-block;"></div> Ingen bestilling', unsafe_allow_html=True)
 
 def update_stroing_status_ui(row, index):
     print(f"Debug: Entering update_stroing_status_ui function for bestilling {row['id']}")
@@ -1791,8 +1667,11 @@ def display_bookings(username):
     else:
         st.info("Du har ingen tidligere bestillinger.")
 
-def display_stroing_bookings(username):
-    st.subheader("Dine tidligere strøing-bestillinger")
+import plotly.express as px
+
+def display_stroing_bookings(username, show_header=False):
+    if show_header:
+        st.subheader("Dine tidligere strøing-bestillinger")
     
     previous_bookings = hent_bruker_stroing_bestillinger(username)
     
@@ -1803,6 +1682,8 @@ def display_stroing_bookings(username):
             with st.expander(f"Bestilling - Ønsket dato: {booking['onske_dato'].strftime('%Y-%m-%d')}"):
                 st.write(f"Bestilt: {booking['bestillings_dato'].strftime('%Y-%m-%d %H:%M')}")
                 st.write(f"Ønsket dato: {booking['onske_dato'].strftime('%Y-%m-%d')}")
+                if 'status' in booking:
+                    st.write(f"Status: {booking['status']}")
         
 def display_recent_feedback():
     st.subheader("Nylige rapporter")
@@ -2035,7 +1916,6 @@ def main():
                 bestill_tunbroyting()
             elif selected == "Bestill Strøing":
                 bestill_stroing()
-                display_stroing_bookings(st.session_state.username)
             elif selected == "Tunkart":
                 vis_tunbroyting_oversikt()
             elif selected == "Live Brøytekart":
@@ -2048,7 +1928,7 @@ def main():
                 elif admin_choice == "Håndter feedback":
                     handle_user_feedback()
                 elif admin_choice == "Håndter tun":
-                    vis_rediger_bestilling()
+                    handle_tun()
                 elif admin_choice == "Håndter strøing":
                     admin_stroing_page()
                 elif admin_choice == "Last ned rapporter":

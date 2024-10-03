@@ -11,6 +11,7 @@ import requests
 import numpy as np
 import pandas as pd
 import hashlib
+import functools
 from datetime import datetime
 from contextlib import contextmanager
 from datetime import datetime, timedelta, date, time
@@ -137,21 +138,22 @@ def get_date_range(period):
 def is_active_booking(booking, current_date):
     if booking is None:
         return False
-    
+
     ankomst = booking['ankomst'].date()
     avreise = booking['avreise'].date() if pd.notnull(booking['avreise']) else None
-    
+
+    # Handle year-round subscriptions:
     if booking['abonnement_type'] == "Årsabonnement":
         return current_date.weekday() == 4 or ankomst == current_date
+    # Handle weekly bookings:
     elif booking['abonnement_type'] == "Ukentlig ved bestilling":
         return ankomst == current_date
+    # Handle standard bookings:
     else:
         if avreise:
             return ankomst <= current_date <= avreise
         else:
             return ankomst == current_date
-
-    return False
 
 def get_status_text(row, has_active_booking):
     if has_active_booking:
@@ -183,9 +185,17 @@ def find_username_by_cabin_id(cabin_id):
 def get_passwords():
     return st.secrets["passwords"]
 
+def perform_database_maintenance():
+    databases = ['tunbroyting', 'stroing', 'feedback']
+    for db_name in databases:
+        with get_db_connection(db_name) as conn:
+            conn.execute("VACUUM")
+    logger.info("Database maintenance (VACUUM) completed")
+
+@functools.lru_cache(maxsize=128)
 def get_customer_info(user_id):
-    db = load_customer_database()
-    customer = db[db['Id'].astype(str) == str(user_id)]
+    customer_db = load_customer_database()
+    customer = customer_db[customer_db['Id'].astype(str) == str(user_id)]
     if not customer.empty:
         return customer.iloc[0].to_dict()
     return None
@@ -236,6 +246,7 @@ def get_cabin_coordinates():
         for _, row in customer_db.iterrows()
         if pd.notnull(row["Latitude"]) and pd.notnull(row["Longitude"])
     ]
+
 # Databasetilkoblinger og generelle spørringsfunksjoner
 @contextmanager
 def get_db_connection(db_name):
@@ -282,9 +293,35 @@ def execute_many(db_name, query, params):
         cursor.executemany(query, params)
         conn.commit()
 
-## initialiseringsfunksjonene øverst i db_utils.py
+def create_database_indexes():
+    try:
+        with get_db_connection('tunbroyting') as conn:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement_type ON tunbroyting_bestillinger(abonnement_type)")
+        
+        with get_stroing_connection() as conn:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_status ON stroing_bestillinger(status)")
+        
+        with get_feedback_connection() as conn:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)")
+        
+        logger.info("Database indexes created successfully")
+    except sqlite3.OperationalError as e:
+        logger.error(f"Error creating indexes: {str(e)}")
+        # Her kan du legge til mer spesifikk feilhåndtering om nødvendig
+    except Exception as e:
+        logger.error(f"Unexpected error while creating indexes: {str(e)}")
+
+## initialiseringsfunksjonene 
 def initialize_database():
     initialize_stroing_database()
+    update_stroing_table_structure()
+    create_database_indexes()
     # Legg til initialisering for andre databaser her hvis nødvendig
     logger.info("Alle databaser initialisert")
 
@@ -320,6 +357,22 @@ def create_all_tables():
             logger.error(f"Error creating {db_name} table: {str(e)}")
     
     logger.info("All tables have been created or verified.")
+
+def update_stroing_table_structure():
+    with get_stroing_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Sjekk om status-kolonnen eksisterer
+        cursor.execute("PRAGMA table_info(stroing_bestillinger)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'status' not in columns:
+            # Legg til status-kolonnen hvis den ikke eksisterer
+            cursor.execute("ALTER TABLE stroing_bestillinger ADD COLUMN status TEXT DEFAULT 'Pending'")
+            conn.commit()
+            logger.info("Added 'status' column to stroing_bestillinger table")
+        
+    logger.info("stroing_bestillinger table structure updated")
 
 def initialize_stroing_database():
     with get_stroing_connection() as conn:
@@ -573,17 +626,6 @@ def send_credentials_email(customer, username, temp_password):
         logger.error(f"Feil ved sending av e-post til {customer['Email']}: {str(e)}")
         return False
 
-# Databaseadministrasjon og vedlikehold
-# def reset_stroing_database():
-#     with get_stroing_connection() as conn:
-#         cursor = conn.cursor()
-#         # Slett alle eksisterende data
-#         cursor.execute("DELETE FROM stroing_bestillinger")
-#         # Nullstill auto-increment teller
-#         cursor.execute("DELETE FROM sqlite_sequence WHERE name='stroing_bestillinger'")
-#         conn.commit()
-#     logger.info("Stroing database has been reset")
-
 def update_database_schema():
     with get_db_connection('tunbroyting') as conn:
         c = conn.cursor()
@@ -634,6 +676,12 @@ def validate_customers_and_passwords():
             logger.warning(f"Customer found with ID {customer['Id']}, but no corresponding password")
 
     logger.info("Customer and password validation complete")
+
+def parse_date(date_string):
+    return pd.to_datetime(date_string).date() if pd.notnull(date_string) else datetime.now().date()
+
+def parse_time(time_string):
+    return pd.to_datetime(time_string).time() if pd.notnull(time_string) else datetime.now().time()
 
 # Logging og statusendringer
 def log_status_change(bestilling_id, old_status, new_status, changed_by):
@@ -768,6 +816,28 @@ def hent_bruker_bestillinger(username):
         df = pd.read_sql_query(query, conn, params=(username,))
     return df
 
+def hent_bestillinger_med_kundeinfo(start_date, end_date):
+    customer_db = load_customer_database()
+    bestillinger = hent_bestillinger_for_periode(start_date, end_date)
+    
+    # Konverter customer_db til et dictionary for raskere oppslag
+    customer_dict = {str(row['Id']): row['Name'] for _, row in customer_db.iterrows()}
+    
+    # Legg til kundenavn til bestillinger
+    bestillinger['kundenavn'] = bestillinger['bruker'].astype(str).map(customer_dict)
+    
+    return bestillinger
+
+def hent_bestillinger_for_periode(start_date, end_date):
+    with get_tunbroyting_connection() as conn:
+        query = """
+        SELECT * FROM tunbroyting_bestillinger 
+        WHERE (ankomst_dato BETWEEN ? AND ?) OR (avreise_dato BETWEEN ? AND ?)
+        ORDER BY ankomst_dato, ankomst_tid
+        """
+        df = pd.read_sql_query(query, conn, params=(start_date, end_date, start_date, end_date))
+    return df
+
 def filter_tunbroyting_bestillinger(bestillinger, filters):
     filtered = bestillinger.copy()
     current_date = datetime.now(TZ).date()
@@ -777,31 +847,34 @@ def filter_tunbroyting_bestillinger(bestillinger, filters):
             ((filtered['abonnement_type'] == "Årsabonnement") & 
              ((current_date.weekday() == 4) | (filtered['ankomst_dato'].dt.date == current_date))) |
             ((filtered['abonnement_type'] == "Ukentlig ved bestilling") & 
-             (filtered['ankomst_dato'].dt.date == current_date))
+             ((filtered['ankomst_dato'].dt.date <= current_date) & 
+              ((filtered['avreise_dato'].isnull()) | (filtered['avreise_dato'].dt.date >= current_date))))
         ]
     elif filters.get('vis_type') == 'active':
         filtered = filtered[
             (filtered['abonnement_type'] == "Årsabonnement") |
             ((filtered['abonnement_type'] == "Ukentlig ved bestilling") & 
-             (filtered['ankomst_dato'].dt.date >= current_date))
+             ((filtered['ankomst_dato'].dt.date <= current_date) & 
+              ((filtered['avreise_dato'].isnull()) | (filtered['avreise_dato'].dt.date >= current_date))))
         ]
     
-    # Resten av filtreringen forblir uendret
     if filters.get('start_date'):
-        filtered = filtered[filtered['ankomst_dato'].dt.date >= filters['start_date']]
+        filtered = filtered[
+            (filtered['ankomst_dato'].dt.date >= filters['start_date']) |
+            (filtered['avreise_dato'].dt.date >= filters['start_date'])
+        ]
     
     if filters.get('end_date'):
-        filtered = filtered[filtered['ankomst_dato'].dt.date <= filters['end_date']]
+        filtered = filtered[
+            (filtered['ankomst_dato'].dt.date <= filters['end_date']) |
+            ((filtered['avreise_dato'].notnull()) & (filtered['avreise_dato'].dt.date <= filters['end_date']))
+        ]
     
     if filters.get('abonnement_type'):
         filtered = filtered[filtered['abonnement_type'].isin(filters['abonnement_type'])]
     
     if filters.get('rode'):
         filtered = filtered[filtered['rode'].isin(filters['rode'])]
-        st.write(f"Totalt antall bestillinger: {len(bestillinger)}")
-        st.write(f"Antall filtrerte bestillinger: {len(filtered_bestillinger)}")
-        st.write(f"Antall dagens bestillinger: {len(dagens_bestillinger)}")
-        st.write(f"Antall aktive bestillinger: {len(aktive_bestillinger)}")
     
     return filtered
 
@@ -898,7 +971,8 @@ def hent_aktive_bestillinger():
     today = datetime.now(TZ).date()
     with get_tunbroyting_connection() as conn:
         query = """
-        SELECT * FROM tunbroyting_bestillinger 
+        SELECT id, bruker, ankomst_dato, avreise_dato, abonnement_type
+        FROM tunbroyting_bestillinger 
         WHERE date(ankomst_dato) >= ? OR (date(ankomst_dato) <= ? AND date(avreise_dato) >= ?)
         OR (abonnement_type = 'Årsabonnement')
         """
@@ -934,7 +1008,56 @@ def hent_bestilling(bestilling_id):
     except Exception as e:
         logger.error(f"Feil ved henting av bestilling {bestilling_id}: {str(e)}", exc_info=True)
         return None
-    
+
+def vis_tunbroyting_statistikk(bestillinger):
+    """
+    Denne funksjonen tar en DataFrame med bestillinger som input og viser 
+    statistikk og visualiseringer basert på disse dataene.
+    """
+
+    # Konverter datoer til datetime.date objekter
+    bestillinger['ankomst_dato'] = pd.to_datetime(bestillinger['ankomst_dato'], errors='coerce').dt.date
+
+    # 1. Antall bestillinger per dag
+    daily_counts = bestillinger.groupby('ankomst_dato').size().reset_index(name='count')
+
+    fig_daily = px.bar(daily_counts, x='ankomst_dato', y='count',
+                       title='Antall bestillinger per dag',
+                       labels={'ankomst_dato': 'Dato', 'count': 'Antall bestillinger'})
+    st.plotly_chart(fig_daily)
+
+    # 2. Fordeling av abonnementstyper
+    abonnement_counts = bestillinger['abonnement_type'].value_counts()
+    fig_abonnement = px.pie(values=abonnement_counts.values, names=abonnement_counts.index,
+                            title='Fordeling av abonnementstyper')
+    st.plotly_chart(fig_abonnement)
+
+    # 3. Bestillinger per rode (hvis data er tilgjengelig)
+    if 'rode' in bestillinger.columns:
+        rode_counts = bestillinger['rode'].value_counts()
+        fig_rode = px.bar(x=rode_counts.index, y=rode_counts.values,
+                          title='Antall bestillinger per rode',
+                          labels={'x': 'Rode', 'y': 'Antall bestillinger'})
+        st.plotly_chart(fig_rode)
+    else:
+        st.info("Rodeinformasjon er ikke tilgjengelig i dataene.")
+
+    # 4. Nøkkeltall
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Totalt antall bestillinger", len(bestillinger))
+    with col2:
+        st.metric("Unike brukere", bestillinger['bruker'].nunique())
+    with col3:
+        # Beregn gjennomsnittlig opphold (hvis data er tilgjengelig)
+        if 'avreise_dato' in bestillinger.columns:
+            bestillinger['avreise_dato'] = pd.to_datetime(bestillinger['avreise_dato'], errors='coerce').dt.date
+            bestillinger['opphold'] = (bestillinger['avreise_dato'] - bestillinger['ankomst_dato']).dt.days
+            avg_stay = bestillinger['opphold'].mean()
+            st.metric("Gjennomsnittlig opphold (dager)", f"{avg_stay:.1f}")
+        else:
+            st.metric("Gjennomsnittlig opphold", "Ikke tilgjengelig")
+            
 # Tunbrøyting - update
 def rediger_bestilling(bestilling_id, nye_data):
     try:
@@ -1078,6 +1201,90 @@ def hent_stroing_bestilling(bestilling_id):
         logger.error(f"Error retrieving stroing booking with id {bestilling_id}: {str(e)}")
         return pd.DataFrame()
 
+def vis_stroingskart_kommende(bestillinger, mapbox_token, title):
+    fig = go.Figure()
+
+    current_date = datetime.now(TZ).date()
+
+    for _, row in bestillinger.iterrows():
+        onske_dato = row['onske_dato'].date()
+        if onske_dato == current_date:
+            color = 'red'
+        elif onske_dato > current_date:
+            # Beregn en gulfargetone som blir lysere jo lengre fram i tid
+            days_ahead = (onske_dato - current_date).days
+            color = f'rgba(255, 255, 0, {1 - min(days_ahead / 7, 0.9)})'
+        else:
+            color = 'gray'  # For tidligere bestillinger, hvis de er inkludert
+        
+        fig.add_trace(go.Scattermapbox(
+            lat=[row['Latitude']],
+            lon=[row['Longitude']],
+            mode='markers',
+            marker=go.scattermapbox.Marker(
+                size=10,
+                color=color,
+                opacity=0.7
+            ),
+            text=f"Hytte: {row['Name']}<br>Dato: {row['onske_dato'].strftime('%Y-%m-%d')}<br>Status: {row['status']}",
+            hoverinfo='text'
+        ))
+
+    center_lat = bestillinger['Latitude'].mean()
+    center_lon = bestillinger['Longitude'].mean()
+
+    fig.update_layout(
+        title=title,
+        mapbox_style="streets",
+        mapbox=dict(
+            accesstoken=mapbox_token,
+            center=dict(lat=center_lat, lon=center_lon),
+            zoom=13
+        ),
+        showlegend=False,
+        height=600,
+        margin={"r":0,"t":30,"l":0,"b":0}
+    )
+
+    return fig
+
+def hent_stroingsbestillinger_for_kart(start_date=None, end_date=None):
+    if start_date is None:
+        start_date = datetime.now(TZ).date()
+    if end_date is None:
+        end_date = start_date + timedelta(days=7)
+    
+    query = """
+    SELECT id, bruker, onske_dato, status
+    FROM stroing_bestillinger
+    WHERE date(onske_dato) BETWEEN ? AND ?
+    ORDER BY onske_dato
+    """
+    
+    with get_stroing_connection() as conn:
+        df = pd.read_sql_query(query, conn, params=(start_date, end_date))
+    
+    if df.empty:
+        return pd.DataFrame(columns=['id', 'bruker', 'onske_dato', 'status', 'Name', 'Latitude', 'Longitude', 'dager_til'])
+    
+    # Konverter 'onske_dato' til datetime
+    df['onske_dato'] = pd.to_datetime(df['onske_dato'], errors='coerce')
+    
+    # Fjern rader med ugyldige datoer
+    df = df.dropna(subset=['onske_dato'])
+    
+    # Hent kundedata fra Streamlit secrets
+    customer_db = load_customer_database()
+    
+    # Slå sammen strøingsbestillinger med kundedata
+    df = df.merge(customer_db[['Id', 'Name', 'Latitude', 'Longitude']], left_on='bruker', right_on='Id', how='left')
+    
+    # Beregn 'dager_til'
+    current_date = datetime.now(TZ).date()
+    df['dager_til'] = (df['onske_dato'].dt.date - current_date).dt.days
+    
+    return df
+
 def count_stroing_bestillinger():
     with get_stroing_connection() as conn:
         cursor = conn.cursor()
@@ -1123,22 +1330,17 @@ def update_stroing_status(bestilling_id, new_status, utfort_av=None):
         return False, str(e)
 
 # Strøing - delete
-def slett_stroing_bestilling(bestilling_id):
+def slett_stroingsbestilling(bestilling_id):
     try:
+        query = "DELETE FROM stroing_bestillinger WHERE id = ?"
         with get_stroing_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM stroing_bestillinger WHERE id = ?", (bestilling_id,))
-            affected_rows = cursor.rowcount
+            cursor.execute(query, (bestilling_id,))
             conn.commit()
-        
-        if affected_rows > 0:
-            logger.info(f"Slettet strøingsbestilling med id: {bestilling_id}")
-            return True
-        else:
-            logger.warning(f"Ingen strøingsbestilling funnet med id: {bestilling_id}")
-            return False
+        logger.info(f"Strøingsbestilling med ID {bestilling_id} ble slettet.")
+        return True
     except Exception as e:
-        logger.error(f"Feil ved sletting av strøingsbestilling med id {bestilling_id}: {str(e)}")
+        logger.error(f"Feil ved sletting av strøingsbestilling {bestilling_id}: {str(e)}")
         return False
 
 def verify_stroing_data():
@@ -1150,49 +1352,73 @@ def verify_stroing_data():
         for row in data:
             logger.info(f"Row: {row}")
 
-# Feedback - create ??
-
-# Feedback - read
-def get_feedback(start_date, end_date, include_hidden=False, cabin_identifier=None):
+# Feedback - create 
+def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden, is_alert=False):
     try:
         query = """
-        SELECT id, type, datetime, comment, innsender, status, status_changed_by, status_changed_at, hidden
-        FROM feedback 
-        WHERE 1=1
+        INSERT INTO feedback (type, datetime, comment, innsender, status, hidden, is_alert)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """
-        params = []
         
-        if start_date and end_date:
-            query += " AND datetime BETWEEN ? AND ?"
-            params.extend([start_date, end_date])
+        # Sett initial status
+        initial_status = "Aktiv" if is_alert else "Ny"
         
-        if not include_hidden:
-            query += " AND hidden = 0"
+        params = (feedback_type, datetime_str, comment, cabin_identifier, initial_status, hidden, is_alert)
         
-        if cabin_identifier:
-            query += " AND innsender = ?"
-            params.append(cabin_identifier)
+        with get_feedback_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            conn.commit()
+            feedback_id = cursor.lastrowid
         
-        query += " ORDER BY datetime DESC"
-        
-        # st.write(f"Debug: get_feedback query: {query}")
-        # st.write(f"Debug: params: {params}")
-        
-        df = fetch_data('feedback', query, params=params)
-        
-        # st.write(f"Debug: Fetched {len(df)} rows from feedback database")
-        
-        # Convert datetime columns
-        df['datetime'] = pd.to_datetime(df['datetime'], utc=True).dt.tz_convert(TZ)
-        if 'status_changed_at' in df.columns:
-            df['status_changed_at'] = pd.to_datetime(df['status_changed_at'], utc=True).dt.tz_convert(TZ)
-        
-        logger.info(f"Successfully fetched {len(df)} feedback entries")
-        return df
+        logger.info(f"Feedback saved successfully: ID {feedback_id}, Type: {feedback_type}, Cabin: {cabin_identifier}")
+        return feedback_id
+    
+    except sqlite3.Error as e:
+        logger.error(f"Database error occurred while saving feedback: {str(e)}")
+        return None
     except Exception as e:
-        logger.error(f"Error in get_feedback: {str(e)}", exc_info=True)
-        st.write(f"Debug: Error in get_feedback: {str(e)}")
-        return pd.DataFrame()  # Return an empty DataFrame on error
+        logger.error(f"Unexpected error occurred while saving feedback: {str(e)}")
+        return None
+    
+def batch_insert_feedback(feedback_list):
+    query = """
+    INSERT INTO feedback (type, datetime, comment, innsender, status, hidden)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """
+    params = [(f['type'], f['datetime'], f['comment'], f['innsender'], 'Ny', 0) for f in feedback_list]
+    
+    with get_feedback_connection() as conn:
+        conn.executemany(query, params)
+        conn.commit()
+    
+    logger.info(f"Batch inserted {len(feedback_list)} feedback entries")
+    
+# Feedback - read
+def get_feedback(start_date, end_date, include_hidden=False, cabin_identifier=None, limit=100, offset=0):
+    query = """
+    SELECT id, type, datetime, comment, innsender, status, status_changed_by, status_changed_at, hidden
+    FROM feedback 
+    WHERE 1=1
+    """
+    params = []
+    
+    if start_date and end_date:
+        query += " AND datetime BETWEEN ? AND ?"
+        params.extend([start_date, end_date])
+    
+    if not include_hidden:
+        query += " AND hidden = 0"
+    
+    if cabin_identifier:
+        query += " AND innsender = ?"
+        params.append(cabin_identifier)
+    
+    query += " ORDER BY datetime DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    
+    df = fetch_data('feedback', query, params=params)
+    return df
 
 # Feedback - update
 def hide_feedback(feedback_id):
