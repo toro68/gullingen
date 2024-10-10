@@ -1,4 +1,4 @@
-#!/Users/tor.inge.jossang@aftenbladet.no/Prosjekter/gullingen/myenv/bin/python3.12
+#!/Users/tor.inge.jossang@aftenbladet.no/dev/gullingen/myenv/bin/python3.11
 # -*- coding: utf-8 -*-
 import re
 import sys
