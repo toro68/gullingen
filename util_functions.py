@@ -157,9 +157,14 @@ def parse_time(time_string):
 
 def dump_debug_info():
     logger.info("Dumping debug info")
+    conn = None
     try:
         from db_utils import get_db_connection
         conn = get_db_connection('customer')
+        if conn is None:
+            logger.error("Failed to establish database connection")
+            return
+
         cursor = conn.cursor()
 
         # Hent totalt antall kunder
@@ -212,5 +217,6 @@ def dump_debug_info():
     finally:
         if conn:
             conn.close()
+            logger.info("Database connection closed")
 
 # Add any other utility functions here as needed
