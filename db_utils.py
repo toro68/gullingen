@@ -154,9 +154,9 @@ def get_tunbroyting_connection():
     return get_db_connection('tunbroyting')
 
 def execute_query(db_name, query, params=None):
-    with get_db_connection(db_name) as conn:
-        cursor = conn.cursor()
-        try:
+    try:
+        with get_db_connection(db_name) as conn:
+            cursor = conn.cursor()
             if params:
                 cursor.execute(query, params)
             else:
@@ -165,16 +165,17 @@ def execute_query(db_name, query, params=None):
             affected_rows = cursor.rowcount
             logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
             return affected_rows
-        except sqlite3.Error as e:
+    except sqlite3.OperationalError as e:
+        if "readonly database" in str(e):
+            logger.error(f"Database {db_name}.db is readonly. Cannot execute query.")
+            st.error(f"Databasen er skrivebeskyttet. Vennligst kontakt systemadministrator.")
+        else:
             logger.error(f"Database error in execute_query on {db_name}.db: {e}")
-            logger.error(f"Query: {query}")
-            if params:
-                logger.error(f"Parameters: {params}")
-            conn.rollback()
-            return 0
-
-logger.info("Updated execute_query function in db_utils.py")
-        
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error in execute_query on {db_name}.db: {e}")
+        return None
+           
 def fetch_data(db_name, query, params=None):
     with get_db_connection(db_name) as conn:
         if params:
