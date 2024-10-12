@@ -102,7 +102,17 @@ def get_db_connection(db_name):
     finally:
         conn.close()
         logger.info(f"Closed connection to database: {db_name}.db")
-        
+
+def create_connection(db_file):
+    """ Create a database connection to a SQLite database """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+        return conn
+    except sqlite3.Error as e:
+        print(e)
+    return conn
+       
 def create_customer_table():
     conn = None
     try:
