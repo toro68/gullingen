@@ -95,10 +95,11 @@ def perform_database_maintenance():
 def get_db_connection(db_name):
     conn = sqlite3.connect(f'{db_name}.db')
     try:
-        yield conn
-    finally:
-        conn.close()
-        
+        return conn
+    except Exception as e:
+        logger.error(f"Error connecting to database {db_name}: {e}")
+        return None
+       
 def create_connection(db_file):
     """ Create a database connection to a SQLite database """
     conn = None
@@ -180,21 +181,36 @@ def execute_query(db_name, query, params=None):
         logger.error(f"Unexpected error in execute_query on {db_name}.db: {e}")
         return None
     finally:
-        conn.close()
+        if conn:
+            conn.close()
            
 def fetch_data(db_name, query, params=None):
-    with get_db_connection(db_name) as conn:
+    conn = get_db_connection(db_name)
+    if conn is None:
+        logger.error(f"Could not establish connection to {db_name}.db")
+        return None
+    try:
         if params:
             return pd.read_sql_query(query, conn, params=params)
         else:
             return pd.read_sql_query(query, conn)
+    finally:
+        if conn:
+            conn.close()
 
 def execute_many(db_name, query, params):
-    with get_db_connection(db_name) as conn:
+    conn = get_db_connection(db_name)
+    if conn is None:
+        logger.error(f"Could not establish connection to {db_name}.db")
+        return None
+    try:
         cursor = conn.cursor()
         cursor.executemany(query, params)
         conn.commit()
-
+    finally:
+        if conn:
+            conn.close()
+            
 def create_database_indexes():
     try:
         with get_db_connection('tunbroyting') as conn:
