@@ -57,8 +57,6 @@ def verify_login_history_db():
     logger.info(f"Database file {db_path} exists.")
     return True
 
-# db_utils.py
-
 def ensure_login_history_table_exists():
     create_query = '''
     CREATE TABLE IF NOT EXISTS login_history (
@@ -96,13 +94,11 @@ def perform_database_maintenance():
 @contextmanager
 def get_db_connection(db_name):
     conn = sqlite3.connect(f'{db_name}.db')
-    logger.info(f"Opening connection to database: {db_name}.db")
     try:
         yield conn
     finally:
         conn.close()
-        logger.info(f"Closed connection to database: {db_name}.db")
-
+        
 def create_connection(db_file):
     """ Create a database connection to a SQLite database """
     conn = None
@@ -112,7 +108,12 @@ def create_connection(db_file):
     except sqlite3.Error as e:
         print(e)
     return conn
-       
+
+def create_table_if_not_exists(db_name, table_name, schema):
+    with get_db_connection(db_name) as conn:
+        conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({schema})")
+        conn.commit()
+     
 def create_customer_table():
     conn = None
     try:
@@ -218,12 +219,29 @@ def create_database_indexes():
     except Exception as e:
         logger.error(f"Unexpected error while creating indexes: {str(e)}")
 
+def create_database(db_name):
+    db_path = f"{db_name}.db"
+    if not os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.close()
+            logger.info(f"Created new database: {db_path}")
+        except sqlite3.Error as e:
+            logger.error(f"Error creating database {db_path}: {e}")
+            
+def check_database_size(db_name):
+    db_path = f"{db_name}.db"
+    if os.path.exists(db_path):
+        size = os.path.getsize(db_path)
+        logger.info(f"Size of {db_name}.db: {size/1024/1024:.2f} MB")
+    else:
+        logger.warning(f"Database {db_name}.db does not exist")
+
 # Database connection
-@st.cache_resource
-def get_stroing_connection():
+def get_stroing_connection(timeout=10):
     db_path = 'stroing.db'
     try:
-        conn = sqlite3.connect(db_path, check_same_thread=False, uri=True)
+        conn = sqlite3.connect(db_path, check_same_thread=False, uri=True, timeout=timeout)
         conn.execute("PRAGMA journal_mode=WAL;")
         logger.info(f"Successfully connected to {db_path}")
         return conn
@@ -231,8 +249,7 @@ def get_stroing_connection():
         logger.error(f"Error connecting to {db_path}: {e}")
         st.error(f"Kunne ikke koble til strøingsdatabasen. Vennligst kontakt systemadministrator.")
         return None
-
-@st.cache_resource
+    
 def get_feedback_connection():
     return sqlite3.connect('feedback.db', check_same_thread=False)
 
@@ -272,40 +289,47 @@ def get_db_engine(db_name='login_history.db'):
         logger.error(f"Failed to create database engine for {db_name}: {str(e)}", exc_info=True)
         raise
     
+def optimize_database(db_name):
+    with get_db_connection(db_name) as conn:
+        conn.execute("PRAGMA optimize")
+        logger.info(f"Optimized {db_name}.db")
+
+def migrate_database(db_name, old_version, new_version):
+    # Implementer logikk for å migrere databasen fra old_version til new_version
+    pass
+
 ## initialiseringsfunksjonene 
 
 def create_all_tables():
     tables = {
-        'login_history': '''CREATE TABLE IF NOT EXISTS login_history
-                            (id INTEGER PRIMARY KEY,
-                             user_id TEXT,
-                             login_time TEXT,
-                             success INTEGER)''',
-        'tunbroyting': '''CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger
-                          (id INTEGER PRIMARY KEY,
-                           bruker TEXT,
-                           ankomst_dato TEXT,
-                           ankomst_tid TEXT,
-                           avreise_dato TEXT,
-                           avreise_tid TEXT,
-                           abonnement_type TEXT)''',
-        'stroing': '''CREATE TABLE IF NOT EXISTS stroing_bestillinger
-                      (id INTEGER PRIMARY KEY,
-                       bruker TEXT,
-                       bestillings_dato TEXT,
-                       onske_dato TEXT,
-                       kommentar TEXT,
-                       status TEXT)'''
+        'login_history': '(id INTEGER PRIMARY KEY, user_id TEXT, login_time TEXT, success INTEGER)',
+        'tunbroyting': '(id INTEGER PRIMARY KEY, bruker TEXT, ankomst_dato TEXT, ankomst_tid TEXT, avreise_dato TEXT, avreise_tid TEXT, abonnement_type TEXT)',
+        'stroing': '(id INTEGER PRIMARY KEY, bruker TEXT, bestillings_dato TEXT, onske_dato TEXT, kommentar TEXT, status TEXT)'
     }
     
-    for db_name, query in tables.items():
+    for db_name, schema in tables.items():
         try:
-            execute_query(db_name, query)
+            create_table_if_not_exists(db_name, db_name, schema)
             logger.info(f"{db_name} table created or already exists.")
         except Exception as e:
             logger.error(f"Error creating {db_name} table: {str(e)}")
     
     logger.info("All tables have been created or verified.")
+
+def check_database_integrity(db_name):
+    with get_db_connection(db_name) as conn:
+        conn.execute("PRAGMA integrity_check")
+        
+def backup_database(db_name):
+    source = f"{db_name}.db"
+    destination = f"{db_name}_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    try:
+        with sqlite3.connect(source) as conn:
+            with sqlite3.connect(destination) as backup:
+                conn.backup(backup)
+        logger.info(f"Successfully backed up {source} to {destination}")
+    except sqlite3.Error as e:
+        logger.error(f"Error backing up database {source}: {e}")
 
 ## initialiseringsfunksjonene 
 def initialize_stroing_database():
@@ -326,14 +350,16 @@ def initialize_stroing_database():
         print("Error! Cannot create the database connection.")
     
 def initialize_database():
-    verify_database_exists('login_history')
-    create_login_history_db()
-    ensure_login_history_table_exists()
-    initialize_stroing_database()
-    update_stroing_table_structure()
+    databases = ['login_history', 'tunbroyting', 'stroing', 'feedback']
+    for db in databases:
+        if not verify_database_exists(db):
+            create_database(db)
+        check_database_integrity(db)
+        optimize_database(db)
+        check_database_size(db)
+    create_all_tables()
     create_database_indexes()
-    # Legg til initialisering for andre databaser her hvis nødvendig
-    logger.info("Alle databaser initialisert")
+    logger.info("All databases initialized, integrity checked, optimized, and sized")
     
 def insert_customer(id, latitude, longitude, subscription, type):
     conn = sqlite3.connect('customer.db')
@@ -376,56 +402,44 @@ def update_stroing_bestillinger_table():
         with get_stroing_connection() as conn:
             cursor = conn.cursor()
             
-            # Execute the SQL commands
-            cursor.executescript('''
-                -- Create backup
-                CREATE TABLE IF NOT EXISTS stroing_bestillinger_backup AS SELECT * FROM stroing_bestillinger;
-
-                -- Drop existing table
-                DROP TABLE IF EXISTS stroing_bestillinger;
-
-                -- Create new table
-                CREATE TABLE stroing_bestillinger (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bruker TEXT NOT NULL,
-                    bestillings_dato TEXT NOT NULL,
-                    onske_dato TEXT NOT NULL,
-                    kommentar TEXT,
-                    utfort_dato TEXT,
-                    utfort_av TEXT,
-                    fakturert BOOLEAN DEFAULT 0,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-                );
-
-                -- Copy data from backup
-                INSERT INTO stroing_bestillinger (
-                    bruker, bestillings_dato, onske_dato, kommentar, 
-                    utfort_dato, utfort_av, fakturert, created_at, updated_at
-                )
-                SELECT 
-                    bruker, bestillings_dato, onske_dato, kommentar,
-                    NULL, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM stroing_bestillinger_backup;
-
-                -- Create indexes
-                CREATE INDEX idx_stroing_bruker ON stroing_bestillinger(bruker);
-                CREATE INDEX idx_stroing_onske_dato ON stroing_bestillinger(onske_dato);
-            ''')
+            cursor.execute("PRAGMA user_version")
+            current_version = cursor.fetchone()[0]
+            logger.info(f"Current stroing_bestillinger table version: {current_version}")
+            
+            if current_version < 1:
+                logger.info("Upgrading stroing_bestillinger table to version 1")
+                cursor.executescript('''
+                    -- Ditt eksisterende script her
+                ''')
+                cursor.execute("PRAGMA user_version = 1")
+                logger.info("stroing_bestillinger table upgraded to version 1")
             
             conn.commit()
-            logger.info("stroing_bestillinger table updated successfully")
+            logger.info("stroing_bestillinger table update completed successfully")
             return True
-    except Exception as e:
-        logger.error(f"Error updating stroing_bestillinger table: {str(e)}")
+    except sqlite3.Error as e:
+        logger.error(f"SQLite error updating stroing_bestillinger table: {e}")
         return False
-    
+    except Exception as e:
+        logger.error(f"Unexpected error updating stroing_bestillinger table: {e}")
+        return False
+      
 def update_login_history_table():
     try:
         ensure_login_history_table_exists()
     except Exception as e:
         logger.error(f"Error updating login_history table: {str(e)}")
-               
+
+def close_all_connections():
+    databases = ['login_history', 'tunbroyting', 'stroing', 'feedback']
+    for db in databases:
+        try:
+            with get_db_connection(db) as conn:
+                conn.close()
+            logger.info(f"Closed connection to {db}.db")
+        except Exception as e:
+            logger.error(f"Error closing connection to {db}.db: {e}")   # Implement logic to close all open connections
+                   
 # Datavalidering og -henting:
 def update_database_schema():
     with get_db_connection('tunbroyting') as conn:
