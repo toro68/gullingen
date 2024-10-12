@@ -121,6 +121,9 @@ SESSION_TIMEOUT = 3600  # 1 time
 # Global variables
 failed_attempts = {}
 
+# Disable file watcher
+st.set_option('server.fileWatcherType', 'none')
+
 #Validering av brukerinput
 def validate_user_input(input_data):
     """
@@ -234,11 +237,9 @@ def main():
                         unified_report_page(include_hidden=True)
 
     except Exception as e:
-        logger.error(f"An error occurred during application setup: {str(e)}")
-        logger.error(f"Error traceback: {traceback.format_exc()}")
-        st.error(
-            "An error occurred during application setup. Please check the logs for more information."
-        )
+        st.error(f"En feil oppstod: {str(e)}")
+        st.write("Feilsøkingsinformasjon:")
+        st.code(traceback.format_exc())
 
 if __name__ == "__main__":
     main()

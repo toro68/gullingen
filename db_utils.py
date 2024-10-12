@@ -284,21 +284,21 @@ def create_all_tables():
 
 ## initialiseringsfunksjonene 
 def initialize_stroing_database():
-    """Oppretter nødvendige tabeller for strøingsdatabasen."""
-    with get_stroing_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS stroing_bestillinger (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                bruker TEXT NOT NULL,
-                bestillings_dato TEXT NOT NULL,
-                onske_dato TEXT NOT NULL,
-                utfort_dato TEXT,
-                utfort_av TEXT
-            )
-        ''')
-        conn.commit()
-    logger.info("Strøingsdatabase initialisert")
+    conn = create_connection("stroing.db")
+    if conn is not None:
+        create_table_sql = """
+        CREATE TABLE IF NOT EXISTS stroing_bestillinger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bruker TEXT NOT NULL,
+            bestillings_dato TEXT NOT NULL,
+            onske_dato TEXT NOT NULL,
+            status TEXT DEFAULT 'Pending'
+        );
+        """
+        execute_query(conn, create_table_sql)
+        conn.close()
+    else:
+        print("Error! Cannot create the database connection.")
     
 def initialize_database():
     verify_database_exists('login_history')
