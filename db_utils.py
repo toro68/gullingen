@@ -93,11 +93,12 @@ def perform_database_maintenance():
 # Databasetilkoblinger og generelle spørringsfunksjoner
 @contextmanager
 def get_db_connection(db_name):
-    conn = sqlite3.connect(f'{db_name}.db')
     try:
+        conn = sqlite3.connect(f'{db_name}.db')
+        logger.info(f"Opening connection to database: {db_name}.db")
         return conn
-    except Exception as e:
-        logger.error(f"Error connecting to database {db_name}: {e}")
+    except sqlite3.Error as e:
+        logger.error(f"Error connecting to database {db_name}.db: {e}")
         return None
        
 def create_connection(db_file):
@@ -183,6 +184,7 @@ def execute_query(db_name, query, params=None):
     finally:
         if conn:
             conn.close()
+            logger.info(f"Closed connection to database: {db_name}.db")
            
 def fetch_data(db_name, query, params=None):
     conn = get_db_connection(db_name)
@@ -197,6 +199,7 @@ def fetch_data(db_name, query, params=None):
     finally:
         if conn:
             conn.close()
+            logger.info(f"Closed connection to database: {db_name}.db")
 
 def execute_many(db_name, query, params):
     conn = get_db_connection(db_name)
