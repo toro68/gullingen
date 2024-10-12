@@ -154,17 +154,20 @@ def get_tunbroyting_connection():
     return get_db_connection('tunbroyting')
 
 def execute_query(db_name, query, params=None):
+    conn = get_db_connection(db_name)
+    if conn is None:
+        logger.error(f"Could not establish connection to {db_name}.db")
+        return None
     try:
-        with get_db_connection(db_name) as conn:
-            cursor = conn.cursor()
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-            conn.commit()
-            affected_rows = cursor.rowcount
-            logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
-            return affected_rows
+        cursor = conn.cursor()
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        conn.commit()
+        affected_rows = cursor.rowcount
+        logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
+        return affected_rows
     except sqlite3.OperationalError as e:
         if "readonly database" in str(e):
             logger.error(f"Database {db_name}.db is readonly. Cannot execute query.")
@@ -175,6 +178,8 @@ def execute_query(db_name, query, params=None):
     except Exception as e:
         logger.error(f"Unexpected error in execute_query on {db_name}.db: {e}")
         return None
+    finally:
+        conn.close()
            
 def fetch_data(db_name, query, params=None):
     with get_db_connection(db_name) as conn:
@@ -216,7 +221,16 @@ def create_database_indexes():
 # Database connection
 @st.cache_resource
 def get_stroing_connection():
-    return sqlite3.connect('stroing.db', check_same_thread=False, uri=True)
+    db_path = 'stroing.db'
+    try:
+        conn = sqlite3.connect(db_path, check_same_thread=False, uri=True)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        logger.info(f"Successfully connected to {db_path}")
+        return conn
+    except sqlite3.Error as e:
+        logger.error(f"Error connecting to {db_path}: {e}")
+        st.error(f"Kunne ikke koble til strøingsdatabasen. Vennligst kontakt systemadministrator.")
+        return None
 
 @st.cache_resource
 def get_feedback_connection():
