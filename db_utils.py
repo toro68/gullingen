@@ -91,7 +91,6 @@ def perform_database_maintenance():
     logger.info("Database maintenance (VACUUM) completed")
 
 # Databasetilkoblinger og generelle spørringsfunksjoner
-@contextmanager
 def get_db_connection(db_name):
     try:
         conn = sqlite3.connect(f'{db_name}.db')
@@ -216,28 +215,39 @@ def execute_many(db_name, query, params):
             
 def create_database_indexes():
     try:
-        with get_db_connection('tunbroyting') as conn:
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement_type ON tunbroyting_bestillinger(abonnement_type)")
+        conn = get_db_connection('tunbroyting')
+        if conn:
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement_type ON tunbroyting_bestillinger(abonnement_type)")
+            finally:
+                conn.close()
         
-        with get_stroing_connection() as conn:
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_status ON stroing_bestillinger(status)")
+        conn = get_stroing_connection()
+        if conn:
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_stroing_status ON stroing_bestillinger(status)")
+            finally:
+                conn.close()
         
-        with get_feedback_connection() as conn:
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type)")
-            conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)")
+        conn = get_feedback_connection()
+        if conn:
+            try:
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)")
+            finally:
+                conn.close()
         
         logger.info("Database indexes created successfully")
     except sqlite3.OperationalError as e:
         logger.error(f"Error creating indexes: {str(e)}")
-        # Her kan du legge til mer spesifikk feilhåndtering om nødvendig
     except Exception as e:
         logger.error(f"Unexpected error while creating indexes: {str(e)}")
-
+        
 def create_database(db_name):
     db_path = f"{db_name}.db"
     if not os.path.exists(db_path):
