@@ -402,11 +402,9 @@ def ensure_stroing_table_exists():
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       bruker TEXT NOT NULL,
                       bestillings_dato TEXT NOT NULL,
-                      onske_dato TEXT NOT NULL,
-                      kommentar TEXT,
-                      status TEXT NOT NULL DEFAULT '1')''')
+                      onske_dato TEXT NOT NULL)''')
         conn.commit()
-              
+                      
 def update_stroing_database_schema():
     with get_stroing_connection() as conn:
         cursor = conn.cursor()
