@@ -174,7 +174,7 @@ def execute_query(db_name, query, params=None):
             conn.commit()
             affected_rows = cursor.rowcount
             logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
-            return affected_rows
+            return affected_rows 
     except sqlite3.OperationalError as e:
         if "readonly database" in str(e):
             logger.error(f"Database {db_name}.db is readonly. Cannot execute query.")
