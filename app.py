@@ -121,9 +121,6 @@ SESSION_TIMEOUT = 3600  # 1 time
 # Global variables
 failed_attempts = {}
 
-# Disable file watcher
-st.set_option('server.fileWatcherType', 'none')
-
 #Validering av brukerinput
 def validate_user_input(input_data):
     """
