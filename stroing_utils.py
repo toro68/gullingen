@@ -429,8 +429,7 @@ def vis_tidligere_stroingsbestillinger(bruker_id):
                 st.write(f"Bestilt: {bestilling['bestillings_dato'].strftime('%Y-%m-%d %H:%M')}")
                 st.write(f"Ønsket dato: {bestilling['onske_dato'].date()}")
 
-TI
-Denne koden skal vise heltall på x-aksen og bestillinger pr døgn på y-aksen. def vis_graf_stroing():
+
     # Hent alle strøingsbestillinger
     alle_bestillinger = hent_stroing_bestillinger()
 
