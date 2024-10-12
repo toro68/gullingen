@@ -95,19 +95,18 @@ def perform_database_maintenance():
 # db_utils.py
 
 @contextmanager
-def get_db_connection(db_name):
+def db_connection(db_name):
     conn = None
     try:
-        conn = sqlite3.connect(f'{db_name}.db')
-        logger.info(f"Opening connection to database: {db_name}.db")
+        conn = get_db_connection(db_name)
         yield conn
     except sqlite3.Error as e:
-        logger.error(f"Error connecting to database {db_name}.db: {e}")
+        logger.error(f"Database error in db_connection for {db_name}.db: {e}")
         raise
     finally:
         if conn:
             conn.close()
-            logger.info(f"Closed connection to database: {db_name}.db")
+            logger.info(f"Connection to {db_name}.db closed.")
        
 def create_connection(db_file):
     """ Create a database connection to a SQLite database """
