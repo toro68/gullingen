@@ -1,8 +1,12 @@
 import sqlite3
 import pandas as pd
 import traceback
+import altair as alt
+import pytz
+
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
+
 import streamlit as st
 
 from db_utils import (
@@ -116,6 +120,9 @@ def bestill_stroing():
 
     # Vis tidligere bestillinger én gang, med overskrift
     display_stroing_bookings(st.session_state.user_id, show_header=True)
+    
+    # Viser graf over strøingsbestillinger for hele hyttegrenda
+    vis_graf_stroing()
     
 # Read
 def hent_stroing_bestillinger():
@@ -422,3 +429,103 @@ def vis_tidligere_stroingsbestillinger(bruker_id):
                 st.write(f"Bestilt: {bestilling['bestillings_dato'].strftime('%Y-%m-%d %H:%M')}")
                 st.write(f"Ønsket dato: {bestilling['onske_dato'].date()}")
 
+TI
+Denne koden skal vise heltall på x-aksen og bestillinger pr døgn på y-aksen. def vis_graf_stroing():
+    # Hent alle strøingsbestillinger
+    alle_bestillinger = hent_stroing_bestillinger()
+
+    # Beregn datointervallet
+    today = datetime.now(TZ).date()
+    date_range = [today + timedelta(days=i) for i in range(5)]
+
+    # Filtrer bestillinger for de neste 5 dagene
+    relevante_bestillinger = alle_bestillinger[
+        (alle_bestillinger['onske_dato'].dt.date >= today) &
+        (alle_bestillinger['onske_dato'].dt.date <= date_range[-1])
+    ]
+
+    # Lag en DataFrame med alle datoer og antall bestillinger
+    date_df = pd.DataFrame({'dato': date_range})
+    bestillinger_per_dag = relevante_bestillinger.groupby(relevante_bestillinger['onske_dato'].dt.date).size().reset_index(name='antall')
+    bestillinger_per_dag.columns = ['dato', 'antall']
+
+    # Kombiner dataframes for å inkludere dager uten bestillinger
+    full_df = pd.merge(date_df, bestillinger_per_dag, on='dato', how='left').fillna(0)
+    full_df['antall'] = full_df['antall'].astype(int)
+
+    # Lag Altair chart
+    chart = alt.Chart(full_df).mark_bar().encode(
+        x=alt.X('dato:T', title='Dato', axis=alt.Axis(format='%d.%m', labelAngle=-45)),
+        y=alt.Y('antall:Q', title='Antall bestillinger'),
+        tooltip=['dato', 'antall']
+    ).properties(
+        width=600,
+        height=400,
+        title='Strøingsbestillinger de neste 5 dagene'
+    )
+
+    # Vis grafen
+    st.altair_chart(chart, use_container_width=True)
+
+    # Vis totalt antall bestillinger
+    total_bestillinger = full_df['antall'].sum()
+    st.info(f"Totalt antall bestillinger for perioden: {total_bestillinger}")
+
+def vis_graf_stroing():
+    alle_bestillinger = hent_stroing_bestillinger()  # Your function to fetch data
+
+    today = datetime.now(TZ).date()
+    date_range = [today + timedelta(days=i) for i in range(5)]
+
+    relevante_bestillinger = alle_bestillinger[
+        (alle_bestillinger['onske_dato'].dt.date >= today) &
+        (alle_bestillinger['onske_dato'].dt.date <= date_range[-1])
+    ]
+
+
+    date_df = pd.DataFrame({'dato': date_range, 'dager_fra_idag': range(5)})
+    bestillinger_per_dag = relevante_bestillinger.groupby(relevante_bestillinger['onske_dato'].dt.date).size().reset_index(name='antall')
+    bestillinger_per_dag.columns = ['dato', 'antall']
+
+
+    full_df = pd.merge(date_df, bestillinger_per_dag, on='dato', how='left').fillna(0)
+    full_df['antall'] = full_df['antall'].astype(int)
+    full_df['dato'] = pd.to_datetime(full_df['dato']).dt.strftime('%Y-%m-%d') # Format date for tooltip
+
+
+    chart = alt.Chart(full_df).mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5).encode(
+        x=alt.X('dager_fra_idag:O', title='Dager fra i dag', axis=alt.Axis(labelAngle=0, labelPadding=5)),
+        y=alt.Y('antall:Q', title='Antall bestillinger'),
+        tooltip=['dato', 'antall']
+    ).properties(
+        width=600,
+        height=400,
+        title='Strøingsbestillinger de neste 5 dagene'
+    ).configure_axis(
+        labelFontSize=12,
+        titleFontSize=14
+    ).configure_title(
+        fontSize=16,
+        anchor='start'
+    )
+
+    text = chart.mark_text(
+        align='center',
+        baseline='middle',
+        dy=-10, # Adjust dynamically based on bar height
+        color='white' # For better contrast
+    ).encode(
+        text='antall:Q'
+    ).transform_filter( # Only show labels if count > 0
+      alt.datum.antall > 0
+  )
+
+
+
+
+    final_chart = (chart + text)
+
+    st.altair_chart(final_chart, use_container_width=True)
+
+    total_bestillinger = full_df['antall'].sum()
+    st.info(f"Totalt antall bestillinger for perioden: {total_bestillinger}")
