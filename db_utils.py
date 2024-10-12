@@ -209,17 +209,13 @@ def fetch_data(db_name, query, params=None):
         return None
     
 def execute_many(db_name, query, params):
-    conn = get_db_connection(db_name)
-    if conn is None:
-        logger.error(f"Could not establish connection to {db_name}.db")
-        return None
     try:
-        cursor = conn.cursor()
-        cursor.executemany(query, params)
-        conn.commit()
-    finally:
-        if conn:
-            conn.close()
+        with get_db_connection(db_name) as conn:
+            cursor = conn.cursor()
+            cursor.executemany(query, params)
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error executing many queries on {db_name}.db: {e}")
             
 def create_database_indexes():
     try:
@@ -399,12 +395,11 @@ def initialize_database():
     logger.info("All databases initialized, integrity checked, optimized, and sized")
     
 def insert_customer(id, latitude, longitude, subscription, type):
-    conn = sqlite3.connect('customer.db')
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO customers VALUES (?, ?, ?, ?, ?)",
-              (id, latitude, longitude, subscription, type))
-    conn.commit()
-    conn.close()
+    with sqlite3.connect('customer.db') as conn:
+        c = conn.cursor()
+        c.execute("INSERT OR REPLACE INTO customers VALUES (?, ?, ?, ?, ?)",
+                  (id, latitude, longitude, subscription, type))
+        conn.commit()
 
 def ensure_stroing_table_exists():
     with get_stroing_connection() as conn:
