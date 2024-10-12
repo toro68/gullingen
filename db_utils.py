@@ -215,7 +215,7 @@ def create_database_indexes():
 # Database connection
 @st.cache_resource
 def get_stroing_connection():
-    return sqlite3.connect('stroing.db', check_same_thread=False)
+    return sqlite3.connect('stroing.db', check_same_thread=False, uri=True)
 
 @st.cache_resource
 def get_feedback_connection():
