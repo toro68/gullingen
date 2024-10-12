@@ -96,6 +96,7 @@ def perform_database_maintenance():
 
 @contextmanager
 def get_db_connection(db_name):
+    conn = None
     try:
         conn = sqlite3.connect(f'{db_name}.db')
         logger.info(f"Opening connection to database: {db_name}.db")
