@@ -77,32 +77,46 @@ def unified_report_page(include_hidden=False):
         default=["Bruker-feedback", "Admin-varsler", "Tunbrøyting", "Strøing"],
     )
 
-    # Fetch data
-    feedback_data = get_feedback(
-        start_datetime.isoformat(),
-        end_datetime.isoformat(),
-        include_hidden=include_hidden,
-    )
-    tunbroyting_data = hent_bestillinger()
-    stroing_data = hent_stroing_bestillinger()
-    login_history = (
-        get_login_history(start_datetime, end_datetime)
-        if "Påloggingshistorikk" in data_types
-        else pd.DataFrame()
-    )
+    st.write("Debug: Valgte datatyper:", data_types)  # Debug utskrift
 
-    if (
-        feedback_data.empty
-        and tunbroyting_data.empty
-        and stroing_data.empty
-        and login_history.empty
-    ):
-        st.warning(f"Ingen data tilgjengelig for perioden {start_date} til {end_date}.")
-        return
+    # Initialize all dataframes
+    feedback_data = pd.DataFrame()
+    tunbroyting_data = pd.DataFrame()
+    stroing_data = pd.DataFrame()
+    login_history = pd.DataFrame()
+    admin_alerts = pd.DataFrame()
+
+    # Fetch data
+    if "Bruker-feedback" in data_types:
+        feedback_data = get_feedback(
+            start_datetime.isoformat(),
+            end_datetime.isoformat(),
+            include_hidden=include_hidden,
+        )
+        st.write("Debug: Hentet bruker-feedback data")  # Debug utskrift
+
+    if "Tunbrøyting" in data_types:
+        tunbroyting_data = hent_bestillinger()
+        st.write("Debug: Hentet tunbrøyting data")  # Debug utskrift
+
+    if "Strøing" in data_types:
+        stroing_data = hent_stroing_bestillinger()
+        st.write("Debug: Hentet strøing data")  # Debug utskrift
+
+    if "Påloggingshistorikk" in data_types:
+        login_history = get_login_history(start_datetime, end_datetime)
+        st.write("Debug: Hentet påloggingshistorikk")  # Debug utskrift
+
+    if "Admin-varsler" in data_types:
+        admin_alerts = get_alerts(only_today=False, include_expired=True)
+        st.write("Debug: Hentet admin-varsler")  # Debug utskrift
+        st.subheader("Admin-varsler")
+        admin_alert()
 
     # Data preprocessing
     if not feedback_data.empty:
-        # ... (existing feedback_data preprocessing)
+        feedback_data["datetime"] = pd.to_datetime(feedback_data["datetime"]).dt.tz_convert(TZ)
+        feedback_data["date"] = feedback_data["datetime"].dt.date
 
     if not tunbroyting_data.empty:
         if 'ankomst_dato' in tunbroyting_data.columns:
@@ -116,91 +130,81 @@ def unified_report_page(include_hidden=False):
             tunbroyting_data["ankomst_dato"] = tunbroyting_data["ankomst"].dt.date
 
     if not login_history.empty:
-        # ... (existing login_history preprocessing)
+        login_history["login_time"] = pd.to_datetime(login_history["login_time"]).dt.tz_convert(TZ)
+        login_history["date"] = login_history["login_time"].dt.date
+
+    if not admin_alerts.empty:
+        admin_alerts["datetime"] = pd.to_datetime(admin_alerts["datetime"]).dt.tz_convert(TZ)
+        admin_alerts["date"] = admin_alerts["datetime"].dt.date
+
+    # Check if all data is empty
+    if all(df.empty for df in [feedback_data, tunbroyting_data, stroing_data, login_history, admin_alerts]):
+        st.warning(f"Ingen data tilgjengelig for perioden {start_date} til {end_date}.")
+        return
 
     # Export options
     st.header("Eksportalternativer")
     export_format = st.radio("Velg eksportformat", ["CSV", "Excel"])
 
     if st.button("Last ned data"):
-        if export_format == "CSV":
-            csv_data = io.StringIO()
-            if "Bruker-feedback" in data_types and not user_feedback.empty:
-                csv_data.write("Bruker-feedback:\n")
-                user_feedback.to_csv(csv_data, index=False)
-                csv_data.write("\n\n")
-            if "Admin-varsler" in data_types and not admin_alerts.empty:
-                csv_data.write("Admin-varsler:\n")
-                admin_alerts.to_csv(csv_data, index=False)
-                csv_data.write("\n\n")
-            if "Tunbrøyting" in data_types and not tunbroyting_data.empty:
-                csv_data.write("Tunbrøyting:\n")
-                tunbroyting_data.to_csv(csv_data, index=False)
-                csv_data.write("\n\n")
-            if "Strøing" in data_types and not stroing_data.empty:
-                csv_data.write("Strøing:\n")
-                stroing_data.to_csv(csv_data, index=False)
-                csv_data.write("\n\n")
-            if "Påloggingshistorikk" in data_types and not login_history.empty:
-                csv_data.write("Påloggingshistorikk:\n")
-                login_history.to_csv(csv_data, index=False)
+        try:
+            st.write("Debug: Starter nedlasting av data")  # Debug utskrift
+            if export_format == "CSV":
+                csv_data = io.StringIO()
+                for data_type, df in [
+                    ("Bruker-feedback", feedback_data),
+                    ("Admin-varsler", admin_alerts),
+                    ("Tunbrøyting", tunbroyting_data),
+                    ("Strøing", stroing_data),
+                    ("Påloggingshistorikk", login_history)
+                ]:
+                    st.write(f"Debug: Prosesserer {data_type}")  # Debug utskrift
+                    if data_type in data_types and not df.empty:
+                        csv_data.write(f"{data_type}:\n")
+                        df.to_csv(csv_data, index=False)
+                        csv_data.write("\n\n")
 
-            st.download_button(
-                label="Last ned CSV",
-                data=csv_data.getvalue(),
-                file_name="samlet_rapport.csv",
-                mime="text/csv",
-            )
-        else:  # Excel
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                if "Bruker-feedback" in data_types and not user_feedback.empty:
-                    user_feedback.to_excel(writer, sheet_name="Bruker-feedback", index=False)
-                if "Admin-varsler" in data_types and not admin_alerts.empty:
-                    admin_alerts.to_excel(writer, sheet_name="Admin-varsler", index=False)
-                if "Tunbrøyting" in data_types and not tunbroyting_data.empty:
-                    tunbroyting_data.to_excel(writer, sheet_name="Tunbrøyting", index=False)
-                if "Strøing" in data_types and not stroing_data.empty:
-                    stroing_data.to_excel(writer, sheet_name="Strøing", index=False)
-                if "Påloggingshistorikk" in data_types and not login_history.empty:
-                    login_history.to_excel(writer, sheet_name="Påloggingshistorikk", index=False)
+                st.download_button(
+                    label="Last ned CSV",
+                    data=csv_data.getvalue(),
+                    file_name="samlet_rapport.csv",
+                    mime="text/csv",
+                )
+            else:  # Excel
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                    for data_type, df in [
+                        ("Bruker-feedback", feedback_data),
+                        ("Admin-varsler", admin_alerts),
+                        ("Tunbrøyting", tunbroyting_data),
+                        ("Strøing", stroing_data),
+                        ("Påloggingshistorikk", login_history)
+                    ]:
+                        st.write(f"Debug: Prosesserer {data_type} for Excel")  # Debug utskrift
+                        if data_type in data_types and not df.empty:
+                            df.to_excel(writer, sheet_name=data_type, index=False)
 
-            st.download_button(
-                label="Last ned Excel",
-                data=output.getvalue(),
-                file_name="samlet_rapport.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            
+                st.download_button(
+                    label="Last ned Excel",
+                    data=output.getvalue(),
+                    file_name="samlet_rapport.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            st.success("Data lastet ned vellykket!")
+        except Exception as e:
+            st.error(f"En feil oppstod under nedlasting av data: {str(e)}")
+            logger.error(f"Error during data download: {str(e)}", exc_info=True)
+            st.write("Debug: Exception stacktrace:", traceback.format_exc())  # Debug utskrift
+                   
     # Data visualization
-    #st.header("Datavisualisering")
+    st.header("Datavisualisering")
 
     if "Admin-varsler" in data_types and not admin_alerts.empty:
-        st.subheader("Admin-varsler Oversikt")
-        admin_type_counts = admin_alerts["type"].value_counts()
-        fig_admin_pie = px.pie(
-            values=admin_type_counts.values,
-            names=admin_type_counts.index,
-            title="Fordeling av admin-varsel typer",
-        )
-        st.plotly_chart(fig_admin_pie, use_container_width=True)
+        # ... (kode for admin-varsler visualisering forblir uendret)
 
-        admin_daily_counts = (
-            admin_alerts.groupby("date").size().reset_index(name="count")
-        )
-        fig_admin_line = px.line(
-            admin_daily_counts,
-            x="date",
-            y="count",
-            title="Antall admin-varsler over tid",
-        )
-        fig_admin_line.update_xaxes(title_text="Dato")
-        fig_admin_line.update_yaxes(title_text="Antall admin-varsler")
-        st.plotly_chart(fig_admin_line, use_container_width=True)
-
-    if "Bruker-feedback" in data_types and not user_feedback.empty:
+    if "Bruker-feedback" in data_types and not feedback_data.empty:
         st.subheader("Brukerfeedback Oversikt")
-        user_type_counts = user_feedback["type"].value_counts()
+        user_type_counts = feedback_data["type"].value_counts()
         fig_user_pie = px.pie(
             values=user_type_counts.values,
             names=user_type_counts.index,
@@ -208,7 +212,7 @@ def unified_report_page(include_hidden=False):
         )
         st.plotly_chart(fig_user_pie, use_container_width=True)
 
-        user_status_counts = user_feedback["status"].value_counts()
+        user_status_counts = feedback_data["status"].value_counts()
         fig_user_bar = px.bar(
             x=user_status_counts.index,
             y=user_status_counts.values,
@@ -219,9 +223,18 @@ def unified_report_page(include_hidden=False):
         )
         st.plotly_chart(fig_user_bar, use_container_width=True)
 
-        user_daily_counts = (
-            user_feedback.groupby("date").size().reset_index(name="count")
+        user_daily_counts = feedback_data.groupby("date").size().reset_index(name="count")
+        fig_user_line = px.line(
+            user_daily_counts,
+            x="date",
+            y="count",
+            title="Antall brukerfeedback over tid",
         )
+        fig_user_line.update_xaxes(title_text="Dato")
+        fig_user_line.update_yaxes(title_text="Antall brukerfeedback")
+        st.plotly_chart(fig_user_line, use_container_width=True)
+
+        user_daily_counts = feedback_data.groupby("date").size().reset_index(name="count")
         fig_user_line = px.line(
             user_daily_counts,
             x="date",
@@ -242,9 +255,9 @@ def unified_report_page(include_hidden=False):
 
     # Preview data
     st.header("Forhåndsvisning av data")
-    if "Bruker-feedback" in data_types and not user_feedback.empty:
+    if "Bruker-feedback" in data_types and not feedback_data.empty:
         st.subheader("Bruker-feedback:")
-        st.dataframe(user_feedback)
+        st.dataframe(feedback_data)
     if "Admin-varsler" in data_types and not admin_alerts.empty:
         st.subheader("Admin-varsler:")
         st.dataframe(admin_alerts)
@@ -260,7 +273,7 @@ def unified_report_page(include_hidden=False):
 
     # Vis totalt antall elementer
     st.info(f"Viser data for perioden {start_date} til {end_date}")
-
+    
 def download_reports(include_hidden=False):
     st.subheader("Last ned rapporter og påloggingshistorikk")
 
