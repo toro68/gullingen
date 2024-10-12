@@ -94,6 +94,16 @@ def perform_database_maintenance():
 # Databasetilkoblinger og generelle spørringsfunksjoner
 # db_utils.py
 
+def get_db_connection(db_name):
+    try:
+        conn = sqlite3.connect(f'{db_name}.db')
+        conn.row_factory = sqlite3.Row  # This allows accessing columns by name
+        logger.info(f"Opening connection to database: {db_name}.db")
+        return conn
+    except sqlite3.Error as e:
+        logger.error(f"Error connecting to database {db_name}.db: {e}")
+        raise
+
 @contextmanager
 def db_connection(db_name):
     conn = None
@@ -107,7 +117,7 @@ def db_connection(db_name):
         if conn:
             conn.close()
             logger.info(f"Connection to {db_name}.db closed.")
-       
+                   
 def create_connection(db_file):
     """ Create a database connection to a SQLite database """
     conn = None
