@@ -254,7 +254,7 @@ def give_feedback():
         """
     Her kan du gi tilbakemeldinger, melde avvik eller komme med forslag til forbedringer. Velg type feedback fra menyen nedenfor. 
 
-    - Brøytekartet viser hvor det skal brøytes hver gang det er behov: https://sartopo.com/m/J881 Annen brøyting må du betale selv.
+    - Brøytekartet viser hvor det skal brøytes hver gang det er behov, [se her](https://sartopo.com/m/J881). Annen brøyting må du betale selv.
     - Brøytestandarden er vår kravspesifikasjon til brøytefirmaet og regulerer samspillet med hytteeierne. 
     - Gå gjennom varslene under, før du gir feedback.   
     """

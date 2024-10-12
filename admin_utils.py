@@ -1,9 +1,25 @@
 import io
+import sys
+import pandas as pd
+import plotly.express as px
+
+from datetime import datetime, timedelta
+
+if sys.version_info >= (3, 9):
+    from zoneinfo import ZoneInfo
+else:
+    from backports.zoneinfo import ZoneInfo
+    
 import streamlit as st
 
-from constants import TZ
+from constants import TZ, STATUS_COLORS
+from tun_utils import hent_bestillinger
+from stroing_utils import hent_stroing_bestillinger
+from feedback_utils import get_feedback
+from customer_utils import load_customer_database
 from alert_utils import handle_alerts_ui, get_alerts
-
+from auth_utils import get_login_history
+from db_utils import get_db_connection
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -441,4 +457,3 @@ def download_reports(include_hidden=False):
             st.dataframe(login_history)
     else:
         st.info("Ingen data å laste ned for den valgte perioden.")
-

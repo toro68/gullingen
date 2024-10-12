@@ -1,6 +1,8 @@
 # Standard library imports
 import logging
+import os
 import sqlite3
+from sqlalchemy import create_engine
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
@@ -8,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from constants import TZ
+from config import DATABASE_PATH
 from logging_config import get_logger
 
 from logging_config import get_logger
@@ -38,6 +41,50 @@ def validate_stroing_table_structure():
         
         return True
 
+def verify_database_exists(db_name):
+    db_path = f"{db_name}.db"
+    if not os.path.exists(db_path):
+        logger.error(f"Database file {db_path} does not exist!")
+        return False
+    logger.info(f"Database file {db_path} exists.")
+    return True
+
+def verify_login_history_db():
+    db_path = 'login_history.db'
+    if not os.path.exists(db_path):
+        logger.error(f"Database file {db_path} does not exist!")
+        return False
+    logger.info(f"Database file {db_path} exists.")
+    return True
+
+# db_utils.py
+
+def ensure_login_history_table_exists():
+    create_query = '''
+    CREATE TABLE IF NOT EXISTS login_history (
+        id TEXT,
+        login_time TEXT,
+        success INTEGER
+    )
+    '''
+    execute_query('login_history', create_query)
+    
+    # Verify table structure
+    columns_query = "PRAGMA table_info(login_history)"
+    columns_df = fetch_data('login_history', columns_query)
+    
+    actual_columns = set(columns_df['name'])
+    expected_columns = {'id', 'login_time', 'success'}
+    
+    if not expected_columns == actual_columns:
+        # Drop the existing table and recreate it
+        drop_query = "DROP TABLE IF EXISTS login_history"
+        execute_query('login_history', drop_query)
+        execute_query('login_history', create_query)
+        logger.info("Recreated login_history table with correct structure")
+    else:
+        logger.info("login_history table structure is correct")
+   
 def perform_database_maintenance():
     databases = ['tunbroyting', 'stroing', 'feedback']
     for db_name in databases:
@@ -49,10 +96,12 @@ def perform_database_maintenance():
 @contextmanager
 def get_db_connection(db_name):
     conn = sqlite3.connect(f'{db_name}.db')
+    logger.info(f"Opening connection to database: {db_name}.db")
     try:
         yield conn
     finally:
         conn.close()
+        logger.info(f"Closed connection to database: {db_name}.db")
         
 def create_customer_table():
     conn = None
@@ -83,6 +132,14 @@ def create_customer_table():
             conn.close()
             logger.info("Database connection closed")
 
+def create_login_history_db():
+    db_path = 'login_history.db'
+    if not os.path.exists(db_path):
+        conn = sqlite3.connect(db_path)
+        conn.close()
+        logger.info(f"Created {db_path}")
+    ensure_login_history_table_exists()
+    
 def get_tunbroyting_connection():
     return get_db_connection('tunbroyting')
 
@@ -95,12 +152,19 @@ def execute_query(db_name, query, params=None):
             else:
                 cursor.execute(query)
             conn.commit()
-            return cursor.rowcount  # Return the number of affected rows
+            affected_rows = cursor.rowcount
+            logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
+            return affected_rows
         except sqlite3.Error as e:
-            logger.error(f"Database error: {e}")
+            logger.error(f"Database error in execute_query on {db_name}.db: {e}")
+            logger.error(f"Query: {query}")
+            if params:
+                logger.error(f"Parameters: {params}")
             conn.rollback()
-            return 0  # Return 0 if there's an error
+            return 0
 
+logger.info("Updated execute_query function in db_utils.py")
+        
 def fetch_data(db_name, query, params=None):
     with get_db_connection(db_name) as conn:
         if params:
@@ -167,6 +231,22 @@ def update_stroing_table_structure():
         
     logger.info("stroing_bestillinger table structure verified")
 
+def get_db_engine(db_name='login_history.db'):
+    try:
+        logger.info(f"DATABASE_PATH: {DATABASE_PATH}")
+        db_path = os.path.join(DATABASE_PATH, db_name)
+        logger.info(f"Full database path: {db_path}")
+        logger.info("Attempting to create database engine...")
+        engine = create_engine(f'sqlite:///{db_path}')
+        logger.info(f"Database engine created successfully for {db_name}")
+        return engine
+    except ImportError as ie:
+        logger.error(f"ImportError: {str(ie)}. Make sure sqlalchemy is installed.", exc_info=True)
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create database engine for {db_name}: {str(e)}", exc_info=True)
+        raise
+    
 ## initialiseringsfunksjonene 
 
 def create_all_tables():
@@ -221,6 +301,9 @@ def initialize_stroing_database():
     logger.info("Strøingsdatabase initialisert")
     
 def initialize_database():
+    verify_database_exists('login_history')
+    create_login_history_db()
+    ensure_login_history_table_exists()
     initialize_stroing_database()
     update_stroing_table_structure()
     create_database_indexes()
@@ -314,17 +397,10 @@ def update_stroing_bestillinger_table():
     
 def update_login_history_table():
     try:
-        query = "PRAGMA table_info(login_history)"
-        columns = fetch_data('login_history', query)
-        
-        # Sjekk om 'success' kolonnen eksisterer
-        if not any(col['name'] == 'success' for col in columns):
-            alter_query = "ALTER TABLE login_history ADD COLUMN success INTEGER"
-            execute_query('login_history', alter_query)
-            logger.info("Added 'success' column to login_history table")
+        ensure_login_history_table_exists()
     except Exception as e:
         logger.error(f"Error updating login_history table: {str(e)}")
-        
+               
 # Datavalidering og -henting:
 def update_database_schema():
     with get_db_connection('tunbroyting') as conn:

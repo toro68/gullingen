@@ -53,3 +53,23 @@ def advanced_validate_and_fix_json(json_string):
     except json.JSONDecodeError as e:
         # Hvis det fortsatt feiler, returner den originale feilen
         return None, f"Unable to fix JSON. Error: {str(e)}"
+
+def sanitize_input(input_string: str) -> str:
+    """
+    Saniterer brukerinput for å forhindre SQL-injeksjon.
+    
+    Args:
+    input_string (str): Strengen som skal saniteres
+    
+    Returns:
+    str: Den saniterte strengen
+    """
+    # Fjern alle ikke-alfanumeriske tegn, bortsett fra mellomrom og bindestrek
+    sanitized = re.sub(r'[^\w\s-]', '', input_string)
+    
+    # Erstatt flere etterfølgende mellomrom med ett enkelt mellomrom
+    sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+    
+    return sanitized
+
+logger.info("Sanitize input function added to validation_utils.py")

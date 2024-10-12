@@ -44,146 +44,67 @@ from db_utils import (
     create_all_tables,
     initialize_database,
     initialize_stroing_database,
-    update_login_history_table
+    update_login_history_table,
+    ensure_login_history_table_exists
 )
+# Validation utilities
+from validation_utils import sanitize_input
 
 # Authentication and session management
 from auth_utils import (
     check_session_timeout,
-    log_login,
-    log_failed_attempt,
-    get_login_history,
-    login_page,
-    check_rate_limit,
-    reset_rate_limit
+    login_page
 )
 
 # Tunbrøyting utilities
 from tun_utils import (
-    lagre_bestilling, 
-    hent_bestillinger, 
-    oppdater_bestilling, 
-    slett_bestilling, 
-    filter_tunbroyting_bestillinger, 
-    hent_statistikk_data,
-    hent_bruker_bestillinger,
-    hent_bestillinger_for_periode,
-    hent_dagens_bestillinger,
-    hent_aktive_bestillinger,
-    hent_bestilling,
-    is_active_booking,
-    get_max_bestilling_id,
-    count_bestillinger,
-    vis_tunbroyting_statistikk,
     bestill_tunbroyting,
     handle_tun,
-    vis_daglige_broytinger,
     vis_tunbroyting_oversikt,
-    vis_rediger_bestilling,
-    vis_aktive_bestillinger,
-    validere_bestilling
 )
 
 # Map utilities
 from map_utils import (
-    vis_dagens_tunkart,
-    vis_kommende_tunbestillinger,
-    vis_stroingskart_kommende,
     display_live_plowmap
 )
 
-# Alert utilities
-from alert_utils import handle_alerts_ui, get_alerts
-
 from customer_utils import (
     get_customer_by_id, 
-    load_customer_database, 
     check_cabin_user_consistency, 
     validate_customers_and_passwords,
-    get_customer_details,
-    get_cabin_coordinates,
-    get_rode
 )
 
 # Feedback utilities
 from feedback_utils import (
-    save_feedback,
-    get_feedback,
-    update_feedback_status,
-    delete_feedback,
-    display_feedback_dashboard,
     handle_user_feedback,
     give_feedback,
-    display_recent_feedback,
-    batch_insert_feedback,
-    hide_feedback,
-    get_feedback_statistics,
-    generate_feedback_report,
-    analyze_feedback_trends,
-    categorize_feedback,
-    get_feedback_by_id
 )
 
 # Strøing utilities
 from stroing_utils import (
-    lagre_stroing_bestilling,
-    hent_stroing_bestillinger,
-    hent_bruker_stroing_bestillinger,
-    count_stroing_bestillinger,
-    update_stroing_info,
-    slett_stroingsbestilling,
     bestill_stroing,
-    display_stroing_bookings,
     admin_stroing_page
 )
 
-# Weather utilities
-from weather_utils import (
-    get_weather_data_for_period,
-    fetch_and_process_data,
-    calculate_snow_drift_alarms,
-    calculate_slippery_road_alarms,
-    calculate_snow_precipitations
-)
-
-# 
+# Weather utilities 
 from weather_display_utils import (
-    display_weather_data,
-    create_improved_graph,
-    display_additional_data,
-    display_wind_data,
-    display_alarms,
-    display_weather_statistics
-)
-
-# GPS utilities
-from gps_utils import (
-    get_gps_coordinates,
-    fetch_gps_data,
-    display_gps_data
+    display_weather_data
 )
     
 # Utility functions
 from util_functions import (
     get_date_range,
-    get_status_display,
-    dump_secrets, 
-    neste_fredag
 )
 
 # admin utilities
 from admin_utils import (
     admin_alert,
-    admin_broytefirma_page,
     unified_report_page,
-    download_reports
 )
 
 from menu_utils import create_menu
 
 from debug_utils import dump_debug_info
-# Encryption utilities
-from encryption_utils import encrypt_data, decrypt_data
 
 # Logging configuration
 from logging_config import setup_logging, get_logger
@@ -200,15 +121,44 @@ SESSION_TIMEOUT = 3600  # 1 time
 # Global variables
 failed_attempts = {}
 
+#Validering av brukerinput
+def validate_user_input(input_data):
+    """
+    Validerer og saniterer brukerinput.
+    
+    Args:
+    input_data (dict): Et dictionary med brukerinput
+    
+    Returns:
+    dict: Et dictionary med validert og sanitert input
+    """
+    validated_data = {}
+    for key, value in input_data.items():
+        if isinstance(value, str):
+            validated_data[key] = sanitize_input(value)
+        elif isinstance(value, (int, float)):
+            validated_data[key] = value
+        elif isinstance(value, (list, dict)):
+            validated_data[key] = validate_user_input(value)
+        else:
+            logger.warning(f"Unexpected input type for {key}: {type(value)}")
+            validated_data[key] = None
+    
+    return validated_data
+
+logger.info("Added validate_user_input function to app.py")
+
 # Hovedfunksjonene for appen
 def main():
     try:
         dump_debug_info()
+        ensure_login_history_table_exists()
+        update_login_history_table()
         create_all_tables()
         update_login_history_table()
         update_database_schema()
-        initialize_database()
         initialize_stroing_database()
+        initialize_database()
         check_session_timeout()
         check_cabin_user_consistency()
         validate_customers_and_passwords()

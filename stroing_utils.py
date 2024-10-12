@@ -74,10 +74,9 @@ def bestill_stroing():
     Strøing av stikkveier i Fjellbergsskardet Hyttegrend - Sesong 2024/2025
 
     - Vi strør veiene når brøytekontakten vurderer det som nødvendig og effektivt ut fra værforholdene. 
-    Hovedveien (Gullingvegen-kryss Kalvaknutvegen) blir alltid prioritert. 
-    - Ønsker du strøing av stikkveien din, kan du bestille dette mot et gebyr.  
-    I tillegg til prisen per bestilling betaler du en fast egenandel for sesongen. 
-    - Strøing av stikkveier utføres kun etter godkjenning fra brøytekontakten.
+    - Hovedveien (Gullingvegen-Tjernet) blir alltid prioritert. Resten strøs på bestilling.
+    - Ønsker du strøing av stikkveien din, kan du bestille dette her. 
+    - Priser: Du betaler 500 kroner for sesongen, pluss 150 kroner for hver gang det strøs. 
     
     Tips ved glatte forhold:
     - Bruk piggdekk/kjetting
@@ -87,48 +86,24 @@ def bestill_stroing():
     """
     )
 
-    # Radioknapper for bestillingstype
-    bestilling_type = st.radio(
-        "Velg bestillingstype:", ("Stikkvei kommende helg", "Mandag-fredag")
+    # Generer liste med dagens dato og de neste 4 dagene
+    today = datetime.now(TZ).date()
+    available_dates = [today + timedelta(days=i) for i in range(5)]
+
+    onske_dato = st.selectbox(
+        "Velg dato for strøing:",
+        available_dates,
+        format_func=lambda x: x.strftime("%d.%m.%Y (%A)"),  # Viser ukedag i parentes
     )
 
-    if bestilling_type == "Stikkvei kommende helg":
-        # Beregn neste helg
-        today = datetime.now(TZ).date()
-        days_until_weekend = (5 - today.weekday()) % 7
-        next_saturday = today + timedelta(days=days_until_weekend)
-        next_sunday = next_saturday + timedelta(days=1)
-
-        st.write(
-            f"Bestilling for helgen {next_saturday.strftime('%d.%m.%Y')} - {next_sunday.strftime('%d.%m.%Y')}"
+    if onske_dato == today:
+        st.warning(
+            "Det tas forbehold om godkjenning fra brøytekontakten."
         )
-
-        # Sjekk om fristen har gått ut
-        if today.weekday() >= 3 and datetime.now(TZ).hour >= 12:
-            st.warning(
-                "Fristen for bestilling denne helgen har gått ut (torsdag kl. 12:00)."
-            )
-        else:
-            st.success("Du kan bestille strøing for kommende helg.")
-
-        onske_dato = next_saturday
-    else:  # Mandag-fredag
-        available_dates = [
-            datetime.now(TZ).date() + timedelta(days=i) for i in range(4)
-        ]
-        onske_dato = st.selectbox(
-            "Velg dato for strøing:",
-            available_dates,
-            format_func=lambda x: x.strftime("%d.%m.%Y"),
-        )
-
-        if onske_dato == datetime.now(TZ).date():
-            st.info(
-                "Du har valgt strøing for i dag. Merk at dette er med forbehold om godkjenning fra brøytekontakten."
-            )
+    elif onske_dato.weekday() >= 5:  # Lørdag eller søndag
+        st.warning("Det tas forbehold om godkjenning fra brøytekontakten.")
 
     if st.button("Bestill Strøing"):
-        #st.info(f"Forsøker å lagre bestilling for bruker {st.session_state.user_id} på dato {onske_dato.isoformat()}")
         result = lagre_stroing_bestilling(st.session_state.user_id, onske_dato.isoformat())
         if result:
             st.success("Bestilling av strøing er registrert!")
@@ -139,10 +114,9 @@ def bestill_stroing():
 
         st.info("Merk: Du vil bli fakturert kun hvis strøing utføres.")
 
-
     # Vis tidligere bestillinger én gang, med overskrift
     display_stroing_bookings(st.session_state.user_id, show_header=True)
-
+    
 # Read
 def hent_stroing_bestillinger():
     try:

@@ -19,7 +19,7 @@ def display_weather_data(client_id, start_date, end_date):
         # Vis dagens aktive alarmer øverst
         todays_alerts = get_alerts()
         if not todays_alerts.empty:
-            st.subheader("Aktive varsler for i dag")
+            st.subheader("Aktive varsler fra brøytefirma / FD")
             for _, alert in todays_alerts.iterrows():
                 st.warning(f"{alert['type']}: {alert['comment']}")
 

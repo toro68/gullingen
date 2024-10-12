@@ -1,5 +1,6 @@
 import sqlite3
 import logging
+import re
 import secrets
 import string
 import pandas as pd
@@ -317,7 +318,12 @@ def send_credentials_email(customer, user_id, temp_password):
         return False
        
 def get_rode(customer_id):
-    customer_id = int(customer_id)
+    # Ekstraherer numerisk del av customer_id
+    numeric_part = re.findall(r'\d+', str(customer_id))
+    if not numeric_part:
+        return None
+    
+    customer_id = int(numeric_part[0])
     
     if 142 <= customer_id <= 168:
         return "1"
@@ -335,6 +341,86 @@ def get_rode(customer_id):
         return "7"
     else:
         return None
+
+def vis_arsabonnenter():
+    st.subheader("Kunder med årsabonnement")
+
+    # Last inn kundedatabasen
+    kunder_df = load_customer_database()
+
+    # Logg kolonnenavn for feilsøking
+    logger.info(f"Kolonner i kundedatabasen: {kunder_df.columns.tolist()}")
+
+    # Sjekk om nødvendige kolonner eksisterer
+    required_columns = ['Id', 'Subscription']
+    name_column = next((col for col in kunder_df.columns if col.lower() == 'name'), None)
+    email_column = next((col for col in kunder_df.columns if col.lower() == 'email'), None)
+    phone_column = next((col for col in kunder_df.columns if col.lower() == 'phone'), None)
+
+    missing_columns = [col for col in required_columns if col not in kunder_df.columns]
+    if missing_columns:
+        st.error(f"Manglende påkrevde kolonner i kundedatabasen: {', '.join(missing_columns)}")
+        logger.error(f"Manglende påkrevde kolonner i kundedatabasen: {', '.join(missing_columns)}")
+        return
+
+    # Filtrer ut kunder med årsabonnement
+    arsabonnenter = kunder_df[kunder_df['Subscription'].isin(['star_white', 'star_gold'])]
+
+    # Legg til rode-kolonne
+    arsabonnenter['Rode'] = arsabonnenter['Id'].apply(lambda x: get_rode(x))
+
+    # Sorter etter kundenavn hvis kolonnen eksisterer
+    if name_column:
+        arsabonnenter = arsabonnenter.sort_values(name_column)
+
+    # Opprett en kollapsbar seksjon
+    with st.expander("Vis kunder med årsabonnement"):
+        if arsabonnenter.empty:
+            st.write("Ingen kunder med årsabonnement funnet.")
+        else:
+            # Vis antall årsabonnenter
+            st.write(f"Totalt antall årsabonnenter: {len(arsabonnenter)}")
+
+            # Forbered kolonner for visning
+            display_columns = ['Id', 'Subscription', 'Rode']
+            column_config = {
+                'Id': 'Kunde-ID',
+                'Subscription': 'Abonnement',
+                'Rode': 'Rode'
+            }
+
+            if name_column:
+                display_columns.insert(1, name_column)
+                column_config[name_column] = 'Navn'
+            if email_column:
+                display_columns.append(email_column)
+                column_config[email_column] = 'E-post'
+            if phone_column:
+                display_columns.append(phone_column)
+                column_config[phone_column] = 'Telefon'
+
+            # Erstatt 'star_white' og 'star_gold' med 'Årsabonnement'
+            arsabonnenter['Subscription'] = arsabonnenter['Subscription'].replace({'star_white': 'Årsabonnement', 'star_gold': 'Årsabonnement'})
+
+            # Vis tabell med tilgjengelige kolonner
+            st.dataframe(arsabonnenter[display_columns], 
+                         hide_index=True,
+                         column_config=column_config)
+
+            # Legg til mulighet for å laste ned som CSV
+            csv = arsabonnenter.to_csv(index=False)
+            st.download_button(
+                label="Last ned som CSV",
+                data=csv,
+                file_name="arsabonnenter.csv",
+                mime="text/csv",
+            )
+          
+# Helper function
+def extract_numeric_id(customer_id):
+    """Ekstraherer numerisk del av customer_id."""
+    numeric_part = re.findall(r'\d+', str(customer_id))
+    return int(numeric_part[0]) if numeric_part else None
 
 def load_customer_database():
     try:

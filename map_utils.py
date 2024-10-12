@@ -29,7 +29,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
     # Definerer intense farger
     BLUE = "#03b01f"  # Intens grønn for aktive årsabonnementer
     RED = "#db0000"  # Intens rød for andre aktive bestillinger
-    GRAY = "#eaeaea"  # Lysere grå for inaktive bestillinger
+    GRAY = "#C0C0C0"  # Lysere grå for inaktive bestillinger
 
     legend_colors = {
         "Årsabonnement": BLUE,

@@ -124,13 +124,18 @@ def delete_alert_action(alert_id):
         
 def handle_alerts_ui():
     st.title("Håndter varsler")
-    st.info("Her kan brøytefirma og Fjellbergsskardet Drift legge ut informasjon og varsler. "
-            "Disse viser øverst på siden Værdata. Utløpsdato for varselet er automatisk satt til dagens dato, "
-            "men kan forlenges ved å velge seinere dato.")
+    st.info(
+        """
+        Her kan brøytefirma og Fjellbergsskardet Drift opprette varsler. 
+        Varslene vil vise øverst på hovedsiden "Værdata". Utløpsdato for varselet er automatisk satt til dagens dato,
+        men kan forlenges ved å velge seinere dato.
+        """
+        )
   
-    display_active_alerts()
-    display_all_alerts()
     create_new_alert()
+    display_user_alerts()
+    # display_active_alerts()
+    display_all_alerts()
 
 def display_active_alerts():
     st.subheader("Dagens aktive varsler")
@@ -142,7 +147,7 @@ def display_active_alerts():
             st.warning(f"{alert['type']}: {alert['comment']}")
 
 def display_all_alerts():
-    st.subheader("Alle aktive varsler")
+    st.subheader("Rediger varsler")
     if st.button("Oppdater varselliste"):
         get_alerts.clear()
         st.rerun()
