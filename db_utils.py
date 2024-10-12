@@ -23,9 +23,7 @@ def validate_stroing_table_structure():
         'id': 'INTEGER',
         'bruker': 'TEXT',
         'bestillings_dato': 'TEXT',
-        'onske_dato': 'TEXT',
-        'kommentar': 'TEXT',
-        'status': 'TEXT'
+        'onske_dato': 'TEXT'
     }
     
     with get_stroing_connection() as conn:
@@ -71,18 +69,21 @@ def ensure_login_history_table_exists():
     columns_query = "PRAGMA table_info(login_history)"
     columns_df = fetch_data('login_history', columns_query)
     
-    actual_columns = set(columns_df['name'])
-    expected_columns = {'id', 'login_time', 'success'}
-    
-    if not expected_columns == actual_columns:
-        # Drop the existing table and recreate it
-        drop_query = "DROP TABLE IF EXISTS login_history"
-        execute_query('login_history', drop_query)
-        execute_query('login_history', create_query)
-        logger.info("Recreated login_history table with correct structure")
+    if columns_df is not None:
+        actual_columns = set(columns_df['name'])
+        expected_columns = {'id', 'login_time', 'success'}
+        
+        if not expected_columns == actual_columns:
+            # Drop the existing table and recreate it
+            drop_query = "DROP TABLE IF EXISTS login_history"
+            execute_query('login_history', drop_query)
+            execute_query('login_history', create_query)
+            logger.info("Recreated login_history table with correct structure")
+        else:
+            logger.info("login_history table structure is correct")
     else:
-        logger.info("login_history table structure is correct")
-   
+        logger.error("Failed to verify login_history table structure")
+        
 def perform_database_maintenance():
     databases = ['tunbroyting', 'stroing', 'feedback']
     for db_name in databases:
@@ -91,14 +92,21 @@ def perform_database_maintenance():
     logger.info("Database maintenance (VACUUM) completed")
 
 # Databasetilkoblinger og generelle spørringsfunksjoner
+# db_utils.py
+
+@contextmanager
 def get_db_connection(db_name):
     try:
         conn = sqlite3.connect(f'{db_name}.db')
         logger.info(f"Opening connection to database: {db_name}.db")
-        return conn
+        yield conn
     except sqlite3.Error as e:
         logger.error(f"Error connecting to database {db_name}.db: {e}")
-        return None
+        raise
+    finally:
+        if conn:
+            conn.close()
+            logger.info(f"Closed connection to database: {db_name}.db")
        
 def create_connection(db_file):
     """ Create a database connection to a SQLite database """
@@ -156,20 +164,17 @@ def get_tunbroyting_connection():
     return get_db_connection('tunbroyting')
 
 def execute_query(db_name, query, params=None):
-    conn = get_db_connection(db_name)
-    if conn is None:
-        logger.error(f"Could not establish connection to {db_name}.db")
-        return None
     try:
-        cursor = conn.cursor()
-        if params:
-            cursor.execute(query, params)
-        else:
-            cursor.execute(query)
-        conn.commit()
-        affected_rows = cursor.rowcount
-        logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
-        return affected_rows
+        with get_db_connection(db_name) as conn:
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            conn.commit()
+            affected_rows = cursor.rowcount
+            logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
+            return affected_rows
     except sqlite3.OperationalError as e:
         if "readonly database" in str(e):
             logger.error(f"Database {db_name}.db is readonly. Cannot execute query.")
@@ -180,26 +185,18 @@ def execute_query(db_name, query, params=None):
     except Exception as e:
         logger.error(f"Unexpected error in execute_query on {db_name}.db: {e}")
         return None
-    finally:
-        if conn:
-            conn.close()
-            logger.info(f"Closed connection to database: {db_name}.db")
-           
+            
 def fetch_data(db_name, query, params=None):
-    conn = get_db_connection(db_name)
-    if conn is None:
-        logger.error(f"Could not establish connection to {db_name}.db")
-        return None
     try:
-        if params:
-            return pd.read_sql_query(query, conn, params=params)
-        else:
-            return pd.read_sql_query(query, conn)
-    finally:
-        if conn:
-            conn.close()
-            logger.info(f"Closed connection to database: {db_name}.db")
-
+        with get_db_connection(db_name) as conn:
+            if params:
+                return pd.read_sql_query(query, conn, params=params)
+            else:
+                return pd.read_sql_query(query, conn)
+    except Exception as e:
+        logger.error(f"Error fetching data from {db_name}.db: {e}")
+        return None
+    
 def execute_many(db_name, query, params):
     conn = get_db_connection(db_name)
     if conn is None:
