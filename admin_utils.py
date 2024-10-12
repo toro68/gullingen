@@ -200,7 +200,25 @@ def unified_report_page(include_hidden=False):
     st.header("Datavisualisering")
 
     if "Admin-varsler" in data_types and not admin_alerts.empty:
-        # ... (kode for admin-varsler visualisering forblir uendret)
+        st.subheader("Admin-varsler Oversikt")
+        admin_type_counts = admin_alerts["type"].value_counts()
+        fig_admin_pie = px.pie(
+            values=admin_type_counts.values,
+            names=admin_type_counts.index,
+            title="Fordeling av admin-varsel typer",
+        )
+        st.plotly_chart(fig_admin_pie, use_container_width=True)
+
+        admin_daily_counts = admin_alerts.groupby("date").size().reset_index(name="count")
+        fig_admin_line = px.line(
+            admin_daily_counts,
+            x="date",
+            y="count",
+            title="Antall admin-varsler over tid",
+        )
+        fig_admin_line.update_xaxes(title_text="Dato")
+        fig_admin_line.update_yaxes(title_text="Antall admin-varsler")
+        st.plotly_chart(fig_admin_line, use_container_width=True)
 
     if "Bruker-feedback" in data_types and not feedback_data.empty:
         st.subheader("Brukerfeedback Oversikt")
@@ -222,17 +240,6 @@ def unified_report_page(include_hidden=False):
             color_discrete_map=STATUS_COLORS,
         )
         st.plotly_chart(fig_user_bar, use_container_width=True)
-
-        user_daily_counts = feedback_data.groupby("date").size().reset_index(name="count")
-        fig_user_line = px.line(
-            user_daily_counts,
-            x="date",
-            y="count",
-            title="Antall brukerfeedback over tid",
-        )
-        fig_user_line.update_xaxes(title_text="Dato")
-        fig_user_line.update_yaxes(title_text="Antall brukerfeedback")
-        st.plotly_chart(fig_user_line, use_container_width=True)
 
         user_daily_counts = feedback_data.groupby("date").size().reset_index(name="count")
         fig_user_line = px.line(
