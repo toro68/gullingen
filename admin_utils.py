@@ -20,19 +20,20 @@ from customer_utils import load_customer_database
 from alert_utils import handle_alerts_ui, get_alerts
 from auth_utils import get_login_history
 from db_utils import get_db_connection
+
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
 # Administrasjonsfunksjoner
 
-def admin_broytefirma_page():
-    st.title("Administrer feedback, tunbrøyting og strøing")
+# def admin_broytefirma_page():
+#     st.title("Administrer feedback, tunbrøyting og strøing")
 
-    if st.session_state.user_id in ["Fjbs Drift"]:
-        admin_menu()
-    else:
-        st.error("Du har ikke tilgang til denne siden")
+#     if st.session_state.user_id in ["Fjbs Drift"]:
+#         admin_menu()
+#     else:
+#         st.error("Du har ikke tilgang til denne siden")
        
 def admin_alert():
     handle_alerts_ui()

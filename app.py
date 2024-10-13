@@ -45,7 +45,8 @@ from db_utils import (
     initialize_database,
     initialize_stroing_database,
     update_login_history_table,
-    ensure_login_history_table_exists
+    ensure_login_history_table_exists,
+    debug_database_operations
 )
 # Validation utilities
 from validation_utils import sanitize_input
@@ -152,6 +153,7 @@ logger.info("Added validate_user_input function to app.py")
 def main():
     try:
         dump_debug_info()
+        debug_database_operations()
         ensure_login_history_table_exists()
         update_login_history_table()
         create_all_tables()

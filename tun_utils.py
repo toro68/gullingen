@@ -568,7 +568,7 @@ def vis_rediger_bestilling():
 
             if submitted:
                 if validere_bestilling(nye_data):
-                    if oppdater_bestilling_i_database(bestilling_id, nye_data):
+                    if oppdater_bestilling(bestilling_id, nye_data):
                         st.success(f"Bestilling {bestilling_id} er oppdatert!")
                     else:
                         st.error(
@@ -602,66 +602,94 @@ def handle_tun():
         vis_tunbroyting_statistikk(hent_bestillinger())
 
     # Rediger bestilling
-    # st.header("Rediger bestilling")
     vis_rediger_bestilling()
 
     # Slett bestilling
     st.header("Slett bestilling")
 
-    slett_metode = st.radio(
-        "Velg slettingsmetode:",
-        ["Slett etter ID", "Slett etter brukernavn", "Slett etter datoperiode"],
-        key="slett_metode",
+    slett_id = st.number_input(
+        "Skriv inn ID på bestillingen du vil slette", min_value=1, key="slett_id"
     )
-
-    if slett_metode == "Slett etter ID":
-        slett_id = st.number_input(
-            "Skriv inn ID på bestillingen du vil slette", min_value=1, key="slett_id"
-        )
-        if st.button("Slett bestilling", key="slett_id_button"):
-            if slett_bestilling(slett_id):
-                st.success(f"Bestilling {slett_id} er slettet.")
-            else:
-                st.error(
-                    "Kunne ikke slette bestillingen. Vennligst sjekk ID og prøv igjen."
-                )
-
-    elif slett_metode == "Slett etter brukernavn":
-        slett_bruker = st.text_input(
-            "Skriv inn brukernavn for å slette alle bestillinger fra brukeren",
-            key="slett_bruker",
-        )
-        if st.button("Slett bestillinger", key="slett_bruker_button"):
-            antall_slettet = slett_bestillinger_for_bruker(slett_bruker)
-            if antall_slettet > 0:
-                st.success(
-                    f"{antall_slettet} bestilling(er) for bruker {slett_bruker} er slettet."
-                )
-            else:
-                st.warning(f"Ingen bestillinger funnet for bruker {slett_bruker}.")
-
-    elif slett_metode == "Slett etter datoperiode":
-        col1, col2 = st.columns(2)
-        with col1:
-            slett_dato_fra = st.date_input(
-                "Slett bestillinger fra dato", key="slett_dato_fra"
+    if st.button("Slett bestilling", key="slett_id_button"):
+        if slett_bestilling(slett_id):
+            st.success(f"Bestilling {slett_id} er slettet.")
+        else:
+            st.error(
+                "Kunne ikke slette bestillingen. Vennligst sjekk ID og prøv igjen."
             )
-        with col2:
-            slett_dato_til = st.date_input(
-                "Slett bestillinger til dato", key="slett_dato_til"
-            )
-        if st.button("Slett bestillinger", key="slett_dato_button"):
-            antall_slettet = slett_bestillinger_for_periode(
-                slett_dato_fra, slett_dato_til
-            )
-            if antall_slettet > 0:
-                st.success(
-                    f"{antall_slettet} bestilling(er) i perioden {slett_dato_fra} til {slett_dato_til} er slettet."
-                )
-            else:
-                st.warning(
-                    f"Ingen bestillinger funnet i perioden {slett_dato_fra} til {slett_dato_til}."
-                )
+            
+# def handle_tun():
+#     st.title("Håndter tunbestillinger")
+#     st.info("Her kan Fjellbergsskardet Drift redigere og slette bestillinger.")
+#     # Vis statistikk
+#     total_bestillinger = count_bestillinger()
+#     st.write(f"Totalt antall bestillinger: {total_bestillinger}")
+
+#     # Legg til en ekspanderende seksjon for statistikk og visualiseringer
+#     with st.expander("Vis statistikk og visualiseringer", expanded=False):
+#         vis_tunbroyting_statistikk(hent_bestillinger())
+
+#     # Rediger bestilling
+#     # st.header("Rediger bestilling")
+#     vis_rediger_bestilling()
+
+#     # Slett bestilling
+#     st.header("Slett bestilling")
+
+#     slett_metode = st.radio(
+#         "Velg slettingsmetode:",
+#         ["Slett etter ID", "Slett etter brukernavn", "Slett etter datoperiode"],
+#         key="slett_metode",
+#     )
+
+#     if slett_metode == "Slett etter ID":
+#         slett_id = st.number_input(
+#             "Skriv inn ID på bestillingen du vil slette", min_value=1, key="slett_id"
+#         )
+#         if st.button("Slett bestilling", key="slett_id_button"):
+#             if slett_bestilling(slett_id):
+#                 st.success(f"Bestilling {slett_id} er slettet.")
+#             else:
+#                 st.error(
+#                     "Kunne ikke slette bestillingen. Vennligst sjekk ID og prøv igjen."
+#                 )
+
+#     elif slett_metode == "Slett etter brukernavn":
+#         slett_bruker = st.text_input(
+#             "Skriv inn brukernavn for å slette alle bestillinger fra brukeren",
+#             key="slett_bruker",
+#         )
+#         if st.button("Slett bestillinger", key="slett_bruker_button"):
+#             antall_slettet = slett_bestillinger_for_bruker(slett_bruker)
+#             if antall_slettet > 0:
+#                 st.success(
+#                     f"{antall_slettet} bestilling(er) for bruker {slett_bruker} er slettet."
+#                 )
+#             else:
+#                 st.warning(f"Ingen bestillinger funnet for bruker {slett_bruker}.")
+
+#     elif slett_metode == "Slett etter datoperiode":
+#         col1, col2 = st.columns(2)
+#         with col1:
+#             slett_dato_fra = st.date_input(
+#                 "Slett bestillinger fra dato", key="slett_dato_fra"
+#             )
+#         with col2:
+#             slett_dato_til = st.date_input(
+#                 "Slett bestillinger til dato", key="slett_dato_til"
+#             )
+#         if st.button("Slett bestillinger", key="slett_dato_button"):
+#             antall_slettet = slett_bestillinger_for_periode(
+#                 slett_dato_fra, slett_dato_til
+#             )
+#             if antall_slettet > 0:
+#                 st.success(
+#                     f"{antall_slettet} bestilling(er) i perioden {slett_dato_fra} til {slett_dato_til} er slettet."
+#                 )
+#             else:
+#                 st.warning(
+#                     f"Ingen bestillinger funnet i perioden {slett_dato_fra} til {slett_dato_til}."
+#                 )
 
 def hent_aktive_bestillinger_for_dag(dato):
     # Hent alle bestillinger ved å bruke den eksisterende funksjonen hent_bestillinger()

@@ -1,8 +1,9 @@
 import sqlite3
 import pandas as pd
 import traceback
+import math
 import altair as alt
-import pytz
+import matplotlib.pyplot as plt
 
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Tuple
@@ -29,16 +30,6 @@ def validate_date(date_string: str) -> bool:
 
 # Create
 def lagre_stroing_bestilling(user_id: str, onske_dato: str) -> bool:
-    """
-    Lagrer en ny strøingsbestilling i databasen.
-
-    Args:
-        user_id (str): ID-en til brukeren som bestiller
-        onske_dato (str): Ønsket dato for strøing i format 'YYYY-MM-DD'
-
-    Returns:
-        bool: True hvis bestillingen ble lagret, False ellers
-    """
     try:
         logger.info(f"Forsøker å lagre strøingsbestilling for bruker {user_id} på dato {onske_dato}")
         
@@ -125,6 +116,25 @@ def bestill_stroing():
     vis_graf_stroing()
     
 # Read
+@st.cache_data(ttl=60)  # Cache data for 60 sekunder
+def hent_og_behandle_data():
+    alle_bestillinger = hent_stroing_bestillinger()
+    dagens_dato = datetime.now(TZ).date()
+    sluttdato = dagens_dato + timedelta(days=4)
+    daglig_aktivitet = {dagen.date(): 0 for dagen in pd.date_range(dagens_dato, sluttdato)}
+    
+    for _, bestilling in alle_bestillinger.iterrows():
+        onske_dato = bestilling['onske_dato'].date()
+        if onske_dato in daglig_aktivitet:
+            daglig_aktivitet[onske_dato] += 1
+    
+    aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index', columns=['Antall bestillinger'])
+    aktivitet_df.index = pd.to_datetime(aktivitet_df.index)
+    aktivitet_df.index = aktivitet_df.index.strftime('%Y-%m-%d')
+    aktivitet_df.index.name = 'Dato'
+    
+    return aktivitet_df, alle_bestillinger
+
 def hent_stroing_bestillinger():
     try:
         with get_stroing_connection() as conn:
@@ -176,23 +186,23 @@ def hent_stroing_bestilling(bestilling_id: int) -> Optional[Dict[str, Any]]:
         logger.error(f"Feil ved henting av strøingsbestilling {bestilling_id}: {str(e)}")
         return None
 
-def hent_utforte_stroingsbestillinger() -> pd.DataFrame:
-    try:
-        with get_stroing_connection() as conn:
-            query = """
-            SELECT * FROM stroing_bestillinger 
-            WHERE utfort_dato IS NOT NULL
-            ORDER BY utfort_dato DESC
-            """
-            df = pd.read_sql_query(query, conn)
+# def hent_utforte_stroingsbestillinger() -> pd.DataFrame:
+#     try:
+#         with get_stroing_connection() as conn:
+#             query = """
+#             SELECT * FROM stroing_bestillinger 
+#             WHERE utfort_dato IS NOT NULL
+#             ORDER BY utfort_dato DESC
+#             """
+#             df = pd.read_sql_query(query, conn)
         
-        for col in ['bestillings_dato', 'onske_dato', 'utfort_dato']:
-            df[col] = pd.to_datetime(df[col])
+#         for col in ['bestillings_dato', 'onske_dato', 'utfort_dato']:
+#             df[col] = pd.to_datetime(df[col])
         
-        return df
-    except Exception as e:
-        logger.error(f"Feil ved henting av utførte strøingsbestillinger: {str(e)}")
-        return pd.DataFrame()
+#         return df
+#     except Exception as e:
+#         logger.error(f"Feil ved henting av utførte strøingsbestillinger: {str(e)}")
+#         return pd.DataFrame()
         
 def count_stroing_bestillinger():
     with get_stroing_connection() as conn:
@@ -200,54 +210,54 @@ def count_stroing_bestillinger():
         cursor.execute("SELECT COUNT(*) FROM stroing_bestillinger")
         return cursor.fetchone()[0]
 
-def update_stroing_info(bestilling_id: int, utfort_av: str) -> Tuple[bool, str]:
-    """
-    Oppdaterer informasjon om en strøingsbestilling når den er utført.
+# def update_stroing_info(bestilling_id: int, utfort_av: str) -> Tuple[bool, str]:
+#     """
+#     Oppdaterer informasjon om en strøingsbestilling når den er utført.
 
-    Args:
-        bestilling_id (int): ID-en til bestillingen som skal oppdateres
-        utfort_av (str): Navnet eller ID-en til personen som utførte strøingen
+#     Args:
+#         bestilling_id (int): ID-en til bestillingen som skal oppdateres
+#         utfort_av (str): Navnet eller ID-en til personen som utførte strøingen
 
-    Returns:
-        Tuple[bool, str]: En tuple hvor første element er True hvis oppdateringen var vellykket,
-                          False ellers. Andre element er en statusmelding.
-    """
-    try:
-        with get_stroing_connection() as conn:
-            cursor = conn.cursor()
+#     Returns:
+#         Tuple[bool, str]: En tuple hvor første element er True hvis oppdateringen var vellykket,
+#                           False ellers. Andre element er en statusmelding.
+#     """
+#     try:
+#         with get_stroing_connection() as conn:
+#             cursor = conn.cursor()
             
-            # Sjekk om bestillingen eksisterer
-            cursor.execute("SELECT id FROM stroing_bestillinger WHERE id = ?", (bestilling_id,))
-            if not cursor.fetchone():
-                logger.warning(f"Strøingsbestilling med ID {bestilling_id} ble ikke funnet")
-                return False, "Bestilling ikke funnet"
+#             # Sjekk om bestillingen eksisterer
+#             cursor.execute("SELECT id FROM stroing_bestillinger WHERE id = ?", (bestilling_id,))
+#             if not cursor.fetchone():
+#                 logger.warning(f"Strøingsbestilling med ID {bestilling_id} ble ikke funnet")
+#                 return False, "Bestilling ikke funnet"
             
-            current_time = datetime.now(TZ).isoformat()
+#             current_time = datetime.now(TZ).isoformat()
             
-            # Oppdater bestillingen
-            cursor.execute("""
-                UPDATE stroing_bestillinger 
-                SET utfort_dato = ?,
-                    utfort_av = ?
-                WHERE id = ?
-            """, (current_time, utfort_av, bestilling_id))
+#             # Oppdater bestillingen
+#             cursor.execute("""
+#                 UPDATE stroing_bestillinger 
+#                 SET utfort_dato = ?,
+#                     utfort_av = ?
+#                 WHERE id = ?
+#             """, (current_time, utfort_av, bestilling_id))
             
-            # Logg endringen
-            cursor.execute("""
-                INSERT INTO stroing_status_log (bestilling_id, old_status, new_status, changed_by, changed_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (bestilling_id, "Ikke utført", "Utført", utfort_av, current_time))
+#             # Logg endringen
+#             cursor.execute("""
+#                 INSERT INTO stroing_status_log (bestilling_id, old_status, new_status, changed_by, changed_at)
+#                 VALUES (?, ?, ?, ?, ?)
+#             """, (bestilling_id, "Ikke utført", "Utført", utfort_av, current_time))
             
-            conn.commit()
+#             conn.commit()
             
-            logger.info(f"Strøingsbestilling {bestilling_id} oppdatert som utført av {utfort_av}")
-            return True, "Bestilling oppdatert som utført"
-    except sqlite3.Error as e:
-        logger.error(f"SQLite-feil ved oppdatering av strøingsbestilling {bestilling_id}: {str(e)}")
-        return False, f"Databasefeil: {str(e)}"
-    except Exception as e:
-        logger.error(f"Uventet feil ved oppdatering av strøingsbestilling {bestilling_id}: {str(e)}")
-        return False, f"Uventet feil: {str(e)}"
+#             logger.info(f"Strøingsbestilling {bestilling_id} oppdatert som utført av {utfort_av}")
+#             return True, "Bestilling oppdatert som utført"
+#     except sqlite3.Error as e:
+#         logger.error(f"SQLite-feil ved oppdatering av strøingsbestilling {bestilling_id}: {str(e)}")
+#         return False, f"Databasefeil: {str(e)}"
+#     except Exception as e:
+#         logger.error(f"Uventet feil ved oppdatering av strøingsbestilling {bestilling_id}: {str(e)}")
+#         return False, f"Uventet feil: {str(e)}"
 
 # Delete
 def slett_stroingsbestilling(bestilling_id):
@@ -290,7 +300,6 @@ def admin_stroing_page():
         all_bestillinger['id'] = all_bestillinger['id'].astype('int32')
         all_bestillinger['bruker'] = all_bestillinger['bruker'].astype('string')
         all_bestillinger['bestillings_dato'] = all_bestillinger['bestillings_dato'].dt.tz_localize(None)
-
         all_bestillinger['onske_dato'] = pd.to_datetime(all_bestillinger['onske_dato'], errors='coerce')
 
         # Logg konverterte datatyper
@@ -321,7 +330,6 @@ def admin_stroing_page():
         else:
             # Beregn 'dager_til'
             bestillinger['dager_til'] = (bestillinger['onske_dato'] - pd.to_datetime(today)).dt.days.astype('int32')
-
 
             # Vis daglig oppsummering
             st.subheader("Daglig oppsummering")
@@ -383,18 +391,6 @@ def verify_stroing_data():
         for row in data:
             logger.info(f"Row: {row}")
 
-def initialize_stroing():
-    """Initialiserer strøingsdatabasen og verifiserer data."""
-    try:
-        initialize_stroing_database()
-        verify_stroing_data()
-        logger.info("Strøingsdatabase initialisert og verifisert")
-    except Exception as e:
-        logger.error(f"Feil ved initialisering av strøingsdatabase: {str(e)}")
-
-if __name__ == "__main__":
-    initialize_stroing()
-    
 # Visninger
 def display_stroing_bookings(user_id, show_header=False):
     if show_header:
@@ -413,9 +409,7 @@ def display_stroing_bookings(user_id, show_header=False):
                     f"Bestilt: {booking['bestillings_dato'].strftime('%Y-%m-%d %H:%M')}"
                 )
                 st.write(f"Ønsket dato: {booking['onske_dato'].strftime('%Y-%m-%d')}")
-                if "status" in booking:
-                    st.write(f"Status: {booking['status']}")
-
+                
 def vis_tidligere_stroingsbestillinger(bruker_id):
     bestillinger = hent_bruker_stroing_bestillinger(bruker_id)
     
@@ -428,7 +422,6 @@ def vis_tidligere_stroingsbestillinger(bruker_id):
             with st.expander(f"Bestilling - Ønsket dato: {bestilling['onske_dato'].date()}"):
                 st.write(f"Bestilt: {bestilling['bestillings_dato'].strftime('%Y-%m-%d %H:%M')}")
                 st.write(f"Ønsket dato: {bestilling['onske_dato'].date()}")
-
 
     # Hent alle strøingsbestillinger
     alle_bestillinger = hent_stroing_bestillinger()
@@ -471,60 +464,58 @@ def vis_tidligere_stroingsbestillinger(bruker_id):
     st.info(f"Totalt antall bestillinger for perioden: {total_bestillinger}")
 
 def vis_graf_stroing():
-    alle_bestillinger = hent_stroing_bestillinger()  # Your function to fetch data
-
-    today = datetime.now(TZ).date()
-    date_range = [today + timedelta(days=i) for i in range(5)]
-
-    relevante_bestillinger = alle_bestillinger[
-        (alle_bestillinger['onske_dato'].dt.date >= today) &
-        (alle_bestillinger['onske_dato'].dt.date <= date_range[-1])
-    ]
-
-
-    date_df = pd.DataFrame({'dato': date_range, 'dager_fra_idag': range(5)})
-    bestillinger_per_dag = relevante_bestillinger.groupby(relevante_bestillinger['onske_dato'].dt.date).size().reset_index(name='antall')
-    bestillinger_per_dag.columns = ['dato', 'antall']
-
-
-    full_df = pd.merge(date_df, bestillinger_per_dag, on='dato', how='left').fillna(0)
-    full_df['antall'] = full_df['antall'].astype(int)
-    full_df['dato'] = pd.to_datetime(full_df['dato']).dt.strftime('%Y-%m-%d') # Format date for tooltip
-
-
-    chart = alt.Chart(full_df).mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5).encode(
-        x=alt.X('dager_fra_idag:O', title='Dager fra i dag', axis=alt.Axis(labelAngle=0, labelPadding=5)),
-        y=alt.Y('antall:Q', title='Antall bestillinger'),
-        tooltip=['dato', 'antall']
-    ).properties(
-        width=600,
-        height=400,
-        title='Strøingsbestillinger de neste 5 dagene'
-    ).configure_axis(
-        labelFontSize=12,
-        titleFontSize=14
-    ).configure_title(
-        fontSize=16,
-        anchor='start'
+    st.subheader("Oversikt over strøingsbestillinger")
+    st.info(
+        """
+        Strøing av veier i Fjellbergsskardet Hyttegrend utføres basert på bestillinger og værforhold.
+        Hovedveien til kryss Kalvaknutvegen prioriteres alltid, mens stikkveier strøs ved bestilling. 
+        """
     )
 
-    text = chart.mark_text(
-        align='center',
-        baseline='middle',
-        dy=-10, # Adjust dynamically based on bar height
-        color='white' # For better contrast
-    ).encode(
-        text='antall:Q'
-    ).transform_filter( # Only show labels if count > 0
-      alt.datum.antall > 0
-  )
+    aktivitet_df, alle_bestillinger = hent_og_behandle_data()
 
+    if aktivitet_df.empty:
+        st.info("Ingen strøingsbestillinger funnet for perioden.")
+        return
 
+    st.subheader("Daglig oversikt over strøingsbestillinger")
+    st.table(aktivitet_df)
 
+    st.subheader("Daglige strøingsbestillinger")
+    
+    y_min = 0
+    y_max = aktivitet_df['Antall bestillinger'].max()
+    y_max = max(5, math.ceil(y_max))
+    
+    chart = alt.Chart(aktivitet_df.reset_index()).mark_bar().encode(
+        x=alt.X('Dato:O', axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('Antall bestillinger:Q', axis=alt.Axis(tickCount=y_max+1), scale=alt.Scale(domain=[y_min, y_max]))
+    ).properties(width=600, height=400)
 
-    final_chart = (chart + text)
+    # Bruk en unik nøkkel basert på nåværende tid for å tvinge oppdatering
+    st.altair_chart(chart, use_container_width=True, key=f"stroing_chart_{datetime.now().timestamp()}")
 
-    st.altair_chart(final_chart, use_container_width=True)
+    totalt_antall = aktivitet_df['Antall bestillinger'].sum()
+    unike_brukere = alle_bestillinger['bruker'].nunique()
+    
+    st.subheader("Oppsummering")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Totalt antall bestillinger", totalt_antall)
+    with col2:
+        st.metric("Antall unike brukere", unike_brukere)
 
-    total_bestillinger = full_df['antall'].sum()
-    st.info(f"Totalt antall bestillinger for perioden: {total_bestillinger}")
+    st.info(f"{unike_brukere} unike brukere har lagt inn strøingsbestillinger for denne perioden.")
+    
+def initialize_stroing():
+    """Initialiserer strøingsdatabasen og verifiserer data."""
+    try:
+        initialize_stroing_database()
+        verify_stroing_data()
+        logger.info("Strøingsdatabase initialisert og verifisert")
+    except Exception as e:
+        logger.error(f"Feil ved initialisering av strøingsdatabase: {str(e)}")
+
+if __name__ == "__main__":
+    initialize_stroing()
+    
