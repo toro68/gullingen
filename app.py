@@ -40,13 +40,9 @@ from constants import TZ, STATUS_MAPPING, STATUS_COLORS
 # Database utilities
 from db_utils import (
     update_database_schemas,
-    create_all_tables,
     initialize_database,
-    update_login_history_table,
     ensure_login_history_table_exists,
     debug_database_operations,
-    update_stroing_table_structure,
-    update_database_structure
 )
 # Validation utilities
 from validation_utils import sanitize_input
@@ -121,16 +117,7 @@ SESSION_TIMEOUT = 3600  # 1 time
 
 # Global variables
 failed_attempts = {}
-
-# def show_database_update_button():
-#     if st.button("Oppdater databasestruktur"):
-#         success = update_database_structure()
-#         if success:
-#             st.success("Databasestrukturen er oppdatert. 'status'-kolonnen er fjernet fra 'stroing_bestillinger'-tabellen.")
-#         else:
-#             st.error("Det oppstod en feil under oppdatering av databasestrukturen. Sjekk loggene for mer informasjon.")
-
-           
+ 
 #Validering av brukerinput
 def validate_user_input(input_data):
     """
