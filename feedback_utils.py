@@ -1,4 +1,3 @@
-import logging
 import pandas as pd
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -27,6 +26,22 @@ icons = {
     'Annet': '❓'
 }
 
+#hjelpefunksjoner
+def safe_to_datetime(date_string):
+    if date_string in [None, '', 'None', '1']:
+        return None
+    try:
+        return pd.to_datetime(date_string)
+    except ValueError:
+        logger.error(f"Ugyldig datostreng: '{date_string}'")
+        return None
+
+def format_date(date_obj):
+    if date_obj is None:
+        return "Ikke satt"
+    return date_obj.strftime('%d.%m.%Y %H:%M')
+
+#crud-operasjoner
 def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden):
     try:
         query = """INSERT INTO feedback (type, datetime, comment, innsender, status, status_changed_at, hidden) 
@@ -68,8 +83,13 @@ def get_feedback(start_date, end_date, include_hidden=False, cabin_identifier=No
     query += " ORDER BY datetime DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
     
-    df = fetch_data('feedback', query, params=params)
-    return fetch_data('feedback', query, params=params)
+    try:
+        df = fetch_data('feedback', query, params=params)
+        df['datetime'] = pd.to_datetime(df['datetime'])
+        return df
+    except Exception as e:
+        logger.error(f"Feil ved henting av feedback: {str(e)}", exc_info=True)
+        return pd.DataFrame()
 
 def update_feedback_status(feedback_id, new_status, changed_by):
     try:

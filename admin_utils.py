@@ -10,6 +10,7 @@ if sys.version_info >= (3, 9):
 else:
     from backports.zoneinfo import ZoneInfo
     
+import traceback
 import streamlit as st
 
 from constants import TZ, STATUS_COLORS
@@ -78,7 +79,7 @@ def unified_report_page(include_hidden=False):
         default=["Bruker-feedback", "Admin-varsler", "Tunbrøyting", "Strøing"],
     )
 
-    st.write("Debug: Valgte datatyper:", data_types)  # Debug utskrift
+    #st.write("Debug: Valgte datatyper:", data_types)  # Debug utskrift
 
     # Initialize all dataframes
     feedback_data = pd.DataFrame()
@@ -111,8 +112,8 @@ def unified_report_page(include_hidden=False):
     if "Admin-varsler" in data_types:
         admin_alerts = get_alerts(only_today=False, include_expired=True)
         st.write("Debug: Hentet admin-varsler")  # Debug utskrift
-        st.subheader("Admin-varsler")
-        admin_alert()
+        # st.subheader("Admin-varsler")
+        # admin_alert()
 
     # Data preprocessing
     if not feedback_data.empty:

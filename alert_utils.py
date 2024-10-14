@@ -5,14 +5,39 @@ from typing import List, Dict, Optional
 import streamlit as st
 import pandas as pd
 
+from constants import TZ
 from db_utils import (
-    TZ, execute_query, fetch_data, get_db_connection
+    execute_query, fetch_data, get_db_connection
 )
 
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
+def is_valid_date(date_string):
+    try:
+        if pd.isna(date_string) or date_string == '':
+            return False
+        pd.to_datetime(date_string)
+        return True
+    except ValueError:
+        return False
+
+def safe_to_datetime(date_string):
+    if pd.isna(date_string) or date_string == '' or date_string == 'None' or date_string == '1':
+        return None
+    try:
+        return pd.to_datetime(date_string)
+    except ValueError:
+        logger.error(f"Ugyldig datostreng: '{date_string}'")
+        return None
+
+def format_date(date_obj):
+    if date_obj is None:
+        return "Ikke satt"
+    return date_obj.strftime('%d.%m.%Y')
+
+# crud functions
 def save_alert(alert_type: str, message: str, expiry_date: str, 
                target_group: List[str], created_by: str) -> Optional[int]:
     try:
@@ -221,46 +246,81 @@ def create_new_alert():
 # Kategori: User Interface Functions
 
 def display_user_alerts():
-    with st.expander("Se aktive og tidligere varsler fra brøytefirma og Fjellbergsskardet Drift"):
-        # Hent alle varsler, inkludert utløpte
-        all_alerts = get_alerts(only_today=False, include_expired=True)
-        
-        if all_alerts.empty:
-            st.info("Ingen varsler å vise.")
-        else:
-            # Sorter varslene etter dato, nyeste først
-            all_alerts['datetime'] = pd.to_datetime(all_alerts['datetime'])
-            all_alerts = all_alerts.sort_values('datetime', ascending=False)
-            
-            # Opprett to lister: en for aktive og en for utløpte varsler
-            active_alerts = []
-            expired_alerts = []
-            
-            current_date = datetime.now(TZ).date()
-            
-            for _, alert in all_alerts.iterrows():
-                expiry_date = pd.to_datetime(alert['expiry_date']).date()
-                alert_info = f"**{alert['type']}** ({alert['datetime'].strftime('%d.%m.%Y')}): {alert['comment']}"
+    st.subheader("Aktive varsler")
+    
+    alerts = fetch_data('feedback', """
+        SELECT * FROM feedback 
+        WHERE type LIKE 'Admin varsel:%' 
+        AND (hidden = 0 OR hidden IS NULL)
+        AND (is_alert = 1 OR is_alert IS NULL)
+        AND (expiry_date IS NULL OR expiry_date >= date('now'))
+        ORDER BY datetime DESC
+    """)
+    
+    if alerts.empty:
+        st.info("Ingen aktive varsler for øyeblikket.")
+    else:
+        for _, alert in alerts.iterrows():
+            with st.expander(f"{alert['type']} - {alert['datetime']}", expanded=True):
+                st.write(f"**Dato:** {alert['datetime']}")
+                st.write(f"**Melding:** {alert['comment']}")
                 
-                if expiry_date >= current_date:
-                    active_alerts.append(alert_info)
+                expiry_date = safe_to_datetime(alert['expiry_date'])
+                if expiry_date is not None:
+                    st.write(f"**Utløper:** {format_date(expiry_date)}")
                 else:
-                    expired_alerts.append(alert_info)
-            
-            # Vis aktive varsler
-            if active_alerts:
-                st.subheader("Aktive varsler")
-                for alert in active_alerts:
-                    st.markdown(alert)
-            else:
-                st.info("Ingen aktive varsler for øyeblikket.")
-            
-            # Vis utløpte varsler
-            if expired_alerts:
-                st.subheader("Tidligere varsler")
-                for alert in expired_alerts:
-                    st.markdown(f"<span style='color: gray;'>{alert}</span>", unsafe_allow_html=True)
-            
-            # Legg til en note om at utløpte varsler vises i 30 dager
-            st.caption("Merk: Utløpte varsler vises i 30 dager etter utløpsdatoen.")
-        
+                    st.write("**Utløper:** Ikke satt")
+                    if alert['expiry_date'] not in [None, '', 'None', '1']:
+                        logger.warning(f"Ugyldig utløpsdato funnet for varsel {alert['id']}: {alert['expiry_date']}")
+                        if st.button(f"Fjern ugyldig utløpsdato for varsel {alert['id']}"):
+                            execute_query('feedback', "UPDATE feedback SET expiry_date = NULL WHERE id = ?", (alert['id'],))
+                            st.success("Ugyldig utløpsdato fjernet.")
+                            st.rerun()
+                
+                if pd.notnull(alert['target_group']):
+                    st.write(f"**Målgruppe:** {alert['target_group']}")
+
+    st.subheader("Tidligere varsler")
+    
+    old_alerts = fetch_data('feedback', """
+        SELECT * FROM feedback 
+        WHERE type LIKE 'Admin varsel:%'
+        AND (hidden = 0 OR hidden IS NULL)
+        AND (is_alert = 1 OR is_alert IS NULL)
+        AND expiry_date < date('now')
+        ORDER BY datetime DESC
+        LIMIT 5
+    """)
+    
+    if old_alerts.empty:
+        st.info("Ingen tidligere varsler å vise.")
+    else:
+        for _, alert in old_alerts.iterrows():
+            with st.expander(f"{alert['type']} - {alert['datetime']}", expanded=False):
+                st.write(f"**Dato:** {alert['datetime']}")
+                st.write(f"**Melding:** {alert['comment']}")
+                
+                expiry_date = safe_to_datetime(alert['expiry_date'])
+                st.write(f"**Utløpt:** {format_date(expiry_date) if expiry_date else 'Ikke satt'}")
+                
+                if pd.notnull(alert['target_group']):
+                    st.write(f"**Målgruppe:** {alert['target_group']}")
+                    
+def clean_invalid_expiry_dates():
+    invalid_alerts = fetch_data('feedback', """
+        SELECT * FROM feedback 
+        WHERE type LIKE 'Admin varsel:%'
+        AND expiry_date IS NOT NULL
+        AND expiry_date != ''
+        AND expiry_date != 'None'
+        AND expiry_date != '1'
+        AND expiry_date NOT LIKE '____-__-__'
+    """)
+    
+    if not invalid_alerts.empty:
+        logger.warning(f"Fant {len(invalid_alerts)} varsler med potensielt ugyldige utløpsdatoer.")
+        for _, alert in invalid_alerts.iterrows():
+            if safe_to_datetime(alert['expiry_date']) is None:
+                logger.info(f"Fjerner ugyldig utløpsdato for varsel {alert['id']}: {alert['expiry_date']}")
+                execute_query('feedback', "UPDATE feedback SET expiry_date = NULL WHERE id = ?", (alert['id'],))
+        logger.info("Alle ugyldige utløpsdatoer har blitt fjernet.")

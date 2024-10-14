@@ -100,6 +100,8 @@ from admin_utils import (
 
 from menu_utils import create_menu
 
+from alert_utils import clean_invalid_expiry_dates
+
 # Logging configuration
 from logging_config import setup_logging, get_logger
 
@@ -146,6 +148,7 @@ def initialize_app():
     initialize_database()
     update_database_schemas()
     ensure_login_history_table_exists()
+    clean_invalid_expiry_dates()
     check_cabin_user_consistency()
     validate_customers_and_passwords()
 

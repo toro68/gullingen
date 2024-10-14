@@ -124,12 +124,12 @@ def validate_customers_and_passwords():
         if conn:
             conn.close()
 
-def validate_user_credentials(user_id, password):
-    passwords = load_passwords()
-    if user_id not in passwords:
-        logging.warning(f"No password found for user ID: {user_id}")
-        return False
-    return passwords[user_id] == password
+# def validate_user_credentials(user_id, password):
+#     passwords = load_passwords()
+#     if user_id not in passwords:
+#         logging.warning(f"No password found for user ID: {user_id}")
+#         return False
+#     return passwords[user_id] == password
 
 def get_customer_id(identifier):
     try:
