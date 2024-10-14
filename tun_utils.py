@@ -1,5 +1,6 @@
 import sqlite3
 import pandas as pd
+import os
 
 from datetime import datetime, timedelta, time
 from typing import Any, Dict, Optional, Tuple
@@ -11,10 +12,13 @@ import base64
 import streamlit as st
 
 from constants import TZ
+from config import DATABASE_PATH
+
 from util_functions import neste_fredag
 from utils import is_active_booking
 from customer_utils import get_customer_by_id, get_rode, load_customer_database, vis_arsabonnenter
 from map_utils import vis_dagens_tunkart, vis_kommende_tunbestillinger
+
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -27,7 +31,8 @@ def get_tunbroyting_connection() -> sqlite3.Connection:
     Returns:
         sqlite3.Connection: En tilkobling til tunbrøyting-databasen.
     """
-    return sqlite3.connect("tunbroyting.db", check_same_thread=False)
+    db_path = os.path.join(DATABASE_PATH, "tunbroyting.db")
+    return sqlite3.connect(db_path, check_same_thread=False)
 
 # CREATE - hovedfunksjon i app.py
 def bestill_tunbroyting():
@@ -38,13 +43,17 @@ def bestill_tunbroyting():
     Tunbrøyting i Fjellbergsskardet - Vintersesongen 2024/2025
 
     Årsabonnement:
-    - Tunet ditt brøytes automatisk når brøytefirma vurderer at det trengs.  
-    - Hvis det er fare for kapasitetsproblemer på fredager, vil vi varsle at det må legges inn bestilling, 
-    slik at hytter med meldt ankomst kan prioriteres.
+    - Tunet ditt brøytes automatisk fredager, når brøytefirma vurderer at det trengs.  
+    - Hvis du ønsker brøyting på andre dager, må du legge inn bestilling. 
+    - Traktor kjører aldri opp for å rydde for bare 1 hytte. Bestill derfor i god tid, 
+    og legg inn f.eks perioden lørdag-torsdag for å være sikker på brøytet tun på en torsdag. 
+    - Hvis du ønsker brøyting hver gang veinettet brøytes, legg inn bestilling fra 1. november til 1. mai.
     
     Ukentlig ved bestilling: 
     - Brøyting kun fredager. Bestilling kreves. 
     - Det faktureres minimum 5 brøytinger (minstepris).
+    
+    Gjelder alle:
     - Brøytefirma kan utføre vedlikeholdsbrøyting for å unngå gjengroing hvis de ser behov for det.
     """
     )
@@ -593,6 +602,7 @@ def validere_bestilling(data):
 def handle_tun():
     st.title("Håndter tunbestillinger")
     st.info("Her kan Fjellbergsskardet Drift redigere og slette bestillinger.")
+    
     # Vis statistikk
     total_bestillinger = count_bestillinger()
     st.write(f"Totalt antall bestillinger: {total_bestillinger}")

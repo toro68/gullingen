@@ -28,7 +28,8 @@ def authenticate_user(user_id, password):
     try:
         sanitized_user_id = sanitize_input(user_id)
         
-        conn = sqlite3.connect('customer.db')
+        db_path = os.path.join(DATABASE_PATH, 'customer.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         query = "SELECT Id FROM customers WHERE Id = ?"

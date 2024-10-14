@@ -263,3 +263,4 @@ def display_user_alerts():
             
             # Legg til en note om at utløpte varsler vises i 30 dager
             st.caption("Merk: Utløpte varsler vises i 30 dager etter utløpsdatoen.")
+        

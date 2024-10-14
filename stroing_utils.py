@@ -10,10 +10,8 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import streamlit as st
 
-from db_utils import (
-    get_stroing_connection,
-    initialize_stroing_database
-)
+from db_utils import get_stroing_connection
+
 from constants import TZ
 
 from logging_config import get_logger
@@ -28,15 +26,43 @@ def validate_date(date_string: str) -> bool:
     except ValueError:
         return False
 
+def update_stroing_table_structure():
+    with get_stroing_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            # Lag en ny tabell uten 'status'-kolonnen
+            cursor.execute('''
+                CREATE TABLE stroing_bestillinger_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bruker TEXT NOT NULL,
+                    bestillings_dato TEXT NOT NULL,
+                    onske_dato TEXT NOT NULL
+                )
+            ''')
+            
+            # Kopier data fra den gamle tabellen til den nye
+            cursor.execute('''
+                INSERT INTO stroing_bestillinger_new (id, bruker, bestillings_dato, onske_dato)
+                SELECT id, bruker, bestillings_dato, onske_dato FROM stroing_bestillinger
+            ''')
+            
+            # Slett den gamle tabellen
+            cursor.execute('DROP TABLE stroing_bestillinger')
+            
+            # Gi den nye tabellen det gamle navnet
+            cursor.execute('ALTER TABLE stroing_bestillinger_new RENAME TO stroing_bestillinger')
+            
+            conn.commit()
+            logger.info("Successfully updated stroing_bestillinger table structure")
+            return True
+        except sqlite3.Error as e:
+            conn.rollback()
+            logger.error(f"Error updating stroing_bestillinger table structure: {e}")
+            return False
+        
 # Create
 def lagre_stroing_bestilling(user_id: str, onske_dato: str) -> bool:
     try:
-        logger.info(f"Forsøker å lagre strøingsbestilling for bruker {user_id} på dato {onske_dato}")
-        
-        if not validate_date(onske_dato):
-            logger.error(f"Ugyldig datoformat for strøingsbestilling: {onske_dato}")
-            return False
-        
         with get_stroing_connection() as conn:
             c = conn.cursor()
             bestillings_dato = datetime.now(TZ).isoformat()
@@ -506,16 +532,3 @@ def vis_graf_stroing():
         st.metric("Antall unike brukere", unike_brukere)
 
     st.info(f"{unike_brukere} unike brukere har lagt inn strøingsbestillinger for denne perioden.")
-    
-def initialize_stroing():
-    """Initialiserer strøingsdatabasen og verifiserer data."""
-    try:
-        initialize_stroing_database()
-        verify_stroing_data()
-        logger.info("Strøingsdatabase initialisert og verifisert")
-    except Exception as e:
-        logger.error(f"Feil ved initialisering av strøingsdatabase: {str(e)}")
-
-if __name__ == "__main__":
-    initialize_stroing()
-    

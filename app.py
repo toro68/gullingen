@@ -14,7 +14,6 @@ import uuid
 import traceback
 import base64
 
-from contextlib import contextmanager  # Context Manager
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo  # ZoneInfo is a subclass of tzinfo
 from io import BytesIO
@@ -40,13 +39,14 @@ from constants import TZ, STATUS_MAPPING, STATUS_COLORS
 
 # Database utilities
 from db_utils import (
-    update_database_schema,
+    update_database_schemas,
     create_all_tables,
     initialize_database,
-    initialize_stroing_database,
     update_login_history_table,
     ensure_login_history_table_exists,
-    debug_database_operations
+    debug_database_operations,
+    update_stroing_table_structure,
+    update_database_structure
 )
 # Validation utilities
 from validation_utils import sanitize_input
@@ -122,6 +122,15 @@ SESSION_TIMEOUT = 3600  # 1 time
 # Global variables
 failed_attempts = {}
 
+# def show_database_update_button():
+#     if st.button("Oppdater databasestruktur"):
+#         success = update_database_structure()
+#         if success:
+#             st.success("Databasestrukturen er oppdatert. 'status'-kolonnen er fjernet fra 'stroing_bestillinger'-tabellen.")
+#         else:
+#             st.error("Det oppstod en feil under oppdatering av databasestrukturen. Sjekk loggene for mer informasjon.")
+
+           
 #Validering av brukerinput
 def validate_user_input(input_data):
     """
@@ -149,21 +158,28 @@ def validate_user_input(input_data):
 
 logger.info("Added validate_user_input function to app.py")
 
+def initialize_app():
+    initialize_database()
+    update_database_schemas()
+    ensure_login_history_table_exists()
+    check_cabin_user_consistency()
+    validate_customers_and_passwords()
+
 # Hovedfunksjonene for appen
 def main():
     try:
+        # Debug og logging
         dump_debug_info()
         debug_database_operations()
-        ensure_login_history_table_exists()
-        update_login_history_table()
-        create_all_tables()
-        update_login_history_table()
-        update_database_schema()
-        initialize_stroing_database()
-        initialize_database()
+
+        # Database initialisering og oppdatering
+        initialize_app()
+
+        # Sesjonshåndtering
         check_session_timeout()
-        check_cabin_user_consistency()
-        validate_customers_and_passwords()
+
+        # UI-elementer
+        # show_database_update_button()
 
         logger.info("Application setup complete")
 
@@ -239,6 +255,7 @@ def main():
         st.error(f"En feil oppstod: {str(e)}")
         st.write("Feilsøkingsinformasjon:")
         st.code(traceback.format_exc())
+        
 
 if __name__ == "__main__":
     main()

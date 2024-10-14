@@ -1,6 +1,7 @@
 import sqlite3
 import logging
 import re
+import os
 import secrets
 import string
 import pandas as pd
@@ -9,39 +10,29 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import streamlit as st
+
 from constants import TZ
+from config import DATABASE_PATH
 from utils import get_passwords
 
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-def get_customer_name(user_id):
-    db = load_customer_database()
-    user = db.get(str(user_id))
-    if user:
-        return user['Name']
-    return None
-
 def get_customer_by_id(user_id):
     try:
-        conn = sqlite3.connect('customer.db')
+        db_path = os.path.join(DATABASE_PATH, 'customer.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
-        query = "SELECT Id, Latitude, Longitude, Subscription, Type FROM customers WHERE Id = ?"
+        query = "SELECT * FROM customers WHERE Id = ?"
         cursor.execute(query, (user_id,))
         
         result = cursor.fetchone()
         
         if result:
-            customer_dict = {
-                'Id': result[0],
-                'Latitude': result[1],
-                'Longitude': result[2],
-                'Subscription': result[3],
-                'Type': result[4]
-            }
-            
+            columns = [column[0] for column in cursor.description]
+            customer_dict = dict(zip(columns, result))
             logger.info(f"Successfully retrieved customer with ID: {user_id}")
             return customer_dict
         else:
@@ -57,6 +48,41 @@ def get_customer_by_id(user_id):
     finally:
         if conn:
             conn.close()
+
+# def get_customer_by_id(user_id):
+#     try:
+#         conn = sqlite3.connect('customer.db')
+#         cursor = conn.cursor()
+        
+#         query = "SELECT Id, Latitude, Longitude, Subscription, Type FROM customers WHERE Id = ?"
+#         cursor.execute(query, (user_id,))
+        
+#         result = cursor.fetchone()
+        
+#         if result:
+#             customer_dict = {
+#                 'Id': result[0],
+#                 'Latitude': result[1],
+#                 'Longitude': result[2],
+#                 'Subscription': result[3],
+#                 'Type': result[4]
+#             }
+            
+#             logger.info(f"Successfully retrieved customer with ID: {user_id}")
+#             return customer_dict
+#         else:
+#             logger.warning(f"No customer found with ID: {user_id}")
+#             return None
+        
+#     except sqlite3.Error as e:
+#         logger.error(f"SQLite error occurred while retrieving customer with ID {user_id}: {e}")
+#         return None
+#     except Exception as e:
+#         logger.error(f"Unexpected error occurred while retrieving customer with ID {user_id}: {e}")
+#         return None
+#     finally:
+#         if conn:
+#             conn.close()
 
 def validate_customers_and_passwords():
     logger.info("Validating customers and passwords")

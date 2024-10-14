@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import streamlit as st
 import plotly.express as px
-from db_utils import execute_query, fetch_data, TZ
+from db_utils import execute_query, fetch_data, get_db_connection
+from constants import TZ
 from alert_utils import display_user_alerts
 
 from logging_config import get_logger
@@ -68,7 +69,7 @@ def get_feedback(start_date, end_date, include_hidden=False, cabin_identifier=No
     params.extend([limit, offset])
     
     df = fetch_data('feedback', query, params=params)
-    return df
+    return fetch_data('feedback', query, params=params)
 
 def update_feedback_status(feedback_id, new_status, changed_by):
     try:
