@@ -1,4 +1,3 @@
-import os
 import io
 import logging
 import sqlite3
@@ -101,8 +100,6 @@ from admin_utils import (
 
 from menu_utils import create_menu
 
-from debug_utils import dump_debug_info
-
 # Logging configuration
 from logging_config import setup_logging, get_logger
 
@@ -156,7 +153,6 @@ def initialize_app():
 def main():
     try:
         # Debug og logging
-        dump_debug_info()
         debug_database_operations()
 
         # Database initialisering og oppdatering

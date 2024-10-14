@@ -155,68 +155,116 @@ def parse_date(date_string):
 def parse_time(time_string):
     return datetime.strptime(time_string, '%H:%M:%S').time() if time_string else None
 
-def dump_debug_info():
-    logger.info("Dumping debug info")
-    conn = None
-    try:
-        from db_utils import get_db_connection
-        conn = get_db_connection('customer')
-        if conn is None:
-            logger.error("Failed to establish database connection")
-            return
+# def dump_debug_info():
+#     logger.info("Dumping debug info")
+#     conn = None
+#     try:
+#         from db_utils import get_db_connection
+#         conn = get_db_connection('customer')
+#         if conn is None:
+#             logger.error("Failed to establish database connection")
+#             return
 
-        cursor = conn.cursor()
+#         cursor = conn.cursor()
 
-        # Hent totalt antall kunder
-        cursor.execute("SELECT COUNT(*) FROM customers")
-        total_customers = cursor.fetchone()[0]
-        logger.info(f"Total number of customers: {total_customers}")
+#         # Hent totalt antall kunder
+#         cursor.execute("SELECT COUNT(*) FROM customers")
+#         total_customers = cursor.fetchone()[0]
+#         logger.info(f"Total number of customers: {total_customers}")
 
-        # Hent kolonner i kundedatabasen
-        cursor.execute("PRAGMA table_info(customers)")
-        columns = [column[1] for column in cursor.fetchall()]
-        logger.info(f"Columns in customer database: {columns}")
+#         # Hent kolonner i kundedatabasen
+#         cursor.execute("PRAGMA table_info(customers)")
+#         columns = [column[1] for column in cursor.fetchall()]
+#         logger.info(f"Columns in customer database: {columns}")
 
-        # Sjekk om 'Type' kolonne eksisterer og hent kundetyper
-        if 'Type' in columns:
-            cursor.execute("SELECT Type, COUNT(*) FROM customers GROUP BY Type")
-            type_counts = dict(cursor.fetchall())
-            logger.info(f"Customer types: {type_counts}")
-        else:
-            logger.warning("'Type' column not found in customer database")
+#         # Sjekk om 'Type' kolonne eksisterer og hent kundetyper
+#         if 'Type' in columns:
+#             cursor.execute("SELECT Type, COUNT(*) FROM customers GROUP BY Type")
+#             type_counts = dict(cursor.fetchall())
+#             logger.info(f"Customer types: {type_counts}")
+#         else:
+#             logger.warning("'Type' column not found in customer database")
 
-        # Hent første kunde for å vise eksempel på data
-        cursor.execute("SELECT * FROM customers LIMIT 1")
-        first_customer = cursor.fetchone()
-        if first_customer:
-            logger.info(f"Example customer data: {dict(zip(columns, first_customer))}")
-        else:
-            logger.warning("No customers found in the database")
+#         # Hent første kunde for å vise eksempel på data
+#         cursor.execute("SELECT * FROM customers LIMIT 1")
+#         first_customer = cursor.fetchone()
+#         if first_customer:
+#             logger.info(f"Example customer data: {dict(zip(columns, first_customer))}")
+#         else:
+#             logger.warning("No customers found in the database")
 
-        # Logg passordinformasjon
-        logger.info("Passwords:")
-        passwords = st.secrets.get("passwords", {})
-        for user_id, password in passwords.items():
-            logger.info(f"  User {user_id}: {password}")
+#         # Logg passordinformasjon
+#         logger.info("Passwords:")
+#         passwords = st.secrets.get("passwords", {})
+#         for user_id, password in passwords.items():
+#             logger.info(f"  User {user_id}: {password}")
 
-        # Sjekk konsistens mellom kunder og passord
-        cursor.execute("SELECT Id FROM customers")
-        customer_ids = set(str(row[0]) for row in cursor.fetchall())
-        password_ids = set(passwords.keys())
+#         # Sjekk konsistens mellom kunder og passord
+#         cursor.execute("SELECT Id FROM customers")
+#         customer_ids = set(str(row[0]) for row in cursor.fetchall())
+#         password_ids = set(passwords.keys())
 
-        customers_without_password = customer_ids - password_ids
-        passwords_without_customer = password_ids - customer_ids
+#         customers_without_password = customer_ids - password_ids
+#         passwords_without_customer = password_ids - customer_ids
 
-        if customers_without_password:
-            logger.warning(f"Customers without passwords: {customers_without_password}")
-        if passwords_without_customer:
-            logger.warning(f"Passwords without corresponding customers: {passwords_without_customer}")
+#         if customers_without_password:
+#             logger.warning(f"Customers without passwords: {customers_without_password}")
+#         if passwords_without_customer:
+#             logger.warning(f"Passwords without corresponding customers: {passwords_without_customer}")
 
-    except Exception as e:
-        logger.error(f"Unexpected error in dump_debug_info: {str(e)}", exc_info=True)
-    finally:
-        if conn:
-            conn.close()
-            logger.info("Database connection closed")
+#     except Exception as e:
+#         logger.error(f"Unexpected error in dump_debug_info: {str(e)}", exc_info=True)
+#     finally:
+#         if conn:
+#             conn.close()
+#             logger.info("Database connection closed")
+            
+# def dump_debug_info():
+#     logger.info("Dumping debug info")
+
+#     # Dump innholdet i st.secrets
+#     dump_secrets()
+
+#     # Forsøk å laste kundedatabasen
+#     customer_db = load_customer_database()
+
+#     if isinstance(customer_db, pd.DataFrame):
+#         logger.info(f"Total number of customers: {len(customer_db)}")
+
+#         if not customer_db.empty:
+#             # Logg noen detaljer om kundedatabasen
+#             first_customer = customer_db.iloc[0].to_dict()
+#             logger.info(f"First customer: {first_customer}")
+#             logger.info(f"Keys in customer data: {list(first_customer.keys())}")
+#         else:
+#             logger.warning("Customer database is empty")
+#     else:
+#         logger.warning("Customer database is not a DataFrame")
+
+#     # Logg passordinformasjon (ikke selve passordene)
+#     logger.info("Passwords:")
+#     for user_id in st.secrets.get("passwords", {}):
+#         logger.info(f"User ID: {user_id} has a password set")
+
+#     logger.info("Bestillinger:")
+#     bestillinger = hent_bestillinger()
+#     if isinstance(bestillinger, pd.DataFrame):
+#         if bestillinger.empty:
+#             logger.info("Ingen bestillinger funnet.")
+#         else:
+#             for _, row in bestillinger.iterrows():
+#                 logger.info(
+#                     f"Bestilling ID: {row['id']}, Bruker: {row['bruker']}, "
+#                     f"Ankomst dato: {row['ankomst_dato']}, Ankomst tid: {row['ankomst_tid']}, "
+#                     f"Avreise dato: {row['avreise_dato']}, Avreise tid: {row['avreise_tid']}, "
+#                     f"Kombinert ankomst: {row['ankomst']}, Kombinert avreise: {row['avreise']}, "
+#                     f"Type: {row['abonnement_type']}"
+#                 )
+
+#             logger.info("Kolonnetyper:")
+#             for col in bestillinger.columns:
+#                 logger.info(f"{col}: {bestillinger[col].dtype}")
+#     else:
+#         logger.warning("Bestillinger is not a DataFrame")
 
 # Add any other utility functions here as needed
