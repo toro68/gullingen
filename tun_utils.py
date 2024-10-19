@@ -1153,14 +1153,12 @@ def display_bookings(user_id):
     else:
         st.info("Du har ingen tidligere bestillinger.")
 
-
-#Visning til brukerne for å vise statistikk og aktivitet i hyttegrenda - på siden for bestillinger av tunbrøyting
 def vis_hyttegrend_aktivitet():
     st.subheader("Aktive tunbestillinger i hyttegrenda")
     st.info(
-            "Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
-            "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
-        )
+        "Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
+        "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
+    )
     
     # Hent alle bestillinger
     alle_bestillinger = hent_bestillinger()
@@ -1174,24 +1172,19 @@ def vis_hyttegrend_aktivitet():
     sluttdato = dagens_dato + timedelta(days=7)
 
     # Initialiser en dictionary for å telle aktive bestillinger per dag
-    daglig_aktivitet = {dagen.strftime('%d.%m'): {'Ukentlig ved bestilling': 0, 'Årsabonnement': 0} 
-                        for dagen in pd.date_range(dagens_dato, sluttdato)}
+    daglig_aktivitet = {dagen.strftime('%d.%m'): 0 for dagen in pd.date_range(dagens_dato, sluttdato)}
 
     # Tell aktive bestillinger for hver dag
     for _, bestilling in alle_bestillinger.iterrows():
-        ankomst_dato = bestilling['ankomst'].date()
-        if bestilling['abonnement_type'] == 'Ukentlig ved bestilling':
-            if ankomst_dato.strftime('%d.%m') in daglig_aktivitet:
-                daglig_aktivitet[ankomst_dato.strftime('%d.%m')]['Ukentlig ved bestilling'] += 1
-        else:  # 'Årsabonnement'
-            avreise_dato = bestilling['avreise'].date() if pd.notnull(bestilling['avreise']) else sluttdato
-            for dag in pd.date_range(max(ankomst_dato, dagens_dato), min(avreise_dato, sluttdato)):
-                if dag.strftime('%d.%m') in daglig_aktivitet:
-                    daglig_aktivitet[dag.strftime('%d.%m')]['Årsabonnement'] += 1
+        ankomst_dato = bestilling['ankomst_dato']
+        avreise_dato = bestilling['avreise_dato'] if pd.notnull(bestilling['avreise_dato']) else sluttdato
+        
+        for dag in pd.date_range(max(ankomst_dato, dagens_dato), min(avreise_dato, sluttdato)):
+            if dag.strftime('%d.%m') in daglig_aktivitet:
+                daglig_aktivitet[dag.strftime('%d.%m')] += 1
 
     # Konverter til DataFrame for enklere visning
-    aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index')
-    aktivitet_df['Totalt'] = aktivitet_df['Ukentlig ved bestilling'] + aktivitet_df['Årsabonnement']
+    aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index', columns=['Totalt'])
     aktivitet_df.index.name = 'Dato'
 
     # Vis daglig aktivitet som tabell med fargekoding
@@ -1201,36 +1194,13 @@ def vis_hyttegrend_aktivitet():
         use_container_width=True,
         height=300
     )
-
-    # # Vis daglig aktivitet som stolpediagram (kun totalen)
-    # fig, ax = plt.subplots(figsize=(10, 4))
-    # aktivitet_df['Totalt'].plot(kind='bar', ax=ax)
-    # ax.set_xlabel('Dato')
-    # ax.set_ylabel('Totalt antall bestillinger')
-    # plt.xticks(rotation=45, ha='right')
-    # ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
-    # plt.tight_layout()
-    # st.pyplot(fig)
-
-    # # Beregn og vis antall unike brukere og totalt antall bestillinger
-    # unike_brukere = alle_bestillinger['bruker'].nunique()
-    # total_bestillinger = aktivitet_df['Totalt'].sum()
     
-    # col1, col2 = st.columns(2)
-    # with col1:
-    #     st.metric("Unike brukere med bestillinger", unike_brukere)
-    # with col2:
-    #     st.metric("Totalt antall bestillinger", int(total_bestillinger))
-
-    # if st.checkbox("Vis detaljert statistikk"):
-    #     st.write(aktivitet_df.describe())
-        
+# #Visning til brukerne for å vise statistikk og aktivitet i hyttegrenda - på siden for bestillinger av tunbrøyting
 # def vis_hyttegrend_aktivitet():
-#     st.subheader("Aktive bestillinger av tunbrøyting per dag i hyttegrenda")
+#     st.subheader("Aktive tunbestillinger i hyttegrenda")
 #     st.info(
-#         """
-#         Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser.
-#         """
+#             "Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
+#             "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
 #         )
     
 #     # Hent alle bestillinger
@@ -1245,42 +1215,30 @@ def vis_hyttegrend_aktivitet():
 #     sluttdato = dagens_dato + timedelta(days=7)
 
 #     # Initialiser en dictionary for å telle aktive bestillinger per dag
-#     daglig_aktivitet = {dagen.date(): {'Ukentlig ved bestilling': 0, 'Årsabonnement': 0} 
+#     daglig_aktivitet = {dagen.strftime('%d.%m'): {'Ukentlig ved bestilling': 0, 'Årsabonnement': 0} 
 #                         for dagen in pd.date_range(dagens_dato, sluttdato)}
 
 #     # Tell aktive bestillinger for hver dag
 #     for _, bestilling in alle_bestillinger.iterrows():
 #         ankomst_dato = bestilling['ankomst'].date()
 #         if bestilling['abonnement_type'] == 'Ukentlig ved bestilling':
-#             # For 'Ukentlig ved bestilling', tell kun for ankomstdatoen hvis den er innenfor perioden
-#             if ankomst_dato in daglig_aktivitet:
-#                 daglig_aktivitet[ankomst_dato]['Ukentlig ved bestilling'] += 1
+#             if ankomst_dato.strftime('%d.%m') in daglig_aktivitet:
+#                 daglig_aktivitet[ankomst_dato.strftime('%d.%m')]['Ukentlig ved bestilling'] += 1
 #         else:  # 'Årsabonnement'
-#             # For 'Årsabonnement', tell for hver dag fra ankomst til avreise (eller sluttdato) innenfor perioden
 #             avreise_dato = bestilling['avreise'].date() if pd.notnull(bestilling['avreise']) else sluttdato
 #             for dag in pd.date_range(max(ankomst_dato, dagens_dato), min(avreise_dato, sluttdato)):
-#                 if dag.date() in daglig_aktivitet:
-#                     daglig_aktivitet[dag.date()]['Årsabonnement'] += 1
+#                 if dag.strftime('%d.%m') in daglig_aktivitet:
+#                     daglig_aktivitet[dag.strftime('%d.%m')]['Årsabonnement'] += 1
 
 #     # Konverter til DataFrame for enklere visning
 #     aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index')
 #     aktivitet_df['Totalt'] = aktivitet_df['Ukentlig ved bestilling'] + aktivitet_df['Årsabonnement']
 #     aktivitet_df.index.name = 'Dato'
 
-#     # Vis daglig aktivitet som tabell
-#     st.table(aktivitet_df)
-
-#     # Vis daglig aktivitet som stolpediagram (kun totalen)
-#     fig, ax = plt.subplots(figsize=(10, 6))
-#     aktivitet_df['Totalt'].plot(kind='bar', ax=ax)
-#     ax.set_xlabel('Dato')
-#     ax.set_ylabel('Totalt antall bestillinger')
-#     plt.xticks(rotation=45)
-#     ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
-#     plt.tight_layout()
-#     st.pyplot(fig)
-
-#     # Beregn og vis antall unike brukere
-#     unike_brukere = alle_bestillinger['bruker'].nunique()
-#     st.subheader("Antall unike brukere med bestillinger")
-#     st.write(f"{unike_brukere} unike brukere har aktive bestillinger i denne perioden.")
+#     # Vis daglig aktivitet som tabell med fargekoding
+#     st.write("Daglig oversikt over aktive bestillinger:")
+#     st.dataframe(
+#         aktivitet_df.style.background_gradient(cmap='Blues', subset=['Totalt']),
+#         use_container_width=True,
+#         height=300
+#     )
