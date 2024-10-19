@@ -135,127 +135,127 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
 
     return fig
 
-def vis_kommende_tunbestillinger(bestillinger, mapbox_token, title):
-    logger.info(f"Starting vis_kommende_tunbestillinger with {len(bestillinger)} bookings")
-    cabin_coordinates = get_cabin_coordinates()
-    current_date = datetime.now(TZ).date()
-    end_date = current_date + timedelta(days=7)
+# def vis_kommende_tunbestillinger(bestillinger, mapbox_token, title):
+#     logger.info(f"Starting vis_kommende_tunbestillinger with {len(bestillinger)} bookings")
+#     cabin_coordinates = get_cabin_coordinates()
+#     current_date = datetime.now(TZ).date()
+#     end_date = current_date + timedelta(days=7)
 
-    latitudes, longitudes, texts, colors, sizes = [], [], [], [], []
+#     latitudes, longitudes, texts, colors, sizes = [], [], [], [], []
 
-    # Define base colors
-    BASE_BLUE = "#03b01f"  # Green for yearly subscriptions
-    BASE_RED = "#db0000"  # Red for other bookings
-    GRAY = "#eaeaea"  # Gray for inactive bookings
+#     # Define base colors
+#     BASE_BLUE = "#03b01f"  # Green for yearly subscriptions
+#     BASE_RED = "#db0000"  # Red for other bookings
+#     GRAY = "#eaeaea"  # Gray for inactive bookings
 
-    # Function to adjust color intensity
-    def adjust_color_intensity(base_color, days_until):
-        rgb = [int(base_color[i:i+2], 16) for i in (1, 3, 5)]
-        factor = max(0, min(1, 1 - (days_until - 1) / 7))  # Ensure factor is between 0 and 1
-        adjusted_rgb = [min(255, max(0, int(c + (255 - c) * (1 - factor)))) for c in rgb]
-        return "#{:02x}{:02x}{:02x}".format(*adjusted_rgb)
+#     # Function to adjust color intensity
+#     def adjust_color_intensity(base_color, days_until):
+#         rgb = [int(base_color[i:i+2], 16) for i in (1, 3, 5)]
+#         factor = max(0, min(1, 1 - (days_until - 1) / 7))  # Ensure factor is between 0 and 1
+#         adjusted_rgb = [min(255, max(0, int(c + (255 - c) * (1 - factor)))) for c in rgb]
+#         return "#{:02x}{:02x}{:02x}".format(*adjusted_rgb)
 
-    legend_colors = {
-        "Årsabonnement": BASE_BLUE,
-        "Ukentlig ved bestilling": BASE_RED,
-        "Ingen bestilling": GRAY,
-    }
+#     legend_colors = {
+#         "Årsabonnement": BASE_BLUE,
+#         "Ukentlig ved bestilling": BASE_RED,
+#         "Ingen bestilling": GRAY,
+#     }
 
-    for _, booking in bestillinger.iterrows():
-        cabin_id = booking['bruker']
-        lat, lon = cabin_coordinates.get(str(cabin_id), (None, None))
+#     for _, booking in bestillinger.iterrows():
+#         cabin_id = booking['bruker']
+#         lat, lon = cabin_coordinates.get(str(cabin_id), (None, None))
         
-        if lat and lon and not (pd.isna(lat) or pd.isna(lon)):
-            latitudes.append(lat)
-            longitudes.append(lon)
+#         if lat and lon and not (pd.isna(lat) or pd.isna(lon)):
+#             latitudes.append(lat)
+#             longitudes.append(lon)
 
-            ankomst_dato = pd.to_datetime(booking["ankomst"]).date()
-            days_until = (ankomst_dato - current_date).days
+#             ankomst_dato = pd.to_datetime(booking["ankomst"]).date()
+#             days_until = (ankomst_dato - current_date).days
 
-            logger.debug(f"Processing booking for cabin {cabin_id}: type={booking['abonnement_type']}, ankomst_dato={ankomst_dato}, days_until={days_until}")
+#             logger.debug(f"Processing booking for cabin {cabin_id}: type={booking['abonnement_type']}, ankomst_dato={ankomst_dato}, days_until={days_until}")
 
-            if current_date <= ankomst_dato <= end_date or booking["abonnement_type"] == "Årsabonnement":
-                if booking["abonnement_type"] == "Årsabonnement":
-                    color = BASE_BLUE
-                    legend_text = "Årsabonnement"
-                    size = 12
-                else:
-                    color = adjust_color_intensity(BASE_RED, max(0, days_until))
-                    legend_text = "Ukentlig ved bestilling"
-                    size = max(8, 12 - min(days_until, 4))  # Gradvis økning i størrelse over 4 dager
-            else:
-                color = GRAY
-                legend_text = "Ingen bestilling"
-                size = 8
+#             if current_date <= ankomst_dato <= end_date or booking["abonnement_type"] == "Årsabonnement":
+#                 if booking["abonnement_type"] == "Årsabonnement":
+#                     color = BASE_BLUE
+#                     legend_text = "Årsabonnement"
+#                     size = 12
+#                 else:
+#                     color = adjust_color_intensity(BASE_RED, max(0, days_until))
+#                     legend_text = "Ukentlig ved bestilling"
+#                     size = max(8, 12 - min(days_until, 4))  # Gradvis økning i størrelse over 4 dager
+#             else:
+#                 color = GRAY
+#                 legend_text = "Ingen bestilling"
+#                 size = 8
 
-            logger.debug(f"Marker properties for cabin {cabin_id}: color={color}, size={size}, legend_text={legend_text}")
+#             logger.debug(f"Marker properties for cabin {cabin_id}: color={color}, size={size}, legend_text={legend_text}")
 
-            text = f"Hytte: {cabin_id}<br>Type: {booking['abonnement_type']}<br>Ankomst: {ankomst_dato}<br>Avreise: {booking['avreise'].date() if pd.notnull(booking['avreise']) else 'Ikke satt'}"
+#             text = f"Hytte: {cabin_id}<br>Type: {booking['abonnement_type']}<br>Ankomst: {ankomst_dato}<br>Avreise: {booking['avreise'].date() if pd.notnull(booking['avreise']) else 'Ikke satt'}"
 
-            colors.append(color)
-            sizes.append(size)
-            texts.append(text)
+#             colors.append(color)
+#             sizes.append(size)
+#             texts.append(text)
 
-    logger.info(f"Prepared {len(latitudes)} points for the map")
+#     logger.info(f"Prepared {len(latitudes)} points for the map")
 
-    fig = go.Figure()
+#     fig = go.Figure()
 
-    fig.add_trace(
-        go.Scattermapbox(
-            lat=latitudes,
-            lon=longitudes,
-            mode="markers",
-            marker=go.scattermapbox.Marker(
-                size=sizes,
-                color=colors,
-                opacity=1.0,
-            ),
-            text=texts,
-            hoverinfo="text",
-        )
-    )
+#     fig.add_trace(
+#         go.Scattermapbox(
+#             lat=latitudes,
+#             lon=longitudes,
+#             mode="markers",
+#             marker=go.scattermapbox.Marker(
+#                 size=sizes,
+#                 color=colors,
+#                 opacity=1.0,
+#             ),
+#             text=texts,
+#             hoverinfo="text",
+#         )
+#     )
 
-    fig.update_layout(
-        title=title,
-        mapbox_style="streets",
-        mapbox=dict(
-            accesstoken=mapbox_token,
-            center=dict(
-                lat=sum(latitudes) / len(latitudes) if latitudes else 0,
-                lon=sum(longitudes) / len(longitudes) if longitudes else 0,
-            ),
-            zoom=13,
-        ),
-        showlegend=True,
-        legend=dict(
-            traceorder="reversed",
-            itemsizing="constant",
-            title="Forklaring",
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-        ),
-        height=600,
-        margin={"r": 0, "t": 30, "l": 0, "b": 0},
-    )
+#     fig.update_layout(
+#         title=title,
+#         mapbox_style="streets",
+#         mapbox=dict(
+#             accesstoken=mapbox_token,
+#             center=dict(
+#                 lat=sum(latitudes) / len(latitudes) if latitudes else 0,
+#                 lon=sum(longitudes) / len(longitudes) if longitudes else 0,
+#             ),
+#             zoom=13,
+#         ),
+#         showlegend=True,
+#         legend=dict(
+#             traceorder="reversed",
+#             itemsizing="constant",
+#             title="Forklaring",
+#             orientation="h",
+#             yanchor="bottom",
+#             y=1.02,
+#             xanchor="right",
+#             x=1,
+#         ),
+#         height=600,
+#         margin={"r": 0, "t": 30, "l": 0, "b": 0},
+#     )
 
-    # Add legend with base colors
-    for legend_text, color in legend_colors.items():
-        fig.add_trace(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="markers",
-                marker=dict(size=10, color=color),
-                showlegend=True,
-                name=legend_text,
-            )
-        )
+#     # Add legend with base colors
+#     for legend_text, color in legend_colors.items():
+#         fig.add_trace(
+#             go.Scatter(
+#                 x=[None],
+#                 y=[None],
+#                 mode="markers",
+#                 marker=dict(size=10, color=color),
+#                 showlegend=True,
+#                 name=legend_text,
+#             )
+#         )
 
-    logger.info("Finished creating the map")
-    return fig
+#     logger.info("Finished creating the map")
+#     return fig
 
 def vis_stroingskart_kommende(bestillinger, mapbox_token, title):
     try:

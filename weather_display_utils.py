@@ -16,13 +16,6 @@ logger = get_logger(__name__)
 # Funksjoner for å vise data og grensesnitt
 def display_weather_data(client_id, start_date, end_date):
     try:
-        # Vis dagens aktive alarmer øverst
-        todays_alerts = get_alerts()
-        if not todays_alerts.empty:
-            st.subheader("Aktive varsler fra brøytefirma / FD")
-            for _, alert in todays_alerts.iterrows():
-                st.warning(f"{alert['type']}: {alert['comment']}")
-
         with st.spinner("Henter og behandler værdata..."):
             weather_data = get_weather_data_for_period(
                 client_id, start_date.isoformat(), end_date.isoformat()

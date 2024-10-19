@@ -18,8 +18,8 @@ class TestWeatherApp(unittest.TestCase):
         app.create_stroing_table(self.conn_stroing)
 
         # Replace the get_connection functions with our test connections
-        app.get_feedback_connection = lambda: self.conn_feedback
-        app.get_tunbroyting_connection = lambda: self.conn_tunbroyting
+        app.get_db_connection = lambda: self.conn_feedback
+        app.get_db_connection = lambda: self.conn_tunbroyting
         app.get_stroing_connection = lambda: self.conn_stroing
 
     def tearDown(self):

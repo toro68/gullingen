@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import streamlit as st
 import plotly.express as px
-from db_utils import execute_query, fetch_data, get_db_connection
+from db_utils import execute_query, fetch_data
 from constants import TZ
 from alert_utils import display_user_alerts
 
@@ -247,16 +247,18 @@ def handle_user_feedback():
                 else:
                     st.error("Feil ved oppdatering av status")
 
-            if st.button("Slett feedback", key=f"delete_{index}"):
-                result = delete_feedback(feedback['id'])
-                if result is True:
-                    st.success("Feedback slettet")
-                    st.rerun()
-                elif result == "not_found":
-                    st.warning("Feedback-en ble ikke funnet. Den kan allerede være slettet.")
-                    st.rerun()
-                else:
-                    st.error("Feil ved sletting av feedback")
+            # Only show delete button for Superadmin
+            if st.session_state.get('is_superadmin', False):
+                if st.button("Slett feedback", key=f"delete_{index}"):
+                    result = delete_feedback(feedback['id'])
+                    if result is True:
+                        st.success("Feedback slettet")
+                        st.rerun()
+                    elif result == "not_found":
+                        st.warning("Feedback-en ble ikke funnet. Den kan allerede være slettet.")
+                        st.rerun()
+                    else:
+                        st.error("Feil ved sletting av feedback")
 
     st.info(f"Viser {len(user_feedback)} feedback-elementer for de valgte kriteriene")
 
@@ -274,14 +276,8 @@ def give_feedback():
     st.info(
         """
     Her kan du gi tilbakemeldinger, melde avvik eller komme med forslag til forbedringer. Velg type feedback fra menyen nedenfor. 
-
-    - Brøytekartet viser hvor det skal brøytes hver gang det er behov, [se her](https://sartopo.com/m/J881). Annen brøyting må du betale selv.
-    - Brøytestandarden er vår kravspesifikasjon til brøytefirmaet og regulerer samspillet med hytteeierne. 
-    - Gå gjennom varslene under, før du gir feedback.   
     """
     )
-    
-    display_user_alerts()
     
     feedback_type = st.radio(
         "Velg type feedback:",

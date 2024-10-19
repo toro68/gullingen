@@ -5,7 +5,7 @@ import os
 import secrets
 import string
 import pandas as pd
-from typing import Dict, Tuple 
+from typing import Dict, Tuple, Any 
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -49,41 +49,6 @@ def get_customer_by_id(user_id):
         if conn:
             conn.close()
 
-# def get_customer_by_id(user_id):
-#     try:
-#         conn = sqlite3.connect('customer.db')
-#         cursor = conn.cursor()
-        
-#         query = "SELECT Id, Latitude, Longitude, Subscription, Type FROM customers WHERE Id = ?"
-#         cursor.execute(query, (user_id,))
-        
-#         result = cursor.fetchone()
-        
-#         if result:
-#             customer_dict = {
-#                 'Id': result[0],
-#                 'Latitude': result[1],
-#                 'Longitude': result[2],
-#                 'Subscription': result[3],
-#                 'Type': result[4]
-#             }
-            
-#             logger.info(f"Successfully retrieved customer with ID: {user_id}")
-#             return customer_dict
-#         else:
-#             logger.warning(f"No customer found with ID: {user_id}")
-#             return None
-        
-#     except sqlite3.Error as e:
-#         logger.error(f"SQLite error occurred while retrieving customer with ID {user_id}: {e}")
-#         return None
-#     except Exception as e:
-#         logger.error(f"Unexpected error occurred while retrieving customer with ID {user_id}: {e}")
-#         return None
-#     finally:
-#         if conn:
-#             conn.close()
-
 def validate_customers_and_passwords():
     logger.info("Validating customers and passwords")
     try:
@@ -123,13 +88,6 @@ def validate_customers_and_passwords():
     finally:
         if conn:
             conn.close()
-
-# def validate_user_credentials(user_id, password):
-#     passwords = load_passwords()
-#     if user_id not in passwords:
-#         logging.warning(f"No password found for user ID: {user_id}")
-#         return False
-#     return passwords[user_id] == password
 
 def get_customer_id(identifier):
     try:
@@ -375,6 +333,119 @@ def get_rode(customer_id):
     else:
         return None
 
+def update_customer(customer_id: str, updates: Dict[str, Any]) -> bool:
+    """
+    Update customer information in the database.
+
+    Args:
+    customer_id (str): The ID of the customer to update.
+    updates (Dict[str, Any]): A dictionary containing the fields to update and their new values.
+
+    Returns:
+    bool: True if the update was successful, False otherwise.
+    """
+    try:
+        db_path = os.path.join(DATABASE_PATH, 'customer.db')
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+
+            # Construct the SQL query dynamically based on the fields to update
+            update_fields = ', '.join([f"{key} = ?" for key in updates.keys()])
+            query = f"UPDATE customers SET {update_fields} WHERE Id = ?"
+
+            # Prepare the values for the query
+            values = list(updates.values()) + [customer_id]
+
+            # Execute the update query
+            cursor.execute(query, values)
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"Successfully updated customer with ID: {customer_id}")
+                return True
+            else:
+                logger.warning(f"No customer found with ID: {customer_id}. No update performed.")
+                return False
+
+    except sqlite3.Error as e:
+        logger.error(f"SQLite error occurred while updating customer with ID {customer_id}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error occurred while updating customer with ID {customer_id}: {e}")
+        return False
+
+def customer_edit_component():
+    st.header("Rediger kundeinformasjon")
+
+    # Input felt for kunde-ID
+    customer_id = st.text_input("Skriv inn kunde-ID")
+
+    if customer_id:
+        # Hent eksisterende kundedata
+        customer_data = get_customer_by_id(customer_id)
+
+        if customer_data:
+            st.subheader(f"Redigerer kunde: {customer_id}")
+
+            # Opprett input-felter for hver kundeegenskap
+            updates: Dict[str, Any] = {}
+            
+            updates['Latitude'] = st.number_input("Breddegrad", value=float(customer_data.get('Latitude', 0)), format="%.6f")
+            updates['Longitude'] = st.number_input("Lengdegrad", value=float(customer_data.get('Longitude', 0)), format="%.6f")
+            
+            # Oppdaterte subscription-kategorier med hjelpetekst
+            subscription_options = [
+                'star_red (Ukentlig)',
+                'star_white (Årsabonnement)',
+                'dot_white (Ikke tunbrøyting)',
+                'admin',
+                'none'
+            ]
+            current_subscription = customer_data.get('Subscription', 'none')
+            
+            # Håndter tilfeller der eksisterende subscription ikke er i listen
+            if current_subscription not in [opt.split()[0] for opt in subscription_options]:
+                subscription_options.append(current_subscription)
+                st.warning(f"Merk: Kunden har en uventet subscription-verdi: {current_subscription}")
+            
+            selected_subscription = st.selectbox(
+                "Abonnement",
+                options=subscription_options,
+                index=next((i for i, opt in enumerate(subscription_options) if opt.startswith(current_subscription)), 0),
+                format_func=lambda x: x  # Viser hele teksten inkludert hjelpetekst
+            )
+            updates['Subscription'] = selected_subscription.split()[0]  # Lagrer bare abonnementskoden
+            
+            # Oppdaterte type-kategorier
+            type_options = ['Cabin', 'Customer', 'Admin', 'Other']
+            current_type = customer_data.get('Type', 'Other')
+            
+            # Håndter tilfeller der eksisterende type ikke er i listen
+            if current_type not in type_options:
+                type_options.append(current_type)
+                st.warning(f"Merk: Kunden har en uventet type-verdi: {current_type}")
+            
+            updates['Type'] = st.selectbox("Type", 
+                                           options=type_options,
+                                           index=type_options.index(current_type))
+
+            # Legg til flere felt etter behov...
+
+            if st.button("Oppdater kunde"):
+                # Fjern uendrede verdier fra updates-dictionary
+                updates = {k: v for k, v in updates.items() if v != customer_data.get(k)}
+                
+                if updates:
+                    success = update_customer(customer_id, updates)
+                    if success:
+                        st.success(f"Kunde {customer_id} ble oppdatert vellykket!")
+                    else:
+                        st.error(f"Kunne ikke oppdatere kunde {customer_id}. Vennligst prøv igjen.")
+                else:
+                    st.info("Ingen endringer ble gjort.")
+        else:
+            st.error(f"Ingen kunde funnet med ID: {customer_id}")
+               
 def vis_arsabonnenter():
     st.subheader("Kunder med årsabonnement")
 

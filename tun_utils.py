@@ -1,38 +1,34 @@
 import sqlite3
 import pandas as pd
 import os
-
 from datetime import datetime, timedelta, time
 from typing import Any, Dict, Optional, Tuple
-
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
-import base64
 import streamlit as st
 
 from constants import TZ
 from config import DATABASE_PATH
-
 from util_functions import neste_fredag
 from utils import is_active_booking
-from customer_utils import get_customer_by_id, get_rode, load_customer_database, vis_arsabonnenter
-from map_utils import vis_dagens_tunkart, vis_kommende_tunbestillinger
-
+from customer_utils import get_customer_by_id, get_rode, load_customer_database, vis_arsabonnenter, customer_edit_component
+from map_utils import vis_dagens_tunkart
+from db_utils import get_db_connection
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-def get_tunbroyting_connection() -> sqlite3.Connection:
-    """
-    Oppretter og returnerer en tilkobling til tunbrøyting-databasen.
+# def get_db_connection() -> sqlite3.Connection:
+#     """
+#     Oppretter og returnerer en tilkobling til tunbrøyting-databasen.
 
-    Returns:
-        sqlite3.Connection: En tilkobling til tunbrøyting-databasen.
-    """
-    db_path = os.path.join(DATABASE_PATH, "tunbroyting.db")
-    return sqlite3.connect(db_path, check_same_thread=False)
+#     Returns:
+#         sqlite3.Connection: En tilkobling til tunbrøyting-databasen.
+#     """
+#     db_path = os.path.join(DATABASE_PATH, "tunbroyting.db")
+#     return sqlite3.connect(db_path, check_same_thread=False)
 
 # CREATE - hovedfunksjon i app.py
 def bestill_tunbroyting():
@@ -146,9 +142,6 @@ def bestill_tunbroyting():
     # Vis Dine tidligere bestillinger
     display_bookings(user_id)
     st.write("---")
-    
-    # Vis daglige brøytinger
-    vis_hyttegrend_aktivitet()
 
 # CREATE - lagre i bestill_tunbroyting
 def lagre_bestilling(
@@ -159,22 +152,8 @@ def lagre_bestilling(
     avreise_tid: str,
     abonnement_type: str,
 ) -> bool:
-    """
-    Lagrer en ny tunbrøytingsbestilling i databasen.
-
-    Args:
-        user_id (str): Brukerens ID
-        ankomst_dato (str): Ankomstdato i ISO-format
-        ankomst_tid (str): Ankomsttid i HH:MM:SS-format
-        avreise_dato (str): Avreisedato i ISO-format eller None
-        avreise_tid (str): Avreisetid i HH:MM:SS-format eller None
-        abonnement_type (str): Type abonnement
-
-    Returns:
-        bool: True hvis lagringen var vellykket, False ellers
-    """
     try:
-        with get_tunbroyting_connection() as conn:
+        with get_db_connection('tunbroyting') as conn:
             c = conn.cursor()
             c.execute(
                 """INSERT INTO tunbroyting_bestillinger 
@@ -202,14 +181,8 @@ def lagre_bestilling(
 # READ
 # Viser brukerens tidligere bestillinger i bestill_tunbroyting
 def hent_bestillinger() -> pd.DataFrame:
-    """
-    Henter alle tunbrøytingsbestillinger fra databasen.
-
-    Returns:
-        pd.DataFrame: En DataFrame med alle bestillinger, eller en tom DataFrame hvis det oppstår en feil.
-    """
     try:
-        with get_tunbroyting_connection() as conn:
+        with get_db_connection('tunbroyting') as conn:
             query = "SELECT * FROM tunbroyting_bestillinger"
             df = pd.read_sql_query(query, conn)
 
@@ -271,8 +244,9 @@ def hent_bestillinger() -> pd.DataFrame:
             "Uventet feil ved henting av bestillinger: %s", str(e), exc_info=True
         )
         return pd.DataFrame()
+    
 def hent_bruker_bestillinger(user_id):
-    with get_tunbroyting_connection() as conn:
+    with get_db_connection('tunbroyting') as conn:
         query = """
         SELECT * FROM tunbroyting_bestillinger 
         WHERE bruker = ? 
@@ -282,16 +256,23 @@ def hent_bruker_bestillinger(user_id):
     return df
 
 def hent_bestillinger_for_periode(start_date, end_date):
-    with get_tunbroyting_connection() as conn:
-        query = """
-        SELECT * FROM tunbroyting_bestillinger 
-        WHERE (ankomst_dato BETWEEN ? AND ?) OR (avreise_dato BETWEEN ? AND ?)
-        ORDER BY ankomst_dato, ankomst_tid
-        """
-        df = pd.read_sql_query(
-            query, conn, params=(start_date, end_date, start_date, end_date)
-        )
-    return df
+    try:
+        with get_db_connection('tunbroyting') as conn:
+            query = """
+            SELECT * FROM tunbroyting_bestillinger 
+            WHERE (ankomst_dato BETWEEN ? AND ?) OR (avreise_dato BETWEEN ? AND ?)
+            ORDER BY ankomst_dato, ankomst_tid
+            """
+            df = pd.read_sql_query(
+                query, conn, params=(start_date, end_date, start_date, end_date)
+            )
+        return df
+    except sqlite3.Error as e:
+        logger.error(f"SQLite error in hent_bestillinger_for_periode: {str(e)}")
+        return pd.DataFrame()
+    except Exception as e:
+        logger.error(f"Unexpected error in hent_bestillinger_for_periode: {str(e)}")
+        return pd.DataFrame()
 
 def hent_statistikk_data(bestillinger: pd.DataFrame) -> Dict[str, Any]:
     """
@@ -325,7 +306,7 @@ def hent_statistikk_data(bestillinger: pd.DataFrame) -> Dict[str, Any]:
 # READ for map
 def hent_dagens_bestillinger():
     today = datetime.now(TZ).date()
-    with get_tunbroyting_connection() as conn:
+    with get_db_connection('tunbroyting') as conn:
         query = """
         SELECT * FROM tunbroyting_bestillinger 
         WHERE date(ankomst_dato) = ? 
@@ -341,7 +322,7 @@ def hent_dagens_bestillinger():
 
 def hent_aktive_bestillinger():
     today = datetime.now(TZ).date()
-    with get_tunbroyting_connection() as conn:
+    with get_db_connection('tunbroyting') as conn:
         query = """
         SELECT id, bruker, ankomst_dato, avreise_dato, abonnement_type
         FROM tunbroyting_bestillinger 
@@ -357,7 +338,7 @@ def hent_aktive_bestillinger():
 
 def hent_bestilling(bestilling_id):
     try:
-        with get_tunbroyting_connection() as conn:
+        with get_db_connection('tunbroyting') as conn:
             query = "SELECT * FROM tunbroyting_bestillinger WHERE id = ?"
             df = pd.read_sql_query(query, conn, params=(bestilling_id,))
 
@@ -387,7 +368,7 @@ def hent_bestilling(bestilling_id):
 
 # def count_bestillinger():
 #     try:
-#         with get_tunbroyting_connection() as conn:
+#         with get_db_connection() as conn:
 #             cursor = conn.cursor()
 #             cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
 #             return cursor.fetchone()[0]
@@ -397,7 +378,7 @@ def hent_bestilling(bestilling_id):
 
 def get_max_bestilling_id():
     try:
-        with get_tunbroyting_connection() as conn:
+        with get_db_connection('tunbroyting') as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT MAX(id) FROM tunbroyting_bestillinger")
             max_id = cursor.fetchone()[0]
@@ -405,19 +386,8 @@ def get_max_bestilling_id():
     except Exception as e:
         logger.error("Feil ved henting av maksimum bestillings-ID: %s", str(e))
         return 0
-
 # update
 def oppdater_bestilling(bestilling_id: int, nye_data: Dict[str, Any]) -> bool:
-    """
-    Oppdaterer en eksisterende tunbrøytingsbestilling i databasen.
-
-    Args:
-        bestilling_id (int): ID-en til bestillingen som skal oppdateres
-        nye_data (Dict[str, Any]): En dictionary med de nye dataene for bestillingen
-
-    Returns:
-        bool: True hvis oppdateringen var vellykket, False ellers
-    """
     try:
         query = """UPDATE tunbroyting_bestillinger
                    SET bruker = ?, ankomst_dato = ?, ankomst_tid = ?, 
@@ -432,7 +402,7 @@ def oppdater_bestilling(bestilling_id: int, nye_data: Dict[str, Any]) -> bool:
             nye_data["abonnement_type"],
             bestilling_id,
         )
-        with get_tunbroyting_connection() as conn:
+        with get_db_connection('tunbroyting') as conn:
             c = conn.cursor()
             c.execute(query, params)
             conn.commit()
@@ -451,17 +421,8 @@ def oppdater_bestilling(bestilling_id: int, nye_data: Dict[str, Any]) -> bool:
 
 # delete
 def slett_bestilling(bestilling_id: int) -> bool:
-    """
-    Sletter en tunbrøytingsbestilling fra databasen.
-
-    Args:
-        bestilling_id (int): ID-en til bestillingen som skal slettes
-
-    Returns:
-        bool: True hvis slettingen var vellykket, False ellers
-    """
     try:
-        with get_tunbroyting_connection() as conn:
+        with get_db_connection('tunbroyting') as conn:
             c = conn.cursor()
             c.execute(
                 "DELETE FROM tunbroyting_bestillinger WHERE id = ?", (bestilling_id,)
@@ -485,7 +446,7 @@ def slett_bestilling(bestilling_id: int) -> bool:
 # teller bestillinger i handle_tun
 def count_bestillinger():
     try:
-        with get_tunbroyting_connection() as conn:
+        with get_db_connection('tunbroyting') as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
             return cursor.fetchone()[0]
@@ -627,6 +588,8 @@ def handle_tun():
             st.error(
                 "Kunne ikke slette bestillingen. Vennligst sjekk ID og prøv igjen."
             )
+    # Kunderedigeringskomponent
+    customer_edit_component()
             
 # def handle_tun():
 #     st.title("Håndter tunbestillinger")
@@ -876,52 +839,52 @@ def vis_tunbestillinger_for_periode():
                 mime="text/csv",
             )
         
-# statisk visning av tunbestillinger for bestill_tunbroyting
-def vis_daglige_broytinger(bestillinger, start_date, end_date):
-    if bestillinger.empty:
-        st.write("Ingen data tilgjengelig for å vise daglige brøytinger.")
-        return
+# # statisk visning av tunbestillinger for bestill_tunbroyting
+# def vis_daglige_broytinger(bestillinger, start_date, end_date):
+#     if bestillinger.empty:
+#         st.write("Ingen data tilgjengelig for å vise daglige brøytinger.")
+#         return
 
-    # Konverter 'ankomst_dato' til datetime hvis det ikke allerede er det, og så til date
-    bestillinger["ankomst_dato"] = pd.to_datetime(bestillinger["ankomst_dato"], errors="coerce").dt.date
+#     # Konverter 'ankomst_dato' til datetime hvis det ikke allerede er det, og så til date
+#     bestillinger["ankomst_dato"] = pd.to_datetime(bestillinger["ankomst_dato"], errors="coerce").dt.date
 
-    # Hent alle unike brukere med årsabonnement
-    yearly_subscribers = bestillinger[bestillinger["abonnement_type"] == "Årsabonnement"]["bruker"].unique()
+#     # Hent alle unike brukere med årsabonnement
+#     yearly_subscribers = bestillinger[bestillinger["abonnement_type"] == "Årsabonnement"]["bruker"].unique()
 
-    # Opprett en datoindeks for hele perioden
-    date_index = pd.date_range(start=start_date, end=end_date, freq='D')
+#     # Opprett en datoindeks for hele perioden
+#     date_index = pd.date_range(start=start_date, end=end_date, freq='D')
 
-    # Initialiser en DataFrame for alle datoer
-    all_dates_df = pd.DataFrame(index=date_index.date, columns=['antall'])
-    all_dates_df['antall'] = 0
+#     # Initialiser en DataFrame for alle datoer
+#     all_dates_df = pd.DataFrame(index=date_index.date, columns=['antall'])
+#     all_dates_df['antall'] = 0
 
-    # Teller bestillinger per dag
-    daily_counts = bestillinger.groupby("ankomst_dato").size()
+#     # Teller bestillinger per dag
+#     daily_counts = bestillinger.groupby("ankomst_dato").size()
 
-    # Legg til daglige tellinger og årlige abonnenter
-    for date in date_index:
-        date = date.date()
-        if date in daily_counts.index:
-            all_dates_df.loc[date, 'antall'] += daily_counts[date]
+#     # Legg til daglige tellinger og årlige abonnenter
+#     for date in date_index:
+#         date = date.date()
+#         if date in daily_counts.index:
+#             all_dates_df.loc[date, 'antall'] += daily_counts[date]
         
-        if date.weekday() == 4 and (date.month >= 11 or date.month <= 4):  # Fredag i vintersesongen
-            all_dates_df.loc[date, 'antall'] += len(yearly_subscribers)
+#         if date.weekday() == 4 and (date.month >= 11 or date.month <= 4):  # Fredag i vintersesongen
+#             all_dates_df.loc[date, 'antall'] += len(yearly_subscribers)
 
-    # Opprett et søylediagram
-    fig = px.bar(
-        all_dates_df.reset_index(),
-        x="index",
-        y="antall",
-        title="Oversikt over aktive bestillinger",
-        labels={"index": "Dato", "antall": "Antall brøytinger"},
-    )
+#     # Opprett et søylediagram
+#     fig = px.bar(
+#         all_dates_df.reset_index(),
+#         x="index",
+#         y="antall",
+#         title="Oversikt over aktive bestillinger",
+#         labels={"index": "Dato", "antall": "Antall brøytinger"},
+#     )
 
-    # Oppdater layout for bedre lesbarhet
-    fig.update_layout(hovermode="x unified")
-    fig.update_traces(hovertemplate="Dato: %{x}<br>Antall brøytinger: %{y}")
+#     # Oppdater layout for bedre lesbarhet
+#     fig.update_layout(hovermode="x unified")
+#     fig.update_traces(hovertemplate="Dato: %{x}<br>Antall brøytinger: %{y}")
 
-    # Vis grafen
-    st.plotly_chart(fig)
+#     # Vis grafen
+#     st.plotly_chart(fig)
 
     # # Vis dataene i en tabell i en kollapsbar seksjon
     # with st.expander("Vis antallet bestilinger i valgt periode i tabellform", expanded=False):
@@ -937,7 +900,7 @@ def vis_daglige_broytinger(bestillinger, start_date, end_date):
 
 # liste for tunkart-siden
 def vis_dagens_bestillinger():
-    st.subheader("Dagens bestillinger")
+    st.subheader("Dagens tunbestillinger")
     bestillinger = hent_bestillinger()
     dagens_bestillinger = filter_todays_bookings(bestillinger)
 
@@ -1000,15 +963,20 @@ def print_dataframe_info(df, name):
     print("---\n")
 
 def vis_tunbroyting_oversikt():
-    st.title("Oversikt over tunbestillinger")
+    st.title("Viktig info til brøytefirma og oversikt over tunbestillinger")
     st.info(
         """
-        Beskjeder til brøytefirma:
-        - Fredager er hoveddag for tunbrøyting. 
-        - Dere kan framskynde og rydde tun torsdag hvis værmeldingen tilsier stabilt vær fram til helgen.
+        - Legg ut Varsel hver gang det strøs, slik at 1) kundene vet at det er strødd og 2)FD kan fakturere for stikkveier.
+        - [Brøytekart](https://sartopo.com/m/J881)
+        - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
+        - [Tunkart - alle tun](https://t.ly/2ewsw)
+        - Liste over årsabonnenter, se nederst på siden. Tunkart bare for årsabonnement, [se her](https://t.ly/Rgrm_)
+        - [Beskjeder om tun](https://docs.google.com/spreadsheets/d/1XGwhza0YJsGMwiX9XtGRAG6OSg_PupA3DUsxKfbitkI/edit?usp=sharing)
+        - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
+        eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22)
         """
     )
-    st.info("Liste over årsabonnenter, se nederst på siden. Tunkart for årsabonnement, [se her](https://t.ly/Rgrm_)")
+    st.info("")
     
     bestillinger = hent_bestillinger()
     print_dataframe_info(bestillinger, "Alle bestillinger")
@@ -1187,15 +1155,11 @@ def display_bookings(user_id):
 
 
 #Visning til brukerne for å vise statistikk og aktivitet i hyttegrenda - på siden for bestillinger av tunbrøyting
-
 def vis_hyttegrend_aktivitet():
-    st.subheader("Aktive bestillinger av tunbrøyting per dag i hyttegrenda")
+    st.subheader("Aktive tunbestillinger i hyttegrenda")
     st.info(
-        """
-        37 hytter har årsabonnement og brøytes automatisk når det trengs, men kan i likhet med "Ukentlig" 
-        legge inn aktiv bestilling for å signalisere at man er på hytta. Siktemålet er å være ferdig med tunbrøyting 
-        på fredager innen kl 15. Store snøfall og/eller mange bestillinger, kan medføre forsinkelser.
-        """
+            "Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
+            "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
         )
     
     # Hent alle bestillinger
@@ -1210,42 +1174,113 @@ def vis_hyttegrend_aktivitet():
     sluttdato = dagens_dato + timedelta(days=7)
 
     # Initialiser en dictionary for å telle aktive bestillinger per dag
-    daglig_aktivitet = {dagen.date(): {'Ukentlig ved bestilling': 0, 'Årsabonnement': 0} 
+    daglig_aktivitet = {dagen.strftime('%d.%m'): {'Ukentlig ved bestilling': 0, 'Årsabonnement': 0} 
                         for dagen in pd.date_range(dagens_dato, sluttdato)}
 
     # Tell aktive bestillinger for hver dag
     for _, bestilling in alle_bestillinger.iterrows():
         ankomst_dato = bestilling['ankomst'].date()
         if bestilling['abonnement_type'] == 'Ukentlig ved bestilling':
-            # For 'Ukentlig ved bestilling', tell kun for ankomstdatoen hvis den er innenfor perioden
-            if ankomst_dato in daglig_aktivitet:
-                daglig_aktivitet[ankomst_dato]['Ukentlig ved bestilling'] += 1
+            if ankomst_dato.strftime('%d.%m') in daglig_aktivitet:
+                daglig_aktivitet[ankomst_dato.strftime('%d.%m')]['Ukentlig ved bestilling'] += 1
         else:  # 'Årsabonnement'
-            # For 'Årsabonnement', tell for hver dag fra ankomst til avreise (eller sluttdato) innenfor perioden
             avreise_dato = bestilling['avreise'].date() if pd.notnull(bestilling['avreise']) else sluttdato
             for dag in pd.date_range(max(ankomst_dato, dagens_dato), min(avreise_dato, sluttdato)):
-                if dag.date() in daglig_aktivitet:
-                    daglig_aktivitet[dag.date()]['Årsabonnement'] += 1
+                if dag.strftime('%d.%m') in daglig_aktivitet:
+                    daglig_aktivitet[dag.strftime('%d.%m')]['Årsabonnement'] += 1
 
     # Konverter til DataFrame for enklere visning
     aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index')
     aktivitet_df['Totalt'] = aktivitet_df['Ukentlig ved bestilling'] + aktivitet_df['Årsabonnement']
     aktivitet_df.index.name = 'Dato'
 
-    # Vis daglig aktivitet som tabell
-    st.table(aktivitet_df)
+    # Vis daglig aktivitet som tabell med fargekoding
+    st.write("Daglig oversikt over aktive bestillinger:")
+    st.dataframe(
+        aktivitet_df.style.background_gradient(cmap='Blues', subset=['Totalt']),
+        use_container_width=True,
+        height=300
+    )
 
-    # Vis daglig aktivitet som stolpediagram (kun totalen)
-    fig, ax = plt.subplots(figsize=(10, 6))
-    aktivitet_df['Totalt'].plot(kind='bar', ax=ax)
-    ax.set_xlabel('Dato')
-    ax.set_ylabel('Totalt antall bestillinger')
-    plt.xticks(rotation=45)
-    ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
-    plt.tight_layout()
-    st.pyplot(fig)
+    # # Vis daglig aktivitet som stolpediagram (kun totalen)
+    # fig, ax = plt.subplots(figsize=(10, 4))
+    # aktivitet_df['Totalt'].plot(kind='bar', ax=ax)
+    # ax.set_xlabel('Dato')
+    # ax.set_ylabel('Totalt antall bestillinger')
+    # plt.xticks(rotation=45, ha='right')
+    # ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    # plt.tight_layout()
+    # st.pyplot(fig)
 
-    # Beregn og vis antall unike brukere
-    unike_brukere = alle_bestillinger['bruker'].nunique()
-    st.subheader("Antall unike brukere med bestillinger")
-    st.write(f"{unike_brukere} unike brukere har aktive bestillinger i denne perioden.")
+    # # Beregn og vis antall unike brukere og totalt antall bestillinger
+    # unike_brukere = alle_bestillinger['bruker'].nunique()
+    # total_bestillinger = aktivitet_df['Totalt'].sum()
+    
+    # col1, col2 = st.columns(2)
+    # with col1:
+    #     st.metric("Unike brukere med bestillinger", unike_brukere)
+    # with col2:
+    #     st.metric("Totalt antall bestillinger", int(total_bestillinger))
+
+    # if st.checkbox("Vis detaljert statistikk"):
+    #     st.write(aktivitet_df.describe())
+        
+# def vis_hyttegrend_aktivitet():
+#     st.subheader("Aktive bestillinger av tunbrøyting per dag i hyttegrenda")
+#     st.info(
+#         """
+#         Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser.
+#         """
+#         )
+    
+#     # Hent alle bestillinger
+#     alle_bestillinger = hent_bestillinger()
+
+#     if alle_bestillinger.empty:
+#         st.info("Ingen bestillinger funnet for perioden.")
+#         return
+
+#     # Definer datoperioden
+#     dagens_dato = datetime.now(TZ).date()
+#     sluttdato = dagens_dato + timedelta(days=7)
+
+#     # Initialiser en dictionary for å telle aktive bestillinger per dag
+#     daglig_aktivitet = {dagen.date(): {'Ukentlig ved bestilling': 0, 'Årsabonnement': 0} 
+#                         for dagen in pd.date_range(dagens_dato, sluttdato)}
+
+#     # Tell aktive bestillinger for hver dag
+#     for _, bestilling in alle_bestillinger.iterrows():
+#         ankomst_dato = bestilling['ankomst'].date()
+#         if bestilling['abonnement_type'] == 'Ukentlig ved bestilling':
+#             # For 'Ukentlig ved bestilling', tell kun for ankomstdatoen hvis den er innenfor perioden
+#             if ankomst_dato in daglig_aktivitet:
+#                 daglig_aktivitet[ankomst_dato]['Ukentlig ved bestilling'] += 1
+#         else:  # 'Årsabonnement'
+#             # For 'Årsabonnement', tell for hver dag fra ankomst til avreise (eller sluttdato) innenfor perioden
+#             avreise_dato = bestilling['avreise'].date() if pd.notnull(bestilling['avreise']) else sluttdato
+#             for dag in pd.date_range(max(ankomst_dato, dagens_dato), min(avreise_dato, sluttdato)):
+#                 if dag.date() in daglig_aktivitet:
+#                     daglig_aktivitet[dag.date()]['Årsabonnement'] += 1
+
+#     # Konverter til DataFrame for enklere visning
+#     aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index')
+#     aktivitet_df['Totalt'] = aktivitet_df['Ukentlig ved bestilling'] + aktivitet_df['Årsabonnement']
+#     aktivitet_df.index.name = 'Dato'
+
+#     # Vis daglig aktivitet som tabell
+#     st.table(aktivitet_df)
+
+#     # Vis daglig aktivitet som stolpediagram (kun totalen)
+#     fig, ax = plt.subplots(figsize=(10, 6))
+#     aktivitet_df['Totalt'].plot(kind='bar', ax=ax)
+#     ax.set_xlabel('Dato')
+#     ax.set_ylabel('Totalt antall bestillinger')
+#     plt.xticks(rotation=45)
+#     ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+#     plt.tight_layout()
+#     st.pyplot(fig)
+
+#     # Beregn og vis antall unike brukere
+#     unike_brukere = alle_bestillinger['bruker'].nunique()
+#     st.subheader("Antall unike brukere med bestillinger")
+#     st.write(f"{unike_brukere} unike brukere har aktive bestillinger i denne perioden.")

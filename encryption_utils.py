@@ -1,4 +1,5 @@
 import streamlit as st
+#import Fernet
 
 def encrypt_data(data):
     f = Fernet(st.secrets["encryption_key"])

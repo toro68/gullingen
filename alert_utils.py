@@ -97,6 +97,16 @@ def get_alerts(only_today: bool = False, include_expired: bool = False) -> pd.Da
     logger.debug(f"Fetched alerts: {df.to_dict('records')}")
     return df
 
+@st.cache_data(ttl=60)  # Cache data for 60 seconds
+def get_active_alerts():
+    alerts = get_alerts(only_today=False, include_expired=False)
+    if not alerts.empty:
+        alerts['datetime'] = pd.to_datetime(alerts['datetime'])
+        alerts['expiry_date'] = pd.to_datetime(alerts['expiry_date'])
+        return alerts.to_dict('records')
+    else:
+        return []
+
 def update_alert(alert_id: int, new_type: str, new_message: str, new_expiry_date: str, 
                  new_target_group: List[str], new_status: str, updated_by: str) -> bool:
     query = """
@@ -152,7 +162,7 @@ def handle_alerts_ui():
     st.info(
         """
         Her kan brøytefirma og Fjellbergsskardet Drift opprette varsler. 
-        Varslene vil vise øverst på hovedsiden "Værdata". Utløpsdato for varselet er automatisk satt til dagens dato,
+        Utløpsdato for varselet er automatisk satt til dagens dato,
         men kan forlenges ved å velge seinere dato.
         """
         )
@@ -162,14 +172,18 @@ def handle_alerts_ui():
     # display_active_alerts()
     display_all_alerts()
 
-def display_active_alerts():
-    st.subheader("Dagens aktive varsler")
-    todays_alerts = get_alerts(only_today=True)
-    if todays_alerts.empty:
-        st.info("Ingen aktive varsler for i dag.")
-    else:
-        for _, alert in todays_alerts.iterrows():
-            st.warning(f"{alert['type']}: {alert['comment']}")
+def display_active_alerts(only_today=False):
+    try:
+        alerts = get_alerts(only_today=only_today)
+        if alerts.empty:
+            st.info("Ingen aktive varsler for øyeblikket." if only_today else "Ingen aktive varsler.")
+        else:
+            st.subheader("Dagens aktive varsler" if only_today else "Aktive varsler fra brøytefirma / FD")
+            for _, alert in alerts.iterrows():
+                st.warning(f"{alert['type']}: {alert['comment']}")
+    except Exception as e:
+        st.error(f"Feil ved visning av aktive alarmer: {str(e)}")
+        logger.error(f"Uventet feil i display_active_alerts: {str(e)}", exc_info=True)
 
 def display_all_alerts():
     st.subheader("Rediger varsler")

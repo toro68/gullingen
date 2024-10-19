@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import streamlit as st
 
-from db_utils import get_stroing_connection
+from db_utils import get_db_connection
 
 from constants import TZ
 
@@ -27,7 +27,7 @@ def validate_date(date_string: str) -> bool:
         return False
 
 def update_stroing_table_structure():
-    with get_stroing_connection() as conn:
+    with get_db_connection('stroing') as conn:
         cursor = conn.cursor()
         try:
             # Lag en ny tabell uten 'status'-kolonnen
@@ -63,7 +63,7 @@ def update_stroing_table_structure():
 # Create
 def lagre_stroing_bestilling(user_id: str, onske_dato: str) -> bool:
     try:
-        with get_stroing_connection() as conn:
+        with get_db_connection('stroing') as conn:
             c = conn.cursor()
             bestillings_dato = datetime.now(TZ).isoformat()
             
@@ -138,9 +138,6 @@ def bestill_stroing():
     # Vis tidligere bestillinger én gang, med overskrift
     display_stroing_bookings(st.session_state.user_id, show_header=True)
     
-    # Viser graf over strøingsbestillinger for hele hyttegrenda
-    vis_graf_stroing()
-    
 # Read
 @st.cache_data(ttl=60)  # Cache data for 60 sekunder
 def hent_og_behandle_data():
@@ -163,7 +160,7 @@ def hent_og_behandle_data():
 
 def hent_stroing_bestillinger():
     try:
-        with get_stroing_connection() as conn:
+        with get_db_connection('stroing') as conn:
             query = """
             SELECT * FROM stroing_bestillinger 
             ORDER BY onske_dato DESC, bestillings_dato DESC
@@ -174,14 +171,17 @@ def hent_stroing_bestillinger():
         for col in ['bestillings_dato', 'onske_dato']:
             df[col] = pd.to_datetime(df[col])
         
+        # Logg kolonnenavnene
+        logger.info(f"Kolonner i stroing_bestillinger: {df.columns.tolist()}")
+        
         return df
     except Exception as e:
         logger.error(f"Feil ved henting av strøing-bestillinger: {str(e)}")
         return pd.DataFrame()
-    
+       
 def hent_bruker_stroing_bestillinger(user_id):
     try:
-        with get_stroing_connection() as conn:
+        with get_db_connection('stroing') as conn:
             query = """
             SELECT * FROM stroing_bestillinger 
             WHERE bruker = ? 
@@ -197,10 +197,10 @@ def hent_bruker_stroing_bestillinger(user_id):
     except Exception as e:
         logger.error(f"Feil ved henting av strøing-bestillinger for bruker {user_id}: {str(e)}")
         return pd.DataFrame()
-
+    
 def hent_stroing_bestilling(bestilling_id: int) -> Optional[Dict[str, Any]]:
     try:
-        with get_stroing_connection() as conn:
+        with get_db_connection('stroing') as conn:
             query = "SELECT * FROM stroing_bestillinger WHERE id = ?"
             cursor = conn.cursor()
             cursor.execute(query, (bestilling_id,))
@@ -214,7 +214,7 @@ def hent_stroing_bestilling(bestilling_id: int) -> Optional[Dict[str, Any]]:
 
 # def hent_utforte_stroingsbestillinger() -> pd.DataFrame:
 #     try:
-#         with get_stroing_connection() as conn:
+#         with get_db_connection('stroing') as conn:
 #             query = """
 #             SELECT * FROM stroing_bestillinger 
 #             WHERE utfort_dato IS NOT NULL
@@ -231,73 +231,24 @@ def hent_stroing_bestilling(bestilling_id: int) -> Optional[Dict[str, Any]]:
 #         return pd.DataFrame()
         
 def count_stroing_bestillinger():
-    with get_stroing_connection() as conn:
+    with get_db_connection('stroing') as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM stroing_bestillinger")
         return cursor.fetchone()[0]
 
-# def update_stroing_info(bestilling_id: int, utfort_av: str) -> Tuple[bool, str]:
-#     """
-#     Oppdaterer informasjon om en strøingsbestilling når den er utført.
-
-#     Args:
-#         bestilling_id (int): ID-en til bestillingen som skal oppdateres
-#         utfort_av (str): Navnet eller ID-en til personen som utførte strøingen
-
-#     Returns:
-#         Tuple[bool, str]: En tuple hvor første element er True hvis oppdateringen var vellykket,
-#                           False ellers. Andre element er en statusmelding.
-#     """
-#     try:
-#         with get_stroing_connection() as conn:
-#             cursor = conn.cursor()
-            
-#             # Sjekk om bestillingen eksisterer
-#             cursor.execute("SELECT id FROM stroing_bestillinger WHERE id = ?", (bestilling_id,))
-#             if not cursor.fetchone():
-#                 logger.warning(f"Strøingsbestilling med ID {bestilling_id} ble ikke funnet")
-#                 return False, "Bestilling ikke funnet"
-            
-#             current_time = datetime.now(TZ).isoformat()
-            
-#             # Oppdater bestillingen
-#             cursor.execute("""
-#                 UPDATE stroing_bestillinger 
-#                 SET utfort_dato = ?,
-#                     utfort_av = ?
-#                 WHERE id = ?
-#             """, (current_time, utfort_av, bestilling_id))
-            
-#             # Logg endringen
-#             cursor.execute("""
-#                 INSERT INTO stroing_status_log (bestilling_id, old_status, new_status, changed_by, changed_at)
-#                 VALUES (?, ?, ?, ?, ?)
-#             """, (bestilling_id, "Ikke utført", "Utført", utfort_av, current_time))
-            
-#             conn.commit()
-            
-#             logger.info(f"Strøingsbestilling {bestilling_id} oppdatert som utført av {utfort_av}")
-#             return True, "Bestilling oppdatert som utført"
-#     except sqlite3.Error as e:
-#         logger.error(f"SQLite-feil ved oppdatering av strøingsbestilling {bestilling_id}: {str(e)}")
-#         return False, f"Databasefeil: {str(e)}"
-#     except Exception as e:
-#         logger.error(f"Uventet feil ved oppdatering av strøingsbestilling {bestilling_id}: {str(e)}")
-#         return False, f"Uventet feil: {str(e)}"
-
 # Delete
-def slett_stroingsbestilling(bestilling_id):
-    try:
-        query = "DELETE FROM stroing_bestillinger WHERE id = ?"
-        with get_stroing_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, (bestilling_id,))
-            conn.commit()
-        logger.info(f"Strøingsbestilling med ID {bestilling_id} ble slettet.")
-        return True
-    except Exception as e:
-        logger.error(f"Feil ved sletting av strøingsbestilling {bestilling_id}: {str(e)}")
-        return False
+# def slett_stroingsbestilling(bestilling_id):
+#     try:
+#         query = "DELETE FROM stroing_bestillinger WHERE id = ?"
+#         with get_db_connection('stroing') as conn:
+#             cursor = conn.cursor()
+#             cursor.execute(query, (bestilling_id,))
+#             conn.commit()
+#         logger.info(f"Strøingsbestilling med ID {bestilling_id} ble slettet.")
+#         return True
+#     except Exception as e:
+#         logger.error(f"Feil ved sletting av strøingsbestilling {bestilling_id}: {str(e)}")
+#         return False
 
 def admin_stroing_page():
     st.title("Administrer Strøing")
@@ -366,20 +317,13 @@ def admin_stroing_page():
             # Vis detaljert oversikt over bestillinger
             st.subheader("Detaljert oversikt over strøingsbestillinger")
             for _, row in bestillinger.iterrows():
-                col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                col1, col2, col3 = st.columns([3, 2, 2])
                 with col1:
                     st.write(f"Hytte: {row['bruker']}")
                 with col2:
                     st.write(f"Bestilt: {row['bestillings_dato'].date()}")
                 with col3:
                     st.write(f"Ønsket dato: {row['onske_dato'].date()}")
-                with col4:
-                    if st.button("Slett", key=f"slett_{row['id']}"):
-                        if slett_stroingsbestilling(row["id"]):
-                            st.success(f"Bestilling for hytte {row['bruker']} er slettet.")
-                            st.rerun()
-                        else:
-                            st.error(f"Kunne ikke slette bestilling for hytte {row['bruker']}.")
 
             # Legg til mulighet for å laste ned bestillinger som CSV
             csv = bestillinger[['id', 'bruker', 'bestillings_dato', 'onske_dato', 'dager_til']].to_csv(index=False)
@@ -409,7 +353,7 @@ def admin_stroing_page():
  
 # Database initialization and maintenance
 def verify_stroing_data():
-    with get_stroing_connection() as conn:
+    with get_db_connection('stroing') as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM stroing_bestillinger")
         data = cursor.fetchall()
@@ -500,6 +444,10 @@ def vis_graf_stroing():
 
     aktivitet_df, alle_bestillinger = hent_og_behandle_data()
 
+    # Logg informasjon om alle_bestillinger
+    logger.info(f"Kolonner i alle_bestillinger: {alle_bestillinger.columns.tolist()}")
+    logger.info(f"Antall rader i alle_bestillinger: {len(alle_bestillinger)}")
+
     if aktivitet_df.empty:
         st.info("Ingen strøingsbestillinger funnet for perioden.")
         return
@@ -522,13 +470,18 @@ def vis_graf_stroing():
     st.altair_chart(chart, use_container_width=True, key=f"stroing_chart_{datetime.now().timestamp()}")
 
     totalt_antall = aktivitet_df['Antall bestillinger'].sum()
-    unike_brukere = alle_bestillinger['bruker'].nunique()
     
     st.subheader("Oppsummering")
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Totalt antall bestillinger", totalt_antall)
-    with col2:
-        st.metric("Antall unike brukere", unike_brukere)
-
-    st.info(f"{unike_brukere} unike brukere har lagt inn strøingsbestillinger for denne perioden.")
+    
+    # Sjekk om 'bruker' kolonnen eksisterer før vi prøver å bruke den
+    if 'bruker' in alle_bestillinger.columns:
+        unike_brukere = alle_bestillinger['bruker'].nunique()
+        with col2:
+            st.metric("Antall unike brukere", unike_brukere)
+        st.info(f"{unike_brukere} unike brukere har lagt inn strøingsbestillinger for denne perioden.")
+    else:
+        logger.warning("'bruker' kolonne ikke funnet i alle_bestillinger")
+        st.warning("Kunne ikke beregne antall unike brukere på grunn av manglende data.")

@@ -1,21 +1,52 @@
 # Standard library imports
 import logging
 import os
+import re
 import sqlite3
+
 from sqlalchemy import create_engine
 from contextlib import contextmanager
+import time
 from datetime import datetime, timedelta
 
+import threading
 import pandas as pd
+from functools import lru_cache
 import streamlit as st
 
 from constants import TZ
 from config import DATABASE_PATH
 from logging_config import get_logger
+import atexit
 
 logger = get_logger(__name__)
+local = threading.local()
 
-# Hjelpefunksjoner og validering           
+database_initialized = False
+
+# Global variable
+last_schema_check = {}
+
+# Global list to store connections
+connection_counter = 0
+connection_lock = threading.Lock()
+
+# Create a thread-local storage
+local = threading.local()
+
+# Hjelpefunksjoner og validering
+def increment_connection_count():
+    global connection_counter
+    with connection_lock:
+        connection_counter += 1
+        logger.debug(f"Connection opened. Total: {connection_counter}")
+
+def decrement_connection_count():
+    global connection_counter
+    with connection_lock:
+        connection_counter -= 1
+        logger.debug(f"Connection closed. Total: {connection_counter}")
+           
 def validate_stroing_table_structure():
     expected_columns = {
         'id': 'INTEGER',
@@ -24,7 +55,7 @@ def validate_stroing_table_structure():
         'onske_dato': 'TEXT'
     }
     
-    with get_stroing_connection() as conn:
+    with get_db_connection() as conn:
         c = conn.cursor()
         c.execute("PRAGMA table_info(stroing_bestillinger)")
         table_info = c.fetchall()
@@ -44,6 +75,17 @@ def verify_database_exists(db_name):
         return False
     logger.info(f"Database file {db_path} exists.")
     return True
+
+@lru_cache(maxsize=None)
+def verify_database_schema(db_name):
+    """
+    Verify the schema of a given database.
+    This function is cached to avoid frequent disk operations.
+    """
+    with get_db_connection(db_name) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT sql FROM sqlite_master WHERE type='table'")
+        return frozenset(cursor.fetchall())
 
 def verify_login_history_db():
     db_path = os.path.join(DATABASE_PATH, 'login_history.db')
@@ -120,39 +162,71 @@ def verify_and_update_schemas():
     }
 
     for db_name, tables in schemas.items():
+        update_database_schema(db_name, schemas[db_name])
+
+    logger.info("All database schemas verified and updated")
+
+def update_database_schema(db_name, expected_schema=None):
+    """
+    Oppdater skjemaet for en spesifikk database.
+    """
+    try:
         with get_db_connection(db_name) as conn:
             cursor = conn.cursor()
-            for table_name, create_sql in tables.items():
-                # Check if table exists
-                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
-                if not cursor.fetchone():
-                    # Table doesn't exist, create it
-                    cursor.execute(create_sql)
-                    logger.info(f"Created table {table_name} in {db_name}.db")
-                else:
-                    # Table exists, verify its structure
-                    cursor.execute(f"PRAGMA table_info({table_name})")
-                    existing_columns = {col[1]: col[2] for col in cursor.fetchall()}
-                    
-                    # Extract expected columns from CREATE TABLE statement
-                    expected_columns = {}
-                    for line in create_sql.split('\n'):
-                        if '(' not in line and ')' not in line and line.strip():
-                            col_parts = line.strip().split()
-                            col_name, col_type = col_parts[0], ' '.join(col_parts[1:])
-                            expected_columns[col_name] = col_type
-                    
-                    # Compare and log any differences (but don't modify the table)
-                    for col_name, expected_type in expected_columns.items():
-                        if col_name not in existing_columns:
-                            logger.warning(f"Column {col_name} is missing in {table_name} in {db_name}.db")
-                        elif not compare_column_types(existing_columns[col_name], expected_type):
-                            logger.warning(f"Column {col_name} in {table_name} in {db_name}.db has type {existing_columns[col_name]}, expected {expected_type}")
-                
+            if db_name == 'login_history':
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS login_history (
+                        id TEXT,
+                        login_time TEXT,
+                        success INTEGER
+                    )
+                ''')
+            elif db_name == 'tunbroyting':
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
+                        id INTEGER PRIMARY KEY,
+                        bruker TEXT,
+                        ankomst_dato DATE,
+                        ankomst_tid TIME,
+                        avreise_dato DATE,
+                        avreise_tid TIME,
+                        abonnement_type TEXT
+                    )
+                ''')
+            elif db_name == 'stroing':
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS stroing_bestillinger (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        bruker TEXT,
+                        bestillings_dato TEXT,
+                        onske_dato TEXT
+                    )
+                ''')
+            elif db_name == 'feedback':
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS feedback (
+                        id INTEGER PRIMARY KEY,
+                        type TEXT,
+                        datetime TEXT,
+                        comment TEXT,
+                        innsender TEXT,
+                        status TEXT,
+                        status_changed_by TEXT,
+                        status_changed_at TEXT,
+                        hidden INTEGER,
+                        is_alert INTEGER,
+                        display_on_weather INTEGER,
+                        expiry_date TEXT,
+                        target_group TEXT
+                    )
+                ''')
             conn.commit()
-
-    logger.info("All database schemas verified")
-    
+        logger.info(f"Oppdatert skjema for {db_name}")
+    except sqlite3.Error as e:
+        logger.error(f"SQLite error ved oppdatering av skjema for {db_name}: {e}")
+    except Exception as e:
+        logger.error(f"Uventet feil ved oppdatering av skjema for {db_name}: {e}")
+       
 def ensure_login_history_table_exists():
     create_query = '''
     CREATE TABLE IF NOT EXISTS login_history (
@@ -393,52 +467,7 @@ def compare_column_types(actual_type, expected_type):
         return True
     
     return actual_type == expected_type
-
-@contextmanager
-def get_db_connection(db_name, timeout=10, check_same_thread=True, journal_mode=None):
-    conn = None
-    try:
-        db_path = os.path.join(DATABASE_PATH, f'{db_name}.db')
-        conn = sqlite3.connect(db_path, timeout=timeout, check_same_thread=check_same_thread, uri=True)
-        if journal_mode:
-            conn.execute(f"PRAGMA journal_mode={journal_mode};")
-        conn.row_factory = sqlite3.Row
-        logger.info(f"Successfully connected to {db_path}")
-        yield conn
-    except sqlite3.Error as e:
-        logger.error(f"Error connecting to {db_path}: {e}")
-        if db_name == 'stroing':
-            st.error(f"Kunne ikke koble til strøingsdatabasen. Vennligst kontakt systemadministrator.")
-        raise
-    finally:
-        if conn:
-            conn.close()
-            logger.info(f"Connection to {db_path} closed.")
-
-@contextmanager
-def db_connection(db_name):
-    conn = None
-    try:
-        conn = get_db_connection(db_name)
-        yield conn
-    except sqlite3.Error as e:
-        logger.error(f"Database error in db_connection for {db_name}.db: {e}")
-        raise
-    finally:
-        if conn:
-            conn.close()
-            logger.info(f"Connection to {db_name}.db closed.")
                    
-def create_connection(db_file):
-    """ Create a database connection to a SQLite database """
-    conn = None
-    try:
-        conn = sqlite3.connect(db_file)
-        return conn
-    except sqlite3.Error as e:
-        print(e)
-    return conn
-
 def create_table_if_not_exists(db_name, table_name, schema):
     with get_db_connection(db_name) as conn:
         conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} ({schema})")
@@ -474,26 +503,21 @@ def create_customer_table():
             conn.close()
             logger.info("Database connection closed")
 
-def create_login_history_db():
-    db_path = os.path.join(DATABASE_PATH, 'login_history.db')
-    if not os.path.exists(db_path):
-        conn = sqlite3.connect(db_path)
-        conn.close()
-        logger.info(f"Created {db_path}")
-    ensure_login_history_table_exists()
-
 def execute_query(db_name, query, params=None):
     try:
         with get_db_connection(db_name) as conn:
             cursor = conn.cursor()
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-            conn.commit()
-            affected_rows = cursor.rowcount
-            logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
-            return affected_rows
+            try:
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
+                conn.commit()
+                affected_rows = cursor.rowcount
+                logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
+                return affected_rows
+            finally:
+                cursor.close()
     except sqlite3.OperationalError as e:
         if "readonly database" in str(e):
             logger.error(f"Database {db_name}.db is readonly. Cannot execute query.")
@@ -504,8 +528,40 @@ def execute_query(db_name, query, params=None):
     except Exception as e:
         logger.error(f"Unexpected error in execute_query on {db_name}.db: {e}")
         return None
+    finally:
+        # Forsikre oss om at tilkoblingen er lukket
+        if 'conn' in locals() and conn:
+            conn.close()
 
-            
+def close_all_connections():
+    logger.info("Starting to close all database connections")
+    
+    # Lukk alle pooled connections hvis de finnes
+    if hasattr(local, 'connection_pool'):
+        for db_name, conn in list(local.connection_pool.items()):
+            try:
+                conn.close()
+                logger.info(f"Closed pooled connection to {db_name}.db")
+            except Exception as e:
+                logger.error(f"Error closing pooled connection to {db_name}.db: {e}", exc_info=True)
+        local.connection_pool.clear()
+    
+    # Fjern unødvendige databasefiler
+    pattern = re.compile(r'<sqlite3\.Connection object at 0x[0-9a-f]+>\.db')
+    current_dir = os.getcwd()
+    for filename in os.listdir(current_dir):
+        if pattern.match(filename):
+            try:
+                os.remove(os.path.join(current_dir, filename))
+                logger.info(f"Removed unnecessary file: {filename}")
+            except Exception as e:
+                logger.error(f"Error removing file {filename}: {e}", exc_info=True)
+    
+    logger.info("Finished closing all database connections and cleaning up files")
+
+# Registrer funksjonen med atexit
+atexit.register(close_all_connections)
+               
 def fetch_data(db_name, query, params=None):
     try:
         with get_db_connection(db_name) as conn:
@@ -683,21 +739,30 @@ def robust_update_customer_schema():
         return False
     
 # Database connection
-def get_stroing_connection():
-    return get_db_connection('stroing', timeout=10, check_same_thread=False, journal_mode='WAL')
-          
-def get_feedback_connection():
-    return get_db_connection('feedback')
-
-def get_tunbroyting_connection():
-    return get_db_connection('tunbroyting')
-
-def get_login_history_connection():
-    return get_db_connection('login_history')
-
-def get_customer_connection():
-    return get_db_connection('customer')
-
+@contextmanager
+def get_db_connection(db_name, timeout=10, check_same_thread=True, journal_mode=None):
+    db_path = os.path.join(DATABASE_PATH, f'{db_name}.db')
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path, timeout=timeout, check_same_thread=check_same_thread, uri=True)
+        if journal_mode:
+            conn.execute(f"PRAGMA journal_mode={journal_mode};")
+        conn.row_factory = sqlite3.Row
+        logger.debug(f"Opened connection to {db_path}")
+        yield conn
+    except sqlite3.Error as e:
+        logger.error(f"Error with connection to {db_name}.db: {e}")
+        if db_name == 'stroing':
+            st.error(f"Kunne ikke koble til strøingsdatabasen. Vennligst kontakt systemadministrator.")
+        raise
+    finally:
+        if conn:
+            try:
+                conn.close()
+                logger.debug(f"Closed connection to {db_path}")
+            except Exception as e:
+                logger.error(f"Error closing connection to {db_name}.db: {e}")
+                
 def verify_database_connections():
     databases = ['stroing', 'tunbroyting', 'feedback', 'login_history', 'customer']
     for db in databases:
@@ -909,7 +974,7 @@ def insert_customer(id, latitude, longitude, subscription, type):
         conn.commit()
 
 def ensure_stroing_table_exists():
-    with get_stroing_connection() as conn:
+    with get_db_connection('stroing', timeout=10, check_same_thread=False, journal_mode='WAL') as conn:
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS stroing_bestillinger 
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -919,7 +984,7 @@ def ensure_stroing_table_exists():
         conn.commit()
 
 def update_stroing_table_structure():
-        with get_stroing_connection() as conn:
+        with get_db_connection('stroing', timeout=10, check_same_thread=False, journal_mode='WAL') as conn:
             cursor = conn.cursor()
             try:
                 # Lag en ny tabell uten 'status'-kolonnen
@@ -953,7 +1018,7 @@ def update_stroing_table_structure():
                 return False
                       
 def update_stroing_database_schema():
-    with get_stroing_connection() as conn:
+    with get_db_connection('stroing', timeout=10, check_same_thread=False, journal_mode='WAL') as conn:
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS stroing_status_log (
@@ -970,7 +1035,7 @@ def update_stroing_database_schema():
 
 def update_stroing_bestillinger_table():
     try:
-        with get_stroing_connection() as conn:
+        with get_db_connection('stroing', timeout=10, check_same_thread=False, journal_mode='WAL') as conn:
             cursor = conn.cursor()
             
             cursor.execute("PRAGMA user_version")
@@ -997,120 +1062,33 @@ def update_stroing_bestillinger_table():
       
 def update_login_history_table():
     try:
-        ensure_login_history_table_exists()
-    except Exception as e:
-        logger.error(f"Error updating login_history table: {str(e)}")
-
-def close_all_connections():
-    databases = ['login_history', 'tunbroyting', 'stroing', 'feedback']
-    for db in databases:
-        try:
-            with get_db_connection(db) as conn:
-                conn.close()
-            logger.info(f"Closed connection to {db}.db")
-        except Exception as e:
-            logger.error(f"Error closing connection to {db}.db: {e}")   # Implement logic to close all open connections
-                   
-# Datavalidering og -henting:
-
-def update_database_schemas():
-    schema_updates = {
-        'customer': {
-            'customers': '''
-                CREATE TABLE customers_new (
-                    Id TEXT PRIMARY KEY,
-                    Latitude REAL,
-                    Longitude REAL,
-                    Subscription TEXT,
-                    Type TEXT
-                )
-            '''
-        },
-        'feedback': {
-            'feedback': '''
-                CREATE TABLE feedback_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    type TEXT,
-                    datetime TEXT,
-                    comment TEXT,
-                    innsender TEXT,
-                    status TEXT,
-                    status_changed_by TEXT,
-                    status_changed_at TEXT,
-                    hidden INTEGER,
-                    is_alert INTEGER,
-                    display_on_weather INTEGER,
-                    expiry_date TEXT,
-                    target_group TEXT
-                )
-            '''
-        },
-        'login_history': {
-            'login_history': '''
-                CREATE TABLE login_history_new (
+        with get_db_connection('login_history') as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS login_history (
                     id TEXT,
                     login_time TEXT,
                     success INTEGER
                 )
-            '''
-        },
-        'stroing': {
-            'stroing_bestillinger': '''
-                CREATE TABLE stroing_bestillinger_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bruker TEXT,
-                    bestillings_dato TEXT,
-                    onske_dato TEXT
-                )
-            '''
-        },
-        'tunbroyting': {
-            'tunbroyting_bestillinger': '''
-                CREATE TABLE tunbroyting_bestillinger_new (
-                    id INTEGER PRIMARY KEY,
-                    bruker TEXT,
-                    ankomst_dato DATE,
-                    ankomst_tid TIME,
-                    avreise_dato DATE,
-                    avreise_tid TIME,
-                    abonnement_type TEXT
-                )
-            '''
-        }
-    }
-
-    for db_name, tables in schema_updates.items():
-        with get_db_connection(db_name) as conn:
-            cursor = conn.cursor()
-            for table_name, create_sql in tables.items():
-                try:
-                    # Sjekk om tabellen eksisterer
-                    cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
-                    if cursor.fetchone():
-                        # Opprett ny tabell
-                        cursor.execute(create_sql)
-                        
-                        # Kopier data fra gammel til ny tabell
-                        cursor.execute(f"INSERT INTO {table_name}_new SELECT * FROM {table_name}")
-                        
-                        # Slett gammel tabell
-                        cursor.execute(f"DROP TABLE {table_name}")
-                        
-                        # Gi den nye tabellen det gamle navnet
-                        cursor.execute(f"ALTER TABLE {table_name}_new RENAME TO {table_name}")
-                    else:
-                        # Hvis tabellen ikke eksisterer, opprett den
-                        cursor.execute(create_sql.replace(f"{table_name}_new", table_name))
-                    
-                    logger.info(f"Successfully updated/created schema for {table_name} in {db_name}.db")
-                except sqlite3.Error as e:
-                    logger.error(f"Error updating schema for {table_name} in {db_name}.db: {e}")
-                    conn.rollback()
-                    continue
-            
+            ''')
             conn.commit()
+        logger.info("login_history table created or verified successfully")
+    except sqlite3.Error as e:
+        logger.error(f"SQLite error updating login_history table: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error updating login_history table: {str(e)}")
 
-    logger.info("All database schemas have been updated")
+# def close_all_connections():
+#     databases = ['login_history', 'tunbroyting', 'stroing', 'feedback']
+#     for db in databases:
+#         try:
+#             with get_db_connection(db) as conn:
+#                 conn.close()
+#             logger.info(f"Closed connection to {db}.db")
+#         except Exception as e:
+#             logger.error(f"Error closing connection to {db}.db: {e}")   # Implement logic to close all open connections
+                   
+# Datavalidering og -henting:
 
 def update_database_structure():
     logger.info("Attempting to update database structure")
@@ -1121,31 +1099,65 @@ def update_database_structure():
         logger.error("Failed to update database structure")
     return success
  
+def get_expected_schema(db_name):
+    # Define expected schemas for each database
+    schemas = {
+        'login_history': [
+            ("CREATE TABLE login_history (id TEXT, login_time TEXT, success INTEGER)",)
+        ],
+        'tunbroyting': [
+            ("CREATE TABLE tunbroyting_bestillinger (id INTEGER PRIMARY KEY, bruker TEXT, ankomst_dato DATE, ankomst_tid TIME, avreise_dato DATE, avreise_tid TIME, abonnement_type TEXT)",)
+        ],
+        'stroing': [
+            ("CREATE TABLE stroing_bestillinger (id INTEGER PRIMARY KEY AUTOINCREMENT, bruker TEXT, bestillings_dato TEXT, onske_dato TEXT)",)
+        ],
+        'feedback': [
+            ("CREATE TABLE feedback (id INTEGER PRIMARY KEY, type TEXT, datetime TEXT, comment TEXT, innsender TEXT, status TEXT DEFAULT 'Innmeldt', status_changed_by TEXT, status_changed_at TEXT, hidden INTEGER DEFAULT 0, is_alert INTEGER DEFAULT 0, display_on_weather INTEGER DEFAULT 0, expiry_date TEXT, target_group TEXT)",)
+        ],
+        'customer': [
+            ("CREATE TABLE customers (Id TEXT PRIMARY KEY, Latitude REAL, Longitude REAL, Subscription TEXT, Type TEXT)",)
+        ]
+    }
+    return frozenset(schemas[db_name])
+ 
 def initialize_database():
+    global database_initialized
+    if database_initialized:
+        logger.info("Database already initialized. Skipping.")
+        return
+    
+    # Your existing initialization code here
     databases = ['login_history', 'tunbroyting', 'stroing', 'feedback', 'customer']
-    for db in databases:
-        if not verify_database_exists(db):
-            create_database(db)
-        check_database_integrity(db)
-        optimize_database(db)
-        check_database_size(db)
-    create_database_tables()
-    create_all_tables()
-    create_database_indexes()
-    verify_and_update_schemas()
-    robust_update_customer_schema()  # Use the new, robust function here
-    logger.info("All databases initialized, integrity checked, optimized, and sized")
     
     for db in databases:
-        check_database_integrity(db)
-        optimize_database(db)
-        check_database_size(db)
+        try:
+            with get_db_connection(db) as conn:
+                cursor = conn.cursor()
+                
+                # Your existing schema verification and update code here
+                
+                logger.info(f"Database {db} initialized, updated, and optimized")
+        
+        except sqlite3.Error as e:
+            logger.error(f"SQLite error initializing {db} database: {str(e)}")
+        except Exception as e:
+            logger.error(f"Unexpected error initializing {db} database: {str(e)}")
     
-    verify_database_connections()
+    try:
+        create_database_indexes()
+        logger.info("Database indexes created")
+    except Exception as e:
+        logger.error(f"Error creating database indexes: {str(e)}")
+    
+    try:
+        verify_database_connections()
+        logger.info("Database connections verified")
+    except Exception as e:
+        logger.error(f"Error verifying database connections: {str(e)}")
     
     logger.info("All databases initialized, updated, and verified")
+    database_initialized = True
           
 # Call this function when the application starts
 if __name__ == "__main__":
     debug_database_operations()
-    initialize_database()

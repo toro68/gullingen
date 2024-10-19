@@ -12,6 +12,7 @@ import locale
 import uuid
 import traceback
 import base64
+import atexit
 
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo  # ZoneInfo is a subclass of tzinfo
@@ -22,10 +23,10 @@ from typing import List, Dict, Any, Optional, Tuple
 import numpy as np  # NumPy
 import pandas as pd  # Pandas
 import matplotlib.pyplot as plt
-import plotly.express as px  # Plotly Express
 import requests
 from statsmodels.nonparametric.smoothers_lowess import lowess  # Lowess Smoothing
 
+import plotly.express as px  # Plotly Express
 import plotly.graph_objects as go  # Plotly Graph Objects
 from plotly.subplots import make_subplots  # Plotly Subplots
 
@@ -36,57 +37,55 @@ from streamlit_option_menu import option_menu  # Streamlit Option Menu
 # Local imports
 from constants import TZ, STATUS_MAPPING, STATUS_COLORS
 
+#from weather_utils import get_weather_data
+
 # Database utilities
 from db_utils import (
-    update_database_schemas,
+    verify_and_update_schemas,
+    fetch_data,
     initialize_database,
     ensure_login_history_table_exists,
     debug_database_operations,
+    #close_all_connections
 )
+
 # Validation utilities
 from validation_utils import sanitize_input
 
 # Authentication and session management
-from auth_utils import (
-    check_session_timeout,
-    login_page
-)
+from auth_utils import check_session_timeout, login_page
 
 # Tunbrøyting utilities
 from tun_utils import (
     bestill_tunbroyting,
     handle_tun,
     vis_tunbroyting_oversikt,
+    hent_bruker_bestillinger,
+    vis_hyttegrend_aktivitet
 )
 
 # Map utilities
-from map_utils import (
-    display_live_plowmap
-)
+from map_utils import display_live_plowmap
 
 from customer_utils import (
-    get_customer_by_id, 
-    check_cabin_user_consistency, 
+    get_customer_by_id,
+    check_cabin_user_consistency,
     validate_customers_and_passwords,
+    customer_edit_component
 )
 
 # Feedback utilities
 from feedback_utils import (
     handle_user_feedback,
-    give_feedback,
+    give_feedback
 )
 
 # Strøing utilities
-from stroing_utils import (
-    bestill_stroing,
-    admin_stroing_page
-)
+from stroing_utils import bestill_stroing, admin_stroing_page, hent_bruker_stroing_bestillinger, vis_graf_stroing
 
-# Weather utilities 
-from weather_display_utils import (
-    display_weather_data
-)
-    
+# Weather utilities
+from weather_display_utils import display_weather_data
+
 # Utility functions
 from util_functions import (
     get_date_range,
@@ -100,7 +99,7 @@ from admin_utils import (
 
 from menu_utils import create_menu
 
-from alert_utils import clean_invalid_expiry_dates
+from alert_utils import clean_invalid_expiry_dates, get_active_alerts
 
 # Logging configuration
 from logging_config import setup_logging, get_logger
@@ -116,15 +115,63 @@ SESSION_TIMEOUT = 3600  # 1 time
 
 # Global variables
 failed_attempts = {}
- 
-#Validering av brukerinput
+
+def display_home_page(customer):
+    st.title("Fjellbergsskardet Hyttegrend")
+    
+    # Vis aktive varsler
+    try:
+        alerts = get_active_alerts()
+        if alerts:
+            st.subheader("Aktive varsler")
+            for alert in alerts:
+                if alert['target_group'] is None or 'Alle brukere' in alert['target_group'] or customer['Type'] in alert['target_group']:
+                    # Håndter både streng og datetime-objekt
+                    if isinstance(alert['datetime'], str):
+                        alert_datetime = datetime.fromisoformat(alert['datetime'].replace('Z', '+00:00'))
+                    else:
+                        alert_datetime = alert['datetime']
+                    
+                    # Formater dato og tid til norsk format
+                    formatted_datetime = alert_datetime.strftime('%d.%m.%Y %H:%M')
+                    
+                    with st.expander(f"{alert['type']} - {formatted_datetime}", expanded=True):
+                        st.write(f"**Melding:** {alert['comment']}")
+                        if alert['expiry_date']:
+                            # Håndter både streng og datetime-objekt for expiry_date
+                            if isinstance(alert['expiry_date'], str):
+                                expiry_date = datetime.fromisoformat(alert['expiry_date'].replace('Z', '+00:00'))
+                            else:
+                                expiry_date = alert['expiry_date']
+                            st.write(f"**Utløper:** {expiry_date.strftime('%d.%m.%Y')}")
+        else:
+            st.info("Ingen aktive varsler for øyeblikket.")
+    except Exception as e:
+        st.error(f"Feil ved henting av varsler: {str(e)}")
+        logger.error(f"Feil ved henting av varsler: {str(e)}", exc_info=True)
+    
+    # Vis daglige brøytinger
+    vis_hyttegrend_aktivitet()
+            
+    # Lenker til ressurser
+    st.subheader("Nyttige lenker")
+    st.markdown("""
+    - [Brøytekart](https://sartopo.com/m/J881)
+    - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
+    - [Tunkart](https://t.ly/2ewsw)
+    - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
+    eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22)
+    - [LIVE Løypekart Gullspor](https://loyper.net/#gullingen/12,6.49103,59.41347)
+    """)
+    
+# Validering av brukerinput
 def validate_user_input(input_data):
     """
     Validerer og saniterer brukerinput.
-    
+
     Args:
     input_data (dict): Et dictionary med brukerinput
-    
+
     Returns:
     dict: Et dictionary med validert og sanitert input
     """
@@ -139,30 +186,45 @@ def validate_user_input(input_data):
         else:
             logger.warning(f"Unexpected input type for {key}: {type(value)}")
             validated_data[key] = None
-    
+
     return validated_data
+
 
 logger.info("Added validate_user_input function to app.py")
 
 def initialize_app():
-    initialize_database()
-    update_database_schemas()
-    ensure_login_history_table_exists()
-    clean_invalid_expiry_dates()
-    check_cabin_user_consistency()
-    validate_customers_and_passwords()
+    try:
+        verify_and_update_schemas()
+        initialize_database()
+        ensure_login_history_table_exists()
+        clean_invalid_expiry_dates()
+        check_cabin_user_consistency()
+        validate_customers_and_passwords()
+        logger.info("Application initialization completed successfully")
+    except Exception as e:
+        logger.error(f"Error during application initialization: {str(e)}")
+        st.error("Det oppstod en feil under initialisering av applikasjonen. Vennligst kontakt support.")
+        raise
 
-# Hovedfunksjonene for appen
 def main():
     try:
-        # Debug og logging
+        # Logging og debugging
+        logger.info("Starting application initialization")
         debug_database_operations()
-
-        # Database initialisering og oppdatering
+        
+        # Sjekk og oppdater databaseskjemaer
+        verify_and_update_schemas()
+        
+        # Initialisering av applikasjonen
         initialize_app()
-
+        
         # Sesjonshåndtering
         check_session_timeout()
+        
+        # # Registrer funksjoner for å lukke databasetilkoblinger ved avslutning
+        # atexit.register(close_all_connections)
+        
+        logger.info("Application initialization completed successfully")
 
         # UI-elementer
         # show_database_update_button()
@@ -184,15 +246,14 @@ def main():
                 st.session_state.is_admin = False
                 st.rerun()
             else:
-                st.session_state.is_admin = customer["Type"].lower() == "admin"
-                selected, admin_choice = create_menu(
-                    customer["Id"], st.session_state.is_admin
-                )
+                user_type = customer["Type"]
+                st.session_state.is_admin = user_type in ['Admin', 'Superadmin']
+                selected, admin_choice = create_menu(customer["Id"], user_type)
 
-                if selected == "Værdata":
+                if selected == "Hjem":
+                    display_home_page(customer)
+                elif selected == "Værdata":
                     client_id = st.secrets["api_keys"]["client_id"]
-
-                    # Periode-velger
                     period_options = [
                         "Siste 24 timer",
                         "Siste 7 dager",
@@ -204,17 +265,12 @@ def main():
                         "Siste GPS-aktivitet til nå",
                     ]
                     period = st.selectbox("Velg en periode:", options=period_options)
-
                     start_date, end_date = get_date_range(period)
-
                     if start_date is None or end_date is None:
                         st.error(f"Kunne ikke hente datoområde for perioden: {period}")
                     else:
-                        st.write(
-                            f"Henter data fra: {start_date.strftime('%d.%m.%Y kl. %H:%M')} til: {end_date.strftime('%d.%m.%Y kl. %H:%M')}"
-                        )
+                        st.write(f"Henter data fra: {start_date.strftime('%d.%m.%Y kl. %H:%M')} til: {end_date.strftime('%d.%m.%Y kl. %H:%M')}")
                         display_weather_data(client_id, start_date, end_date)
-
                 elif selected == "Bestill Tunbrøyting":
                     bestill_tunbroyting()
                 elif selected == "Bestill Strøing":
@@ -232,16 +288,15 @@ def main():
                         handle_user_feedback()
                     elif admin_choice == "Håndter Strøing":
                         admin_stroing_page()
-                    elif admin_choice == "Håndter Tun":
+                    elif admin_choice == "Håndter tunbestillinger" and user_type == 'Superadmin':
                         handle_tun()
-                    elif admin_choice == "Last ned Rapporter":
+                    elif admin_choice == "Dashbord for rapporter" and user_type == 'Superadmin':
                         unified_report_page(include_hidden=True)
 
     except Exception as e:
-        st.error(f"En feil oppstod: {str(e)}")
-        st.write("Feilsøkingsinformasjon:")
-        st.code(traceback.format_exc())
+        logger.error(f"An error occurred during application execution: {e}", exc_info=True)
+    finally:
+        logger.info("Application shutting down")
         
-
 if __name__ == "__main__":
     main()
