@@ -974,6 +974,8 @@ def vis_tunbroyting_oversikt():
         - [Beskjeder om tun](https://docs.google.com/spreadsheets/d/1XGwhza0YJsGMwiX9XtGRAG6OSg_PupA3DUsxKfbitkI/edit?usp=sharing)
         - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
         eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22)
+        - [abonnere på en daglig e-post med oppsummering av været. 
+        Man vil også få snøalarm ved mer enn 8mm nysnø.](https://t.ly/iFdRZ/)
         """
     )
     st.info("")
