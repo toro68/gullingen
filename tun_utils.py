@@ -966,6 +966,7 @@ def vis_tunbroyting_oversikt():
     st.title("Viktig info til brøytefirma og oversikt over tunbestillinger")
     st.info(
         """
+        - Informer vanskelige vei- og føreforhold
         - Legg ut Varsel hver gang det strøs, slik at 1) kundene vet at det er strødd og 2)FD kan fakturere for stikkveier.
         - [Brøytekart](https://sartopo.com/m/J881)
         - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
@@ -978,7 +979,6 @@ def vis_tunbroyting_oversikt():
         Man vil også få snøalarm ved mer enn 8mm nysnø.](https://t.ly/iFdRZ/)
         """
     )
-    st.info("")
     
     bestillinger = hent_bestillinger()
     print_dataframe_info(bestillinger, "Alle bestillinger")
