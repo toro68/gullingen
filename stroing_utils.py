@@ -251,7 +251,7 @@ def count_stroing_bestillinger():
 #         return False
 
 def admin_stroing_page():
-    st.title("Administrer Strøing")
+    st.title("Håndter Strøing")
 
     # Sett opp datovelgere
     today = datetime.now(TZ).date()

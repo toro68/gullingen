@@ -962,23 +962,39 @@ def print_dataframe_info(df, name):
     print(f"First few rows:\n{df.head()}")
     print("---\n")
 
+
 def vis_tunbroyting_oversikt():
     st.title("Viktig info til brøytefirma og oversikt over tunbestillinger")
-    st.info(
-        """
-        - Informer vanskelige vei- og føreforhold
-        - Legg ut Varsel hver gang det strøs, slik at 1) kundene vet at det er strødd og 2)FD kan fakturere for stikkveier.
-        - [Brøytekart](https://sartopo.com/m/J881)
-        - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
-        - [Tunkart - alle tun](https://t.ly/2ewsw)
-        - Liste over årsabonnenter, se nederst på siden. Tunkart bare for årsabonnement, [se her](https://t.ly/Rgrm_)
-        - [Beskjeder om tun](https://docs.google.com/spreadsheets/d/1XGwhza0YJsGMwiX9XtGRAG6OSg_PupA3DUsxKfbitkI/edit?usp=sharing)
-        - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
-        eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22)
-        - [abonnere på en daglig e-post med oppsummering av været. 
-        Man vil også få snøalarm ved mer enn 8mm nysnø.](https://t.ly/iFdRZ/)
-        """
-    )
+
+    with st.expander("Oppfordring til brøytefirma om å legge ut varsel", expanded=True):
+        st.info(
+            """
+            - Varsel er beskjeder til hytteeierne.
+            - Informer om vanskelige vei- og føreforhold, eventuelle forsinkelser, etc.
+            - Legg ut varsel hver gang det strøs, slik at FD kan fakturere for stikkveier.
+            """
+        )
+
+    with st.expander("Kart og dokumenter"):
+        st.markdown(
+            """
+            - [Brøytekart](https://sartopo.com/m/J881)
+            - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
+            - [Tunkart - alle tun](https://t.ly/2ewsw)
+            - Tunkart bare for årsabonnement, [se her](https://t.ly/Rgrm_)
+            - [Beskjeder om tun](https://docs.google.com/spreadsheets/d/1XGwhza0YJsGMwiX9XtGRAG6OSg_PupA3DUsxKfbitkI/edit?usp=sharing)
+            """
+        )
+
+    with st.expander("Væroppdateringer og varsler"):
+        st.markdown(
+            """
+            - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
+              eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22).
+            - Abonner på en daglig e-post med oppsummering av været siste døgn. Man vil også få alarm 
+              hvis det ikke brøytes ved mer enn 8mm nedbør som nysnø, [se her](https://t.ly/iFdRZ/)
+            """
+        )
     
     bestillinger = hent_bestillinger()
     print_dataframe_info(bestillinger, "Alle bestillinger")
