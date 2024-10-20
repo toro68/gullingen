@@ -982,8 +982,7 @@ def vis_tunbroyting_oversikt():
             - [Brøytekart](https://sartopo.com/m/J881)
             - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
             - [Tunkart - alle tun](https://t.ly/2ewsw)
-            - Tunkart bare for årsabonnement, [se her](https://t.ly/Rgrm_)
-            - [Beskjeder om tun](https://docs.google.com/spreadsheets/d/1XGwhza0YJsGMwiX9XtGRAG6OSg_PupA3DUsxKfbitkI/edit?usp=sharing)
+            - Tunkart oversikt over årsabonnement, [se her](https://t.ly/Rgrm_)
             """
         )
 
@@ -994,7 +993,6 @@ def vis_tunbroyting_oversikt():
               eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22).
             - Abonner på en daglig e-post med oppsummering av været siste døgn. Man vil også få alarm 
               hvis det ikke brøytes ved mer enn 8mm nedbør som nysnø, [se her](https://t.ly/iFdRZ/)
-            - Webkamera - laste ned Nedis SmartLife-appen. Bruker:kalvaknuten@gmail.com Passord: Webcam2024@  
             """
         )
     
