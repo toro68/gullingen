@@ -994,6 +994,7 @@ def vis_tunbroyting_oversikt():
               eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22).
             - Abonner på en daglig e-post med oppsummering av været siste døgn. Man vil også få alarm 
               hvis det ikke brøytes ved mer enn 8mm nedbør som nysnø, [se her](https://t.ly/iFdRZ/)
+            - Webkamera - laste ned Nedis SmartLife-appen. Bruker:kalvaknuten@gmail.com Passord: Webcam2024@  
             """
         )
     
@@ -1213,51 +1214,3 @@ def vis_hyttegrend_aktivitet():
         use_container_width=True,
         height=300
     )
-    
-# #Visning til brukerne for å vise statistikk og aktivitet i hyttegrenda - på siden for bestillinger av tunbrøyting
-# def vis_hyttegrend_aktivitet():
-#     st.subheader("Aktive tunbestillinger i hyttegrenda")
-#     st.info(
-#             "Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
-#             "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
-#         )
-    
-#     # Hent alle bestillinger
-#     alle_bestillinger = hent_bestillinger()
-
-#     if alle_bestillinger.empty:
-#         st.info("Ingen bestillinger funnet for perioden.")
-#         return
-
-#     # Definer datoperioden
-#     dagens_dato = datetime.now(TZ).date()
-#     sluttdato = dagens_dato + timedelta(days=7)
-
-#     # Initialiser en dictionary for å telle aktive bestillinger per dag
-#     daglig_aktivitet = {dagen.strftime('%d.%m'): {'Ukentlig ved bestilling': 0, 'Årsabonnement': 0} 
-#                         for dagen in pd.date_range(dagens_dato, sluttdato)}
-
-#     # Tell aktive bestillinger for hver dag
-#     for _, bestilling in alle_bestillinger.iterrows():
-#         ankomst_dato = bestilling['ankomst'].date()
-#         if bestilling['abonnement_type'] == 'Ukentlig ved bestilling':
-#             if ankomst_dato.strftime('%d.%m') in daglig_aktivitet:
-#                 daglig_aktivitet[ankomst_dato.strftime('%d.%m')]['Ukentlig ved bestilling'] += 1
-#         else:  # 'Årsabonnement'
-#             avreise_dato = bestilling['avreise'].date() if pd.notnull(bestilling['avreise']) else sluttdato
-#             for dag in pd.date_range(max(ankomst_dato, dagens_dato), min(avreise_dato, sluttdato)):
-#                 if dag.strftime('%d.%m') in daglig_aktivitet:
-#                     daglig_aktivitet[dag.strftime('%d.%m')]['Årsabonnement'] += 1
-
-#     # Konverter til DataFrame for enklere visning
-#     aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index')
-#     aktivitet_df['Totalt'] = aktivitet_df['Ukentlig ved bestilling'] + aktivitet_df['Årsabonnement']
-#     aktivitet_df.index.name = 'Dato'
-
-#     # Vis daglig aktivitet som tabell med fargekoding
-#     st.write("Daglig oversikt over aktive bestillinger:")
-#     st.dataframe(
-#         aktivitet_df.style.background_gradient(cmap='Blues', subset=['Totalt']),
-#         use_container_width=True,
-#         height=300
-#     )
