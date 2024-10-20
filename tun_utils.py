@@ -41,8 +41,9 @@ def bestill_tunbroyting():
     Årsabonnement:
     - Tunet ditt brøytes automatisk fredager, når brøytefirma vurderer at det trengs.  
     - Hvis du ønsker brøyting på andre dager, må du legge inn bestilling. 
-    - Traktor kjører aldri opp for å rydde for bare 1 hytte. Bestill derfor i god tid, 
-    og legg inn f.eks perioden lørdag-torsdag for å være sikker på brøytet tun på en torsdag. 
+    - Traktor kjører aldri opp for å rydde bare 1 hyttetun, det ryddes samtidig med veinettet.
+    Bestill derfor i god tid, og legg inn f.eks perioden lørdag-torsdag 
+    for å være sikker på brøytet tun på en torsdag. 
     - Hvis du ønsker brøyting hver gang veinettet brøytes, legg inn bestilling fra 1. november til 1. mai.
     
     Ukentlig ved bestilling: 

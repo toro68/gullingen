@@ -155,14 +155,25 @@ def display_home_page(customer):
             
     # Lenker til ressurser
     st.subheader("Nyttige lenker")
-    st.markdown("""
-    - [Brøytekart](https://sartopo.com/m/J881)
-    - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
-    - [Tunkart](https://t.ly/2ewsw)
-    - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
-    eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22)
-    - [LIVE Løypekart Gullspor](https://loyper.net/#gullingen/12,6.49103,59.41347)
-    """)
+    with st.expander("Kart og dokumenter"):
+        st.markdown(
+            """
+            - [Brøytekart](https://sartopo.com/m/J881)
+            - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
+            - [Tunkart - alle tun](https://t.ly/2ewsw)
+            - Tunkart bare for årsabonnement, [se her](https://t.ly/Rgrm_)
+            """
+        )
+
+    with st.expander("Væroppdateringer og varsler"):
+        st.markdown(
+            """
+            - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
+              eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22).
+            - Abonner på en daglig e-post med oppsummering av været siste døgn. Man vil også få alarm 
+              hvis det ikke brøytes ved mer enn 8mm nedbør som nysnø, [se her](https://t.ly/iFdRZ/)
+            """
+        )
     
 # Validering av brukerinput
 def validate_user_input(input_data):
