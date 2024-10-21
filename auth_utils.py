@@ -1,8 +1,8 @@
 import hashlib
 import os
 import hmac
-import logging
 import sqlite3
+import base64
 import string
 import secrets
 import pandas as pd
@@ -15,8 +15,6 @@ from constants import TZ, SESSION_TIMEOUT, LOCKOUT_PERIOD, MAX_ATTEMPTS
 from config import DATABASE_PATH
 from validation_utils import sanitize_input
 from db_utils import verify_login_history_db, execute_query, get_db_engine
-
-from logging_config import get_logger
 
 from customer_utils import get_customer_by_id
 
@@ -61,6 +59,23 @@ def authenticate_user(user_id, password):
 
 logger.info("Updated authenticate_user function in auth_utils.py")
 
+def get_base64(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+def set_background(png_file):
+    bin_str = get_base64(png_file)
+    page_bg_img = '''
+    <style>
+    .stApp {
+        background-image: url("data:image/png;base64,%s");
+        background-size: cover;
+    }
+    </style>
+    ''' % bin_str
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+    
 def generate_secure_code():
     return hashlib.sha256(os.urandom(32)).hexdigest()[:8]
 
@@ -88,38 +103,48 @@ def generate_credentials(customer):
 # auth_utils.py
 
 def login_page():
-    st.title("Logg inn")
+    st.title("Fjellbergsskardet Hyttegrend")
+    
     id = st.text_input("Skriv inn ID", key="login_id")
     password = st.text_input("Skriv inn passord", type="password", key="login_password")
+    
     if st.button("Logg inn", key="login_button"):
         logger.info(f"Login attempt for ID: {id}")
-        if authenticate_user(id, password):
-            customer = get_customer_by_id(id)
-            if customer is not None:
-                st.session_state.authenticated = True
-                st.session_state.user_id = id
-                if log_login(id, success=True):
-                    logger.info(f"Successful login and logging for ID: {id}")
-                    st.success(f"Innlogget som {id}")
-                    st.rerun()
+        if check_rate_limit(id):
+            if authenticate_user(id, password):
+                customer = get_customer_by_id(id)
+                if customer is not None:
+                    st.session_state.authenticated = True
+                    st.session_state.user_id = id
+                    if log_login(id, success=True):
+                        logger.info(f"Successful login and logging for ID: {id}")
+                        st.success(f"Innlogget som {id}")
+                        reset_rate_limit(id)
+                        st.rerun()
+                    else:
+                        logger.warning(f"Login successful but logging failed for ID: {id}")
+                        st.warning("Innlogging vellykket, men logging feilet. Kontakt administrator.")
                 else:
-                    logger.warning(f"Login successful but logging failed for ID: {id}")
-                    st.warning("Innlogging vellykket, men logging feilet. Kontakt administrator.")
+                    logger.warning(f"Authentication successful but customer info not found for ID: {id}")
+                    st.error("Brukerinformasjon ikke funnet. Kontakt administrator.")
+                    log_login(id, success=False)
             else:
-                logger.warning(f"Authentication successful but customer info not found for ID: {id}")
-                st.error("Brukerinformasjon ikke funnet. Kontakt administrator.")
+                logger.warning(f"Failed login attempt for ID: {id}")
+                st.error("Ugyldig ID eller passord")
                 log_login(id, success=False)
         else:
-            logger.warning(f"Failed login attempt for ID: {id}")
-            st.error("Ugyldig ID eller passord")
-            log_login(id, success=False)
-            
+            st.error("For mange mislykkede innloggingsforsøk. Vennligst prøv igjen senere.")
+         
 def log_login(id, success=True):
     try:
         if not verify_login_history_db():
             logger.error("Unable to log login attempt: login_history database does not exist")
             return False
         
+        if not success and not check_rate_limit(id):
+            logger.warning(f"Login attempt rejected due to rate limiting for user: {id}")
+            return False
+
         login_time = datetime.now(TZ).isoformat()
         query = "INSERT INTO login_history (id, login_time, success) VALUES (?, ?, ?)"
         affected_rows = execute_query('login_history', query, (id, login_time, 1 if success else 0))
@@ -134,42 +159,52 @@ def log_login(id, success=True):
         logger.error(f"Unexpected error logging login attempt: {str(e)}")
         return False
     
-# def log_failed_attempt(user_id):
-#     try:
-#         current_time = datetime.now(TZ).isoformat()
-#         query = "INSERT INTO login_history (user_id, login_time, success) VALUES (?, ?, ?)"
-#         execute_query('login_history', query, (user_id, current_time, 0))
-#         logger.warning(f"Failed login attempt for user: {user_id}")
-#     except Exception as e:
-#         logger.error(f"Error logging failed login attempt: {str(e)}")
+def check_rate_limit(user_id):
+    try:
+        engine = get_db_engine('login_history.db')
+        now = datetime.now(TZ)
+        lockout_start = now - LOCKOUT_PERIOD
 
-# def log_successful_attempt(user_id):
-#     try:
-#         current_time = datetime.now(TZ).isoformat()
-#         query = "INSERT INTO login_history (user_id, login_time, success) VALUES (?, ?, ?)"
-#         execute_query('login_history', query, (user_id, current_time, 1))
-#         logger.info(f"Successful login for user: {user_id}")
-#     except Exception as e:
-#         logger.error(f"Error logging successful login: {str(e)}")
+        query = text("""
+            SELECT COUNT(*) as attempt_count, MAX(login_time) as last_attempt
+            FROM login_history
+            WHERE id = :user_id AND success = 0 AND login_time > :lockout_start
+        """)
 
-def check_rate_limit(code):
-    now = datetime.now()
-    if code in failed_attempts:
-        attempts, last_attempt = failed_attempts[code]
-        if now - last_attempt < LOCKOUT_PERIOD:
-            if attempts >= MAX_ATTEMPTS:
-                return False
-        else:
-            attempts = 0
-    else:
-        attempts = 0
+        with engine.connect() as connection:
+            result = connection.execute(query, {"user_id": user_id, "lockout_start": lockout_start}).fetchone()
 
-    failed_attempts[code] = (attempts + 1, now)
-    return True
+        if result:
+            attempt_count, last_attempt = result
+            if attempt_count >= MAX_ATTEMPTS:
+                if now - last_attempt < LOCKOUT_PERIOD:
+                    logger.warning(f"User {user_id} is locked out due to too many failed attempts")
+                    return False
+                else:
+                    reset_rate_limit(user_id)
 
-def reset_rate_limit(code):
-    if code in failed_attempts:
-        del failed_attempts[code]
+        logger.info(f"Rate limit check passed for user {user_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error in check_rate_limit: {str(e)}", exc_info=True)
+        return True  # Allow login attempt if there's an error checking the rate limit
+
+def reset_rate_limit(user_id):
+    try:
+        engine = get_db_engine('login_history.db')
+        query = text("""
+            DELETE FROM login_history
+            WHERE id = :user_id AND success = 0
+        """)
+        
+        with engine.connect() as connection:
+            connection.execute(query, {"user_id": user_id})
+            connection.commit()
+        
+        logger.info(f"Rate limit reset for user {user_id}")
+    except Exception as e:
+        logger.error(f"Error in reset_rate_limit: {str(e)}", exc_info=True)
 
 def get_login_history(start_datetime, end_datetime):
     try:
