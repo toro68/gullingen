@@ -1197,10 +1197,12 @@ def vis_hyttegrend_aktivitet():
     })
     
     def tell_aktive_bestillinger(dato):
+        # Konverter dato til date-objekt for sammenligning
+        dato = pd.Timestamp(dato).date()
         return len(alle_bestillinger[
-            ((alle_bestillinger['ankomst_dato'] <= dato) & 
+            ((pd.to_datetime(alle_bestillinger['ankomst_dato']).dt.date <= dato) & 
              (pd.isna(alle_bestillinger['avreise_dato']) | 
-              (alle_bestillinger['avreise_dato'] >= dato))) |
+              (pd.to_datetime(alle_bestillinger['avreise_dato']).dt.date >= dato))) |
             ((alle_bestillinger['abonnement_type'] == 'Årsabonnement') & 
              (dato.weekday() == 4))  # Fredag
         ])
