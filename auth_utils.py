@@ -14,7 +14,7 @@ import streamlit as st
 from constants import TZ, SESSION_TIMEOUT, LOCKOUT_PERIOD, MAX_ATTEMPTS
 from config import DATABASE_PATH
 from validation_utils import sanitize_input
-from db_utils import verify_login_history_db, execute_query, get_db_engine
+from db_utils import verify_login_history_db, execute_query, get_db_engine, get_db_connection
 
 from customer_utils import get_customer_by_id
 
@@ -26,38 +26,34 @@ def authenticate_user(user_id, password):
     try:
         sanitized_user_id = sanitize_input(user_id)
         
-        db_path = os.path.join(DATABASE_PATH, 'customer.db')
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        query = "SELECT Id FROM customers WHERE Id = ?"
-        cursor.execute(query, (sanitized_user_id,))
-        
-        result = cursor.fetchone()
-        
-        if result:
-            passwords = st.secrets["passwords"]
-            if str(sanitized_user_id) in passwords and passwords[str(sanitized_user_id)] == password:
-                logger.info(f"User {sanitized_user_id} authenticated successfully")
-                return True
+        with get_db_connection('customer') as conn:
+            cursor = conn.cursor()
+            query = "SELECT Id FROM customers WHERE Id = ?"
+            cursor.execute(query, (sanitized_user_id,))
+            result = cursor.fetchone()
+            
+            if result:
+                try:
+                    passwords = st.secrets["passwords"]
+                    if str(sanitized_user_id) in passwords and passwords[str(sanitized_user_id)] == password:
+                        logger.info(f"User {sanitized_user_id} authenticated successfully")
+                        return True
+                    else:
+                        logger.warning(f"Authentication failed for user {sanitized_user_id}: Invalid password")
+                except KeyError as e:
+                    logger.error(f"Missing passwords in secrets for user {sanitized_user_id}")
+                    return False
             else:
-                logger.warning(f"Authentication failed for user {sanitized_user_id}: Invalid password")
-        else:
-            logger.warning(f"Authentication failed: No user found with ID {sanitized_user_id}")
-        
-        return False
-        
+                logger.warning(f"Authentication failed: No user found with ID {sanitized_user_id}")
+            
+            return False
+            
     except sqlite3.Error as e:
         logger.error(f"SQLite error occurred during authentication for user {sanitized_user_id}: {e}")
         return False
     except Exception as e:
         logger.error(f"Unexpected error occurred during authentication for user {sanitized_user_id}: {e}")
         return False
-    finally:
-        if conn:
-            conn.close()
-
-logger.info("Updated authenticate_user function in auth_utils.py")
 
 def get_base64(bin_file):
     with open(bin_file, 'rb') as f:

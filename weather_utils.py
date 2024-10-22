@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from statsmodels.nonparametric.smoothers_lowess import lowess
 import logging
 from constants import TZ, STATION_ID, API_URL, ELEMENTS, TIME_RESOLUTION
@@ -13,16 +13,30 @@ logger = get_logger(__name__)
 
 def fetch_and_process_data(client_id, date_start, date_end):
     try:
+        # Konverter til datetime hvis det er strings
+        if isinstance(date_start, str):
+            date_start = datetime.fromisoformat(date_start)
+        if isinstance(date_end, str):
+            date_end = datetime.fromisoformat(date_end)
+
+        # Sjekk at datoene ikke er i fremtiden
+        current_time = datetime.now(TZ)
+        if date_end > current_time:
+            date_end = current_time
+        if date_start > current_time:
+            raise ValueError("Startdato kan ikke være i fremtiden")
+
         # Valider at date_start er før date_end
         if date_start >= date_end:
             error_message = f"Ugyldig tidsperiode: Startdatoen ({date_start}) må være før sluttdatoen ({date_end})."
             logger.error(error_message)
             return {'error': error_message}
+
         params = {
             "sources": STATION_ID,
             "elements": ELEMENTS,
             "timeresolutions": TIME_RESOLUTION,
-            "referencetime": f"{date_start}/{date_end}"
+            "referencetime": f"{date_start.isoformat()}/{date_end.isoformat()}"
         }
         response = requests.get(API_URL, params=params, auth=(client_id, ""))
         response.raise_for_status()
@@ -117,6 +131,49 @@ def calculate_slippery_road_alarms(df):
     df['slippery_road_alarm'] = np.all(conditions, axis=0).astype(int)
     return df
 
+def get_latest_alarms(client_id: str) -> dict:
+    """
+    Henter siste glatt vei-alarm og snøfokk-alarm fra værdata.
+    
+    Returns:
+        dict: Dictionary med siste alarmer og tidspunkt
+    """
+    try:
+        # Hent data for siste 7 dager
+        end_date = datetime.now(TZ)
+        start_date = end_date - timedelta(days=7)
+        
+        weather_data = fetch_and_process_data(client_id, start_date, end_date)
+        
+        if not weather_data or 'error' in weather_data or 'df' not in weather_data:
+            logger.error("Kunne ikke hente værdata for alarmer")
+            return None
+            
+        df = weather_data['df']
+        
+        # Finn siste alarmer
+        last_slippery = df[df['slippery_road_alarm'] == 1].iloc[-1] if any(df['slippery_road_alarm'] == 1) else None
+        last_snowdrift = df[df['snow_drift_alarm'] == 1].iloc[-1] if any(df['snow_drift_alarm'] == 1) else None
+        
+        result = {
+            'slippery_road': {
+                'time': last_slippery.name.strftime('%d.%m.%Y kl %H:%M') if last_slippery is not None else None,
+                'temp': f"{last_slippery['air_temperature']:.1f}°C" if last_slippery is not None else None,
+                'precipitation': f"{last_slippery['precipitation_amount']:.1f}mm" if last_slippery is not None else None
+            },
+            'snow_drift': {
+                'time': last_snowdrift.name.strftime('%d.%m.%Y kl %H:%M') if last_snowdrift is not None else None,
+                'wind': f"{last_snowdrift['wind_speed']:.1f}m/s" if last_snowdrift is not None else None,
+                'temp': f"{last_snowdrift['air_temperature']:.1f}°C" if last_snowdrift is not None else None
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Feil ved henting av alarmer: {str(e)}")
+        return None
+    
 def calculate_snow_precipitations(temperatures, precipitations, snow_depths):
     snow_precipitations = np.zeros_like(temperatures)
     for i in range(len(temperatures)):

@@ -41,3 +41,5 @@ MAX_ATTEMPTS = 5
 LOCKOUT_PERIOD = timedelta(minutes=15)
 # Timeout for sesjon
 SESSION_TIMEOUT = 3600  # 1 time
+
+

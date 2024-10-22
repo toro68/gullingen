@@ -46,6 +46,7 @@ from db_utils import (
     initialize_database,
     ensure_login_history_table_exists,
     debug_database_operations,
+    create_database_indexes
     #close_all_connections
 )
 
@@ -84,7 +85,7 @@ from feedback_utils import (
 from stroing_utils import bestill_stroing, admin_stroing_page, hent_bruker_stroing_bestillinger, vis_graf_stroing
 
 # Weather utilities
-from weather_display_utils import display_weather_data
+from weather_display_utils import display_weather_data, display_alarms_homepage
 
 # Utility functions
 from util_functions import (
@@ -150,7 +151,10 @@ def display_home_page(customer):
         st.error(f"Feil ved henting av varsler: {str(e)}")
         logger.error(f"Feil ved henting av varsler: {str(e)}", exc_info=True)
     
-    # Vis daglige brøytinger
+    # vis siste alarmer for glatte veier og snøfokk
+    display_alarms_homepage()
+    
+    # Vis daglige tunbrøytinger
     vis_hyttegrend_aktivitet()
             
     # Lenker til ressurser
@@ -211,6 +215,7 @@ def initialize_app():
         clean_invalid_expiry_dates()
         check_cabin_user_consistency()
         validate_customers_and_passwords()
+        create_database_indexes() 
         logger.info("Application initialization completed successfully")
     except Exception as e:
         logger.error(f"Error during application initialization: {str(e)}")

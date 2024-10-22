@@ -5,9 +5,8 @@ import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from logging_config import get_logger
 from alert_utils import get_alerts
-from weather_utils import get_weather_data_for_period
+from weather_utils import get_weather_data_for_period, get_latest_alarms
 
 from logging_config import get_logger
 
@@ -442,3 +441,33 @@ def display_weather_statistics(df):
 
     # Display the table
     st.table(stats)
+
+def display_alarms_homepage():
+    # Vis siste væralarmer
+    try:
+        client_id = st.secrets["api_keys"]["client_id"]
+        latest_alarms = get_latest_alarms(client_id)
+        
+        if latest_alarms:
+            with st.expander("Siste væralarmer", expanded=True):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("🌧️ Siste glatt vei-alarm")
+                    if latest_alarms['slippery_road']['time']:
+                        st.write(f"Tidspunkt: {latest_alarms['slippery_road']['time']}")
+                        st.write(f"Temperatur: {latest_alarms['slippery_road']['temp']}")
+                        st.write(f"Nedbør: {latest_alarms['slippery_road']['precipitation']}")
+                    else:
+                        st.info("Ingen glatt vei-alarmer siste 7 dager")
+                
+                with col2:
+                    st.subheader("❄️ Siste snøfokk-alarm")
+                    if latest_alarms['snow_drift']['time']:
+                        st.write(f"Tidspunkt: {latest_alarms['snow_drift']['time']}")
+                        st.write(f"Vindhastighet: {latest_alarms['snow_drift']['wind']}")
+                        st.write(f"Temperatur: {latest_alarms['snow_drift']['temp']}")
+                    else:
+                        st.info("Ingen snøfokk-alarmer siste 7 dager")
+    except Exception as e:
+        logger.error(f"Feil ved visning av væralarmer: {str(e)}")

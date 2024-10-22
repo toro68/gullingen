@@ -583,19 +583,44 @@ def execute_many(db_name, query, params):
         logger.error(f"Error executing many queries on {db_name}.db: {e}")
 
 def create_database_indexes():
-    databases = ['tunbroyting', 'stroing', 'feedback']
+    databases = ['tunbroyting', 'stroing', 'feedback', 'login_history', 'customer']
     for db_name in databases:
-        with get_db_connection(db_name) as conn:
-            cursor = conn.cursor()
-            if db_name == 'tunbroyting':
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)")
-            elif db_name == 'stroing':
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato)")
-            elif db_name == 'feedback':
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
-            conn.commit()
+        try:
+            with get_db_connection(db_name) as conn:
+                cursor = conn.cursor()
+                if db_name == 'tunbroyting':
+                    # Eksisterende + nye indekser for tunbroyting
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_avreise_dato ON tunbroyting_bestillinger(avreise_dato)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement ON tunbroyting_bestillinger(abonnement_type)")
+                elif db_name == 'stroing':
+                    # Eksisterende + nye indekser for stroing
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bestillings_dato ON stroing_bestillinger(bestillings_dato)")
+                elif db_name == 'feedback':
+                    # Eksisterende + nye indekser for feedback
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_innsender ON feedback(innsender)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type)")
+                elif db_name == 'login_history':
+                    # Nye indekser for login_history
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_id ON login_history(id)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_time ON login_history(login_time)")
+                elif db_name == 'customer':
+                    # Nye indekser for customer
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_customer_subscription ON customers(Subscription)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_customer_type ON customers(Type)")
+                
+                conn.commit()
+                logger.info(f"Successfully created indexes for {db_name} database")
+                
+        except Exception as e:
+            logger.error(f"Error creating indexes for {db_name} database: {str(e)}")
+
+    logger.info("Database index creation completed")
         
 def create_database(db_name):
     db_path = os.path.join(DATABASE_PATH, f"{db_name}.db")
@@ -740,7 +765,7 @@ def robust_update_customer_schema():
     
 # Database connection
 @contextmanager
-def get_db_connection(db_name, timeout=10, check_same_thread=True, journal_mode=None):
+def get_db_connection(db_name, timeout=30, check_same_thread=True, journal_mode=None):
     db_path = os.path.join(DATABASE_PATH, f'{db_name}.db')
     conn = None
     try:
