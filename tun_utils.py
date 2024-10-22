@@ -735,17 +735,56 @@ def filter_tunbroyting_bestillinger(bestillinger: pd.DataFrame, filters: Dict[st
 
     return filtered
 
-def filter_todays_bookings(bestillinger):
-    today = datetime.now(TZ).date()
-    return bestillinger[
-        # Årsabonnementer som er aktive i dag
-        ((bestillinger['abonnement_type'] == 'Årsabonnement') & 
-         (bestillinger['ankomst'].dt.date <= today) & 
-         ((bestillinger['avreise'].isnull()) | (bestillinger['avreise'].dt.date >= today))) |
-        # Ukentlig ved bestilling som starter i dag
-        ((bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') & 
-         (bestillinger['ankomst'].dt.date == today))
-    ].copy()
+def filter_todays_bookings(bestillinger: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filtrerer bestillinger for å vise dagens aktive bestillinger.
+    
+    Args:
+        bestillinger (pd.DataFrame): DataFrame med alle bestillinger
+        
+    Returns:
+        pd.DataFrame: DataFrame med kun dagens aktive bestillinger
+    """
+    if bestillinger.empty:
+        logger.info("No bookings found to filter")
+        return bestillinger
+        
+    today = pd.Timestamp.now(TZ).normalize()  # Normaliserer til midnatt
+    logger.info(f"Filtering bookings for date: {today}")
+
+    # Vis detaljert informasjon om dataene
+    logger.debug("\n--- Alle bestillinger ---\n"
+                f"Shape: {bestillinger.shape}\n"
+                f"Columns: {bestillinger.columns.tolist()}\n"
+                f"Data types:\n{bestillinger.dtypes}\n"
+                f"First few rows:\n{bestillinger.head()}\n---\n")
+    
+    # Opprett masker for hver betingelse
+    friday_mask = (today.weekday() == 4)  # Fredag
+    active_annual = (
+        (bestillinger['abonnement_type'] == 'Årsabonnement') & 
+        friday_mask
+    )
+    
+    active_weekly = (
+        (bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') & 
+        (bestillinger['ankomst'].dt.normalize() == today)
+    )
+    
+    # Kombiner maskene
+    active_mask = active_annual | active_weekly
+    
+    # Filtrer og kopier resultatet
+    result = bestillinger[active_mask].copy()
+    
+    # Logg resultatet
+    logger.debug("\n--- Dagens bestillinger ---\n"
+                f"Shape: {result.shape}\n"
+                f"Columns: {result.columns.tolist()}\n"
+                f"Data types:\n{result.dtypes}\n"
+                f"First few rows:\n{result}\n---\n")
+    
+    return result
 
 def filter_bookings_for_period(bestillinger, start_date, end_date):
     return bestillinger[
@@ -1172,9 +1211,10 @@ def display_bookings(user_id):
         st.info("Du har ingen tidligere bestillinger.")
 
 def vis_hyttegrend_aktivitet():
+    """Viser oversikt over tunbrøytingsaktivitet for neste 7 dager."""
     st.subheader("Aktive tunbestillinger i hyttegrenda")
     st.info(
-        "Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
+        "💡  Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
         "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
     )
     
@@ -1183,11 +1223,11 @@ def vis_hyttegrend_aktivitet():
         st.info("Ingen bestillinger funnet for perioden.")
         return
 
-    dagens_dato = datetime.now(TZ).date()
-    sluttdato = dagens_dato + timedelta(days=7)
+    dagens_dato = pd.Timestamp.now(TZ).normalize()
+    sluttdato = dagens_dato + pd.Timedelta(days=7)
     dato_range = pd.date_range(dagens_dato, sluttdato)
 
-    # Forbedret databehandling med pandas
+    # Opprett aktivitets-DataFrame
     df_aktivitet = pd.DataFrame(index=dato_range)
     df_aktivitet['dato_str'] = df_aktivitet.index.strftime('%d.%m')
     df_aktivitet['ukedag'] = df_aktivitet.index.strftime('%A').map({
@@ -1196,58 +1236,79 @@ def vis_hyttegrend_aktivitet():
         'Sunday': 'Søndag'
     })
     
-    def tell_aktive_bestillinger(dato):
-        # Konverter dato til date-objekt for sammenligning
-        dato = pd.Timestamp(dato).date()
-        return len(alle_bestillinger[
-            ((pd.to_datetime(alle_bestillinger['ankomst_dato']).dt.date <= dato) & 
-             (pd.isna(alle_bestillinger['avreise_dato']) | 
-              (pd.to_datetime(alle_bestillinger['avreise_dato']).dt.date >= dato))) |
-            ((alle_bestillinger['abonnement_type'] == 'Årsabonnement') & 
-             (dato.weekday() == 4))  # Fredag
+    # Tell bestillinger per dag
+    df_aktivitet['antall'] = 0
+    for dato in dato_range:
+        # Filter for årlige abonnementer på fredager
+        if dato.weekday() == 4:  # Fredag
+            yearly_count = len(alle_bestillinger[
+                alle_bestillinger['abonnement_type'] == 'Årsabonnement'
+            ])
+        else:
+            yearly_count = 0
+            
+        # Filter for ukentlige bestillinger på denne datoen
+        daily_count = len(alle_bestillinger[
+            (alle_bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') & 
+            (alle_bestillinger['ankomst'].dt.normalize() == dato)
         ])
+        
+        df_aktivitet.loc[dato, 'antall'] = yearly_count + daily_count
 
-    df_aktivitet['Bestillinger'] = df_aktivitet.index.map(tell_aktive_bestillinger)
-
-    # Vis statistikk
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Totalt aktive bestillinger", df_aktivitet['Bestillinger'].sum())
-    with col2:
-        st.metric("Høyeste antall på én dag", df_aktivitet['Bestillinger'].max())
-    with col3:
-        st.metric("Gjennomsnitt per dag", f"{df_aktivitet['Bestillinger'].mean():.1f}")
-
-    # Vis tabell
-    st.write("### Oversikt neste 7 dager")
+    # Vis aktivitetsoversikt
+    if df_aktivitet['antall'].sum() > 0:
+        # Vis som tabell med formattering
+        st.write("Oversikt over tunbrøytinger neste 7 dager:")
+        
+        # Formater visning
+        df_display = df_aktivitet.copy()
+        df_display['Dato'] = df_display['dato_str'] + ' (' + df_display['ukedag'] + ')'
+        df_display = df_display[['Dato', 'antall']].rename(columns={'antall': 'Antall tun'})
+        
+        # Bruk st.dataframe med styling
+        st.dataframe(
+            df_display.style.highlight_max(subset=['Antall tun'], color='lightgreen'),
+            hide_index=True
+        )
+        
+        # Vis total
+        st.write(f"Totalt antall tunbrøytinger i perioden: {df_aktivitet['antall'].sum()}")
+    else:
+        st.info("Ingen planlagte tunbrøytinger de neste 7 dagene.")
+        
+    # Legg til ekstra informasjon om fredager
+    if df_aktivitet.loc[df_aktivitet.index[df_aktivitet.index.weekday == 4], 'antall'].sum() > 0:
+        st.info("💡 På fredager brøytes alle tun med årsabonnement automatisk.")
     
-    # Forbered visningsdata
-    display_df = pd.DataFrame({
-        'Dato': df_aktivitet['dato_str'],
-        'Ukedag': df_aktivitet['ukedag'],
-        'Antall bestillinger': df_aktivitet['Bestillinger']
-    })
-
-    # Bruk st.dataframe med styling
-    st.dataframe(
-        display_df.style
-            .background_gradient(cmap='Blues', subset=['Antall bestillinger'])
-            .bar(subset=['Antall bestillinger'], color='lightblue')
-            .format({'Antall bestillinger': '{:,.0f}'})
-            .set_properties(**{
-                'background-color': 'white',
-                'color': 'black',
-                'border-color': 'lightgrey'
-            }),
-        use_container_width=True,
-        height=300
+def tell_aktive_bestillinger(dato_ts):
+    """
+    Teller aktive bestillinger for en gitt dato.
+    
+    Args:
+        dato_ts: Timestamp fra dato_range
+        
+    Returns:
+        int: Antall aktive bestillinger
+    """
+    dato = pd.Timestamp(dato_ts).date()  # Konverter Timestamp til date
+    
+    # Konverter alle datoer til pandas Timestamps
+    ankomst_datoer = pd.to_datetime(alle_bestillinger['ankomst_dato']).dt.date
+    avreise_datoer = pd.to_datetime(alle_bestillinger['avreise_dato']).dt.date
+    
+    # Lag masker for de ulike betingelsene
+    standard_bestillinger = (
+        (ankomst_datoer <= dato) & 
+        (pd.Series([pd.isna(d) or d >= dato for d in avreise_datoer]))
     )
-
-    # Vis ekstra informasjon hvis det er mange bestillinger
-    max_bestillinger = df_aktivitet['Bestillinger'].max()
-    if max_bestillinger > 10:
-        st.warning(f"⚠️ Merk: Det er {max_bestillinger} bestillinger på det meste. " 
-                  "Dette kan medføre lengre ventetid.")
+    
+    arsabonnement_fredag = (
+        (alle_bestillinger['abonnement_type'] == 'Årsabonnement') & 
+        (dato.weekday() == 4)  # Fredag
+    )
+    
+    # Kombiner maskene og tell antall True-verdier
+    return len(alle_bestillinger[standard_bestillinger | arsabonnement_fredag])
                                                               
 # def vis_hyttegrend_aktivitet():
 #     st.subheader("Aktive tunbestillinger i hyttegrenda")
