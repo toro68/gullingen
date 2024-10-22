@@ -1178,37 +1178,113 @@ def vis_hyttegrend_aktivitet():
         "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
     )
     
-    # Hent alle bestillinger
     alle_bestillinger = hent_bestillinger()
-
     if alle_bestillinger.empty:
         st.info("Ingen bestillinger funnet for perioden.")
         return
 
-    # Definer datoperioden
     dagens_dato = datetime.now(TZ).date()
     sluttdato = dagens_dato + timedelta(days=7)
+    dato_range = pd.date_range(dagens_dato, sluttdato)
 
-    # Initialiser en dictionary for å telle aktive bestillinger per dag
-    daglig_aktivitet = {dagen.strftime('%d.%m'): 0 for dagen in pd.date_range(dagens_dato, sluttdato)}
+    # Forbedret databehandling med pandas
+    df_aktivitet = pd.DataFrame(index=dato_range)
+    df_aktivitet['dato_str'] = df_aktivitet.index.strftime('%d.%m')
+    df_aktivitet['ukedag'] = df_aktivitet.index.strftime('%A').map({
+        'Monday': 'Mandag', 'Tuesday': 'Tirsdag', 'Wednesday': 'Onsdag',
+        'Thursday': 'Torsdag', 'Friday': 'Fredag', 'Saturday': 'Lørdag', 
+        'Sunday': 'Søndag'
+    })
+    
+    def tell_aktive_bestillinger(dato):
+        return len(alle_bestillinger[
+            ((alle_bestillinger['ankomst_dato'] <= dato) & 
+             (pd.isna(alle_bestillinger['avreise_dato']) | 
+              (alle_bestillinger['avreise_dato'] >= dato))) |
+            ((alle_bestillinger['abonnement_type'] == 'Årsabonnement') & 
+             (dato.weekday() == 4))  # Fredag
+        ])
 
-    # Tell aktive bestillinger for hver dag
-    for _, bestilling in alle_bestillinger.iterrows():
-        ankomst_dato = bestilling['ankomst_dato']
-        avreise_dato = bestilling['avreise_dato'] if pd.notnull(bestilling['avreise_dato']) else sluttdato
-        
-        for dag in pd.date_range(max(ankomst_dato, dagens_dato), min(avreise_dato, sluttdato)):
-            if dag.strftime('%d.%m') in daglig_aktivitet:
-                daglig_aktivitet[dag.strftime('%d.%m')] += 1
+    df_aktivitet['Bestillinger'] = df_aktivitet.index.map(tell_aktive_bestillinger)
 
-    # Konverter til DataFrame for enklere visning
-    aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index', columns=['Totalt'])
-    aktivitet_df.index.name = 'Dato'
+    # Vis statistikk
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Totalt aktive bestillinger", df_aktivitet['Bestillinger'].sum())
+    with col2:
+        st.metric("Høyeste antall på én dag", df_aktivitet['Bestillinger'].max())
+    with col3:
+        st.metric("Gjennomsnitt per dag", f"{df_aktivitet['Bestillinger'].mean():.1f}")
 
-    # Vis daglig aktivitet som tabell med fargekoding
-    st.write("Daglig oversikt over aktive bestillinger:")
+    # Vis tabell
+    st.write("### Oversikt neste 7 dager")
+    
+    # Forbered visningsdata
+    display_df = pd.DataFrame({
+        'Dato': df_aktivitet['dato_str'],
+        'Ukedag': df_aktivitet['ukedag'],
+        'Antall bestillinger': df_aktivitet['Bestillinger']
+    })
+
+    # Bruk st.dataframe med styling
     st.dataframe(
-        aktivitet_df.style.background_gradient(cmap='Blues', subset=['Totalt']),
+        display_df.style
+            .background_gradient(cmap='Blues', subset=['Antall bestillinger'])
+            .bar(subset=['Antall bestillinger'], color='lightblue')
+            .format({'Antall bestillinger': '{:,.0f}'})
+            .set_properties(**{
+                'background-color': 'white',
+                'color': 'black',
+                'border-color': 'lightgrey'
+            }),
         use_container_width=True,
         height=300
     )
+
+    # Vis ekstra informasjon hvis det er mange bestillinger
+    max_bestillinger = df_aktivitet['Bestillinger'].max()
+    if max_bestillinger > 10:
+        st.warning(f"⚠️ Merk: Det er {max_bestillinger} bestillinger på det meste. " 
+                  "Dette kan medføre lengre ventetid.")
+                                                              
+# def vis_hyttegrend_aktivitet():
+#     st.subheader("Aktive tunbestillinger i hyttegrenda")
+#     st.info(
+#         "Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
+#         "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
+#     )
+    
+#     # Hent alle bestillinger
+#     alle_bestillinger = hent_bestillinger()
+
+#     if alle_bestillinger.empty:
+#         st.info("Ingen bestillinger funnet for perioden.")
+#         return
+
+#     # Definer datoperioden
+#     dagens_dato = datetime.now(TZ).date()
+#     sluttdato = dagens_dato + timedelta(days=7)
+
+#     # Initialiser en dictionary for å telle aktive bestillinger per dag
+#     daglig_aktivitet = {dagen.strftime('%d.%m'): 0 for dagen in pd.date_range(dagens_dato, sluttdato)}
+
+#     # Tell aktive bestillinger for hver dag
+#     for _, bestilling in alle_bestillinger.iterrows():
+#         ankomst_dato = bestilling['ankomst_dato']
+#         avreise_dato = bestilling['avreise_dato'] if pd.notnull(bestilling['avreise_dato']) else sluttdato
+        
+#         for dag in pd.date_range(max(ankomst_dato, dagens_dato), min(avreise_dato, sluttdato)):
+#             if dag.strftime('%d.%m') in daglig_aktivitet:
+#                 daglig_aktivitet[dag.strftime('%d.%m')] += 1
+
+#     # Konverter til DataFrame for enklere visning
+#     aktivitet_df = pd.DataFrame.from_dict(daglig_aktivitet, orient='index', columns=['Totalt'])
+#     aktivitet_df.index.name = 'Dato'
+
+#     # Vis daglig aktivitet som tabell med fargekoding
+#     st.write("Daglig oversikt over aktive bestillinger:")
+#     st.dataframe(
+#         aktivitet_df.style.background_gradient(cmap='Blues', subset=['Totalt']),
+#         use_container_width=True,
+#         height=300
+#     )
