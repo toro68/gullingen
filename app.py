@@ -37,7 +37,8 @@ from streamlit_option_menu import option_menu  # Streamlit Option Menu
 # Local imports
 from constants import TZ, STATUS_MAPPING, STATUS_COLORS
 
-#from weather_utils import get_weather_data
+# UI components
+from components.ui.alert_card import display_alert_card
 
 # Database utilities
 from db_utils import (
@@ -120,36 +121,24 @@ failed_attempts = {}
 def display_home_page(customer):
     st.title("Fjellbergsskardet Hyttegrend")
     
-    # Vis aktive varsler
     try:
         alerts = get_active_alerts()
         if alerts:
             st.subheader("Aktive varsler")
+            
             for alert in alerts:
-                if alert['target_group'] is None or 'Alle brukere' in alert['target_group'] or customer['Type'] in alert['target_group']:
-                    # Håndter både streng og datetime-objekt
-                    if isinstance(alert['datetime'], str):
-                        alert_datetime = datetime.fromisoformat(alert['datetime'].replace('Z', '+00:00'))
-                    else:
-                        alert_datetime = alert['datetime']
+                if (alert['target_group'] is None or 
+                    'Alle brukere' in alert['target_group'] or 
+                    customer['Type'] in alert['target_group']):
                     
-                    # Formater dato og tid til norsk format
-                    formatted_datetime = alert_datetime.strftime('%d.%m.%Y %H:%M')
+                    display_alert_card(alert)
                     
-                    with st.expander(f"{alert['type']} - {formatted_datetime}", expanded=True):
-                        st.write(f"**Melding:** {alert['comment']}")
-                        if alert['expiry_date']:
-                            # Håndter både streng og datetime-objekt for expiry_date
-                            if isinstance(alert['expiry_date'], str):
-                                expiry_date = datetime.fromisoformat(alert['expiry_date'].replace('Z', '+00:00'))
-                            else:
-                                expiry_date = alert['expiry_date']
-                            st.write(f"**Utløper:** {expiry_date.strftime('%d.%m.%Y')}")
         else:
             st.info("Ingen aktive varsler for øyeblikket.")
+            
     except Exception as e:
-        st.error(f"Feil ved henting av varsler: {str(e)}")
         logger.error(f"Feil ved henting av varsler: {str(e)}", exc_info=True)
+        st.error("Det oppstod en feil ved lasting av varsler. Vennligst prøv igjen senere.")
     
     # vis siste alarmer for glatte veier og snøfokk
     display_alarms_homepage()
