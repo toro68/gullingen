@@ -1,5 +1,6 @@
 import io
 import sys
+import traceback
 import pandas as pd
 import plotly.express as px
 
@@ -9,8 +10,7 @@ if sys.version_info >= (3, 9):
     from zoneinfo import ZoneInfo
 else:
     from backports.zoneinfo import ZoneInfo
-    
-import traceback
+
 import streamlit as st
 
 from constants import TZ, STATUS_COLORS
@@ -27,14 +27,6 @@ from logging_config import get_logger
 logger = get_logger(__name__)
 
 # Administrasjonsfunksjoner
-
-# def admin_broytefirma_page():
-#     st.title("Administrer feedback, tunbrøyting og strøing")
-
-#     if st.session_state.user_id in ["Fjbs Drift"]:
-#         admin_menu()
-#     else:
-#         st.error("Du har ikke tilgang til denne siden")
        
 def admin_alert():
     handle_alerts_ui()
@@ -195,7 +187,7 @@ def unified_report_page(include_hidden=False):
             st.success("Data lastet ned vellykket!")
         except Exception as e:
             st.error(f"En feil oppstod under nedlasting av data: {str(e)}")
-            logger.error(f"Error during data download: {str(e)}", exc_info=True)
+            logger.error("Error during data download: %s", str(e), exc_info=True)
             st.write("Debug: Exception stacktrace:", traceback.format_exc())  # Debug utskrift
                    
     # Data visualization
@@ -412,3 +404,4 @@ def download_reports(include_hidden=False):
             st.dataframe(login_history)
     else:
         st.info("Ingen data å laste ned for den valgte perioden.")
+

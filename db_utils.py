@@ -1186,3 +1186,4 @@ def initialize_database():
 # Call this function when the application starts
 if __name__ == "__main__":
     debug_database_operations()
+

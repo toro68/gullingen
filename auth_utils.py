@@ -101,36 +101,44 @@ def generate_credentials(customer):
 def login_page():
     st.title("Fjellbergsskardet Hyttegrend")
     
-    id = st.text_input("Skriv inn ID", key="login_id")
-    password = st.text_input("Skriv inn passord", type="password", key="login_password")
+    with st.form(key='login_form'):
+        id = st.text_input("Skriv inn ID", key="login_id")
+        password = st.text_input("Skriv inn passord", type="password", key="login_password")
+        
+        # Legg til en skjult knapp som utløses når Enter trykkes
+        submit_button = st.form_submit_button(label="Logg inn")
     
-    if st.button("Logg inn", key="login_button"):
-        logger.info(f"Login attempt for ID: {id}")
-        if check_rate_limit(id):
-            if authenticate_user(id, password):
-                customer = get_customer_by_id(id)
-                if customer is not None:
-                    st.session_state.authenticated = True
-                    st.session_state.user_id = id
-                    if log_login(id, success=True):
-                        logger.info(f"Successful login and logging for ID: {id}")
-                        st.success(f"Innlogget som {id}")
-                        reset_rate_limit(id)
-                        st.rerun()
-                    else:
-                        logger.warning(f"Login successful but logging failed for ID: {id}")
-                        st.warning("Innlogging vellykket, men logging feilet. Kontakt administrator.")
+    # Sjekk om skjemaet er sendt inn
+    if submit_button:
+        login_attempt(id, password)
+
+def login_attempt(id, password):
+    logger.info(f"Login attempt for ID: {id}")
+    if check_rate_limit(id):
+        if authenticate_user(id, password):
+            customer = get_customer_by_id(id)
+            if customer is not None:
+                st.session_state.authenticated = True
+                st.session_state.user_id = id
+                if log_login(id, success=True):
+                    logger.info(f"Successful login and logging for ID: {id}")
+                    st.success(f"Innlogget som {id}")
+                    reset_rate_limit(id)
+                    st.rerun()
                 else:
-                    logger.warning(f"Authentication successful but customer info not found for ID: {id}")
-                    st.error("Brukerinformasjon ikke funnet. Kontakt administrator.")
-                    log_login(id, success=False)
+                    logger.warning(f"Login successful but logging failed for ID: {id}")
+                    st.warning("Innlogging vellykket, men logging feilet. Kontakt administrator.")
             else:
-                logger.warning(f"Failed login attempt for ID: {id}")
-                st.error("Ugyldig ID eller passord")
+                logger.warning(f"Authentication successful but customer info not found for ID: {id}")
+                st.error("Brukerinformasjon ikke funnet. Kontakt administrator.")
                 log_login(id, success=False)
         else:
-            st.error("For mange mislykkede innloggingsforsøk. Vennligst prøv igjen senere.")
-         
+            logger.warning(f"Failed login attempt for ID: {id}")
+            st.error("Ugyldig ID eller passord")
+            log_login(id, success=False)
+    else:
+        st.error("For mange mislykkede innloggingsforsøk. Vennligst prøv igjen senere.")
+
 def log_login(id, success=True):
     try:
         if not verify_login_history_db():

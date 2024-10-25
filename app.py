@@ -15,9 +15,9 @@ import base64
 import atexit
 
 from datetime import datetime, timedelta, time
-from zoneinfo import ZoneInfo  # ZoneInfo is a subclass of tzinfo
+from zoneinfo import ZoneInfo  # ZoneInfo er en underklasse av tzinfo
 from io import BytesIO
-from streamlit_calendar import calendar
+# Fjernet import av 'streamlit_calendar' siden det ikke kunne importeres
 from typing import List, Dict, Any, Optional, Tuple
 
 import numpy as np  # NumPy

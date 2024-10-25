@@ -13,10 +13,14 @@ from logging_config import get_logger
 logger = get_logger(__name__)
 
 # Funksjoner for å vise data og grensesnitt
+@st.cache_data
+def get_cached_weather_data(client_id, start_date, end_date):
+    return get_weather_data_for_period(client_id, start_date, end_date)
+
 def display_weather_data(client_id, start_date, end_date):
     try:
         with st.spinner("Henter og behandler værdata..."):
-            weather_data = get_weather_data_for_period(
+            weather_data = get_cached_weather_data(
                 client_id, start_date.isoformat(), end_date.isoformat()
             )
 
@@ -37,7 +41,7 @@ def display_weather_data(client_id, start_date, end_date):
         df = weather_data["df"]
 
         # Create tabs for different sections
-        tab1, tab2, tab3 = st.tabs(["Hovedgraf", "Andre værdata", "Værstatistikk"])
+        tab1, tab2, tab3 = st.tabs(["🌡️ Hovedgraf", "📊 Andre værdata", "📈 Værstatistikk"])
 
         with tab1:
             st.subheader("Væroversikt")
@@ -125,6 +129,11 @@ def create_improved_graph(df):
     }
 
     for title, data in trace_data.items():
+        hovertemplate = (
+            f"{title}<br>"
+            f"Verdi: %{{y:.1f}} {data['units']}<br>"
+            f"Tid: %{{x|%Y-%m-%d %H:%M}}"
+        )
         if data["type"] == "scatter":
             fig.add_trace(
                 go.Scatter(
@@ -132,7 +141,7 @@ def create_improved_graph(df):
                     y=data["data"],
                     name=title,
                     line=dict(color=data["color"]),
-                    hovertemplate=f'%{{y:.1f}} {data["units"]}<br>%{{x}}',
+                    hovertemplate=hovertemplate,
                 ),
                 row=data["row"],
                 col=1,
@@ -144,7 +153,7 @@ def create_improved_graph(df):
                     y=data["data"],
                     name=title,
                     marker_color=data["color"],
-                    hovertemplate=f'%{{y:.1f}} {data["units"]}<br>%{{x}}',
+                    hovertemplate=hovertemplate,
                 ),
                 row=data["row"],
                 col=1,
@@ -164,7 +173,7 @@ def create_improved_graph(df):
             mode="markers",
             name="Snøfokk-alarm",
             marker=dict(symbol="star", size=12, color="blue"),
-            hovertemplate="Snøfokk-alarm<br>%{x}",
+            hovertemplate="Snøfokk-alarm<br>%{x|%Y-%m-%d %H:%M}",
         ),
         row=6,
         col=1,
@@ -177,7 +186,7 @@ def create_improved_graph(df):
             mode="markers",
             name="Glatt vei-alarm",
             marker=dict(symbol="triangle-up", size=12, color="red"),
-            hovertemplate="Glatt vei-alarm<br>%{x}",
+            hovertemplate="Glatt vei-alarm<br>%{x|%Y-%m-%d %H:%M}",
         ),
         row=6,
         col=1,
@@ -203,6 +212,7 @@ def create_improved_graph(df):
         height=1400,
         title_text="Værdataoversikt",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=50, r=50, t=50, b=50),
     )
 
     # Update x and y axes
@@ -271,14 +281,14 @@ def create_improved_graph(df):
     return fig
 
 def display_additional_data(df):
-    with st.expander("Overflatetemperatur - på bakken"):
+    with st.expander("🌡️ Overflatetemperatur - på bakken"):
         st.line_chart(df["surface_temperature"])
         st.write(f"Gjennomsnitt: {df['surface_temperature'].mean():.1f}°C")
         st.write(f"Minimum: {df['surface_temperature'].min():.1f}°C")
         st.write(f"Maksimum: {df['surface_temperature'].max():.1f}°C")
 
     with st.expander(
-        "Relativ luftfuktighet - Høy luftfuktighet i kombinasjon med lave temperaturer øker risikoen for ising"
+        "💧 Relativ luftfuktighet - Høy luftfuktighet i kombinasjon med lave temperaturer øker risikoen for ising"
     ):
         st.line_chart(df["relative_humidity"])
         st.write(f"Gjennomsnitt: {df['relative_humidity'].mean():.1f}%")
@@ -286,7 +296,7 @@ def display_additional_data(df):
         st.write(f"Maksimum: {df['relative_humidity'].max():.1f}%")
 
     with st.expander(
-        "Duggpunkt - Temperaturen hvor luften blir mettet og dugg eller frost kan dannes"
+        "❄️ Duggpunkt - Temperaturen hvor luften blir mettet og dugg eller frost kan dannes"
     ):
         st.line_chart(df["dew_point_temperature"])
         st.write(f"Gjennomsnitt: {df['dew_point_temperature'].mean():.1f}°C")
@@ -471,3 +481,4 @@ def display_alarms_homepage():
                         st.info("Ingen snøfokk-alarmer siste 7 dager")
     except Exception as e:
         logger.error(f"Feil ved visning av væralarmer: {str(e)}")
+
