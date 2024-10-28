@@ -184,66 +184,39 @@ def lagre_bestilling(
 def hent_bestillinger() -> pd.DataFrame:
     try:
         with get_db_connection('tunbroyting') as conn:
-            query = "SELECT * FROM tunbroyting_bestillinger"
-            df = pd.read_sql_query(query, conn)
-
-        if df.empty:
-            logger.warning("Ingen bestillinger funnet i databasen.")
-            return pd.DataFrame()
-
-        # Sjekk og konverter dato- og tidskolonner
-        date_columns = ["ankomst_dato", "avreise_dato"]
-        time_columns = ["ankomst_tid", "avreise_tid"]
-
-        for col in date_columns:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
-
-        for col in time_columns:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], format="%H:%M:%S", errors="coerce").dt.time
-
-        # Kombiner dato og tid til datetime-objekter hvis begge eksisterer
-        if "ankomst_dato" in df.columns and "ankomst_tid" in df.columns:
-            df["ankomst"] = df.apply(
-                lambda row: (
-                    pd.Timestamp.combine(row["ankomst_dato"], row["ankomst_tid"])
-                    if pd.notnull(row["ankomst_dato"]) and pd.notnull(row["ankomst_tid"])
-                    else pd.NaT
-                ),
-                axis=1,
+            df = pd.read_sql_query("SELECT * FROM tunbroyting_bestillinger", conn)
+            
+            if df.empty:
+                return df
+                
+            # Konverter dato og tid kolonner
+            for col in ['ankomst_dato', 'avreise_dato']:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+                
+            for col in ['ankomst_tid', 'avreise_tid']:
+                df[col] = pd.to_datetime(df[col], format='%H:%M:%S', errors='coerce').dt.time
+                
+            # Kombiner dato og tid til datetime
+            df['ankomst'] = df.apply(
+                lambda row: pd.Timestamp.combine(
+                    row['ankomst_dato'].date() if pd.notnull(row['ankomst_dato']) else None,
+                    row['ankomst_tid'] if pd.notnull(row['ankomst_tid']) else time()
+                ).tz_localize(TZ) if pd.notnull(row['ankomst_dato']) else pd.NaT,
+                axis=1
             )
-        elif "ankomst_dato" in df.columns:
-            df["ankomst"] = pd.to_datetime(df["ankomst_dato"])
-
-        if "avreise_dato" in df.columns and "avreise_tid" in df.columns:
-            df["avreise"] = df.apply(
-                lambda row: (
-                    pd.Timestamp.combine(row["avreise_dato"], row["avreise_tid"])
-                    if pd.notnull(row["avreise_dato"]) and pd.notnull(row["avreise_tid"])
-                    else pd.NaT
-                ),
-                axis=1,
+            
+            df['avreise'] = df.apply(
+                lambda row: pd.Timestamp.combine(
+                    row['avreise_dato'].date() if pd.notnull(row['avreise_dato']) else None,
+                    row['avreise_tid'] if pd.notnull(row['avreise_tid']) else time()
+                ).tz_localize(TZ) if pd.notnull(row['avreise_dato']) else pd.NaT,
+                axis=1
             )
-        elif "avreise_dato" in df.columns:
-            df["avreise"] = pd.to_datetime(df["avreise_dato"])
-
-        # Sett tidssone for datetime-kolonner
-        for col in ["ankomst", "avreise"]:
-            if col in df.columns:
-                df[col] = df[col].dt.tz_localize(TZ, ambiguous="NaT", nonexistent="NaT")
-
-        logger.info("Hentet %s bestillinger fra databasen.", len(df))
-        logger.debug("Kolonner i dataframe: %s", df.columns.tolist())
-        return df
-
-    except sqlite3.Error as e:
-        logger.error("Database error ved henting av bestillinger: %s", str(e))
-        return pd.DataFrame()
+            
+            return df
+            
     except Exception as e:
-        logger.error(
-            "Uventet feil ved henting av bestillinger: %s", str(e), exc_info=True
-        )
+        logger.error(f"Feil ved henting av bestillinger: {str(e)}")
         return pd.DataFrame()
     
 def hent_bruker_bestillinger(user_id):

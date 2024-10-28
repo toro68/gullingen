@@ -21,6 +21,10 @@ logger = get_logger(__name__)
 
 
 def vis_dagens_tunkart(bestillinger, mapbox_token, title):
+    logger.info(f"Starter vis_dagens_tunkart med {len(bestillinger)} bestillinger")
+    logger.debug(f"Bestillinger dataframe:\n{bestillinger.head()}")
+    logger.debug(f"Kolonner: {bestillinger.columns.tolist()}")
+    logger.debug(f"Dagens dato: {datetime.now(TZ).date()}")
     cabin_coordinates = get_cabin_coordinates()
     current_date = datetime.now(TZ).date()
 
@@ -42,14 +46,22 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             latitudes.append(lat)
             longitudes.append(lon)
 
+            # Endre denne delen for å fikse filtrering av dagens bestillinger
             cabin_bookings = bestillinger[bestillinger["bruker"] == str(cabin_id)]
             if not cabin_bookings.empty:
                 booking = cabin_bookings.iloc[0]
-                ankomst = booking["ankomst"].date()
-                avreise = booking["avreise"].date() if pd.notnull(booking["avreise"]) else None
                 
-                is_active = (booking["abonnement_type"] == "Årsabonnement" and current_date.weekday() == 4) or \
-                            (ankomst <= current_date and (avreise is None or current_date <= avreise))
+                # Konverter datoer til datetime.date objekter for konsistent sammenligning
+                ankomst = pd.to_datetime(booking["ankomst"]).date() if pd.notnull(booking["ankomst"]) else None
+                avreise = pd.to_datetime(booking["avreise"]).date() if pd.notnull(booking["avreise"]) else None
+                
+                # Oppdatert logikk for å sjekke om bestillingen er aktiv
+                is_active = False
+                if booking["abonnement_type"] == "Årsabonnement":
+                    is_active = current_date.weekday() == 4  # Fredag
+                else:
+                    is_active = (ankomst is not None and ankomst <= current_date and 
+                               (avreise is None or current_date <= avreise))
 
                 if is_active:
                     if booking["abonnement_type"] == "Årsabonnement":
@@ -65,7 +77,11 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
                     size = 8
 
                 status = "Aktiv" if is_active else "Inaktiv"
-                text = f"Hytte: {cabin_id}<br>Status: {status}<br>Type: {booking['abonnement_type']}<br>Ankomst: {ankomst}<br>Avreise: {avreise if avreise else 'Ikke satt'}"
+                text = (f"Hytte: {cabin_id}<br>"
+                       f"Status: {status}<br>"
+                       f"Type: {booking['abonnement_type']}<br>"
+                       f"Ankomst: {ankomst}<br>"
+                       f"Avreise: {avreise if avreise else 'Ikke satt'}")
             else:
                 color = GRAY
                 legend_text = "Ingen bestilling"
@@ -377,3 +393,5 @@ def display_live_plowmap():
         height=600,
         scrolling=True,
     )
+
+
