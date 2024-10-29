@@ -516,22 +516,23 @@ def execute_query(db_name, query, params=None):
                 affected_rows = cursor.rowcount
                 logger.info(f"Query executed successfully on {db_name}.db. Rows affected: {affected_rows}")
                 return affected_rows
+            except sqlite3.OperationalError as e:
+                if "readonly database" in str(e):
+                    logger.error(f"Database {db_name}.db is readonly. Cannot execute query.")
+                    st.error("Databasen er skrivebeskyttet. Vennligst kontakt systemadministrator.")
+                else:
+                    logger.error(f"Database error in execute_query on {db_name}.db: {e}")
+                conn.rollback()
+                return 0
+            except Exception as e:
+                logger.error(f"Unexpected error in execute_query on {db_name}.db: {e}")
+                conn.rollback()
+                return 0
             finally:
                 cursor.close()
-    except sqlite3.OperationalError as e:
-        if "readonly database" in str(e):
-            logger.error(f"Database {db_name}.db is readonly. Cannot execute query.")
-            st.error(f"Databasen er skrivebeskyttet. Vennligst kontakt systemadministrator.")
-        else:
-            logger.error(f"Database error in execute_query on {db_name}.db: {e}")
-        return None
     except Exception as e:
-        logger.error(f"Unexpected error in execute_query on {db_name}.db: {e}")
-        return None
-    finally:
-        # Forsikre oss om at tilkoblingen er lukket
-        if 'conn' in locals() and conn:
-            conn.close()
+        logger.error(f"Connection error in execute_query for {db_name}.db: {e}")
+        return 0
 
 def close_all_connections():
     logger.info("Starting to close all database connections")
