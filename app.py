@@ -79,7 +79,8 @@ from customer_utils import (
 # Feedback utilities
 from feedback_utils import (
     handle_user_feedback,
-    give_feedback
+    give_feedback,
+    display_maintenance_feedback,
 )
 
 # Strøing utilities
@@ -145,7 +146,11 @@ def display_home_page(customer):
     
     # Vis daglige tunbrøytinger
     vis_hyttegrend_aktivitet()
-            
+    
+    # Legg til mulighet for å gi tilbakemelding på vintervedlikehold
+    st.write("---")  # Visuell separator
+    display_maintenance_feedback()  # Legg til denne linjen
+    
     # Lenker til ressurser
     st.subheader("Nyttige lenker")
     with st.expander("Kart og dokumenter"):
@@ -161,7 +166,7 @@ def display_home_page(customer):
     with st.expander("Væroppdateringer og varsler"):
         st.markdown(
             """
-            - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
+            - Følg @gullingen365 p [X(Twitter)](https://x.com/gullingen365) 
               eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22).
             - Abonner på en daglig e-post med oppsummering av været siste døgn. Man vil også få alarm 
               hvis det ikke brøytes ved mer enn 8mm nedbør som nysnø, [se her](https://t.ly/iFdRZ/)
