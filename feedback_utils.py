@@ -643,7 +643,7 @@ def get_maintenance_reactions(start_date, end_date):
 
 def display_maintenance_feedback():
     try:
-        st.subheader("Gi din vurdering av dagens brøyting her - eller bruk 'Gi feedback' i menyen for en mer detaljert tilbakemelding")
+        st.subheader("Gi din vurdering av dagens brøyting her")
         
         if 'user_id' not in st.session_state:
             st.warning("Du må være logget inn for å gi tilbakemelding")
@@ -674,7 +674,7 @@ def display_maintenance_feedback():
             )
             
             if result:
-                st.success("Takk for din tilbakemelding!")
+                st.success("Takk for din tilbakemelding! Bruk 'Gi feedback' i menyen for en mer detaljert tilbakemelding")
             else:
                 st.error("Beklager, det oppstod en feil ved lagring av tilbakemeldingen.")
         

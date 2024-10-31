@@ -267,90 +267,107 @@ def admin_stroing_page():
     st.write(f"Viser bestillinger fra {start_date} til {end_date}")
 
     try:
-        # Hent alle strøingsbestillinger
-        all_bestillinger = hent_stroing_bestillinger()
+        # Hent data direkte fra database
+        with get_db_connection('stroing') as conn:
+            query = """
+            SELECT * FROM stroing_bestillinger 
+            ORDER BY onske_dato DESC, bestillings_dato DESC
+            """
+            all_bestillinger = pd.read_sql_query(query, conn)
 
-        # Logg originale datatyper
-        logger.info(f"Original datatypes: {all_bestillinger.dtypes}")
+        # Sikre at vi har data å jobbe med
+        if all_bestillinger.empty:
+            st.warning("Ingen strøingsbestillinger funnet.")
+            return
 
-        # Konverter kolonner til Arrow-kompatible datatyper
-        all_bestillinger['id'] = all_bestillinger['id'].astype('int32')
-        all_bestillinger['bruker'] = all_bestillinger['bruker'].astype('string')
-        all_bestillinger['bestillings_dato'] = all_bestillinger['bestillings_dato'].dt.tz_localize(None)
-        all_bestillinger['onske_dato'] = pd.to_datetime(all_bestillinger['onske_dato'], errors='coerce')
+        # Konverter datokolonner til datetime og håndter potensielle feil
+        try:
+            # Først, forsøk å parse datoene som ISO format
+            all_bestillinger['bestillings_dato'] = pd.to_datetime(
+                all_bestillinger['bestillings_dato'], 
+                format='ISO8601', 
+                errors='coerce'
+            )
+            all_bestillinger['onske_dato'] = pd.to_datetime(
+                all_bestillinger['onske_dato'], 
+                format='ISO8601', 
+                errors='coerce'
+            )
+        except Exception as e:
+            logger.warning(f"ISO8601 parsing failed, trying flexible parsing: {str(e)}")
+            # Hvis ISO parsing feiler, prøv fleksibel parsing
+            all_bestillinger['bestillings_dato'] = pd.to_datetime(
+                all_bestillinger['bestillings_dato'], 
+                errors='coerce'
+            )
+            all_bestillinger['onske_dato'] = pd.to_datetime(
+                all_bestillinger['onske_dato'], 
+                errors='coerce'
+            )
 
-        # Logg konverterte datatyper
-        logger.info(f"Converted datatypes: {all_bestillinger.dtypes}")
-
-        # Sjekk gyldighet av datoer i onske_dato-kolonnen
-        invalid_dates = all_bestillinger[all_bestillinger['onske_dato'].isna()]
-        if not invalid_dates.empty:
-            logger.warning(f"Found {len(invalid_dates)} invalid dates in onske_dato column")
-            st.warning(f"Fant {len(invalid_dates)} ugyldige datoer i ønsket dato-kolonnen. Disse vil bli ekskludert fra visningen.")
-            
-            # Vis problematiske datoer
-            st.subheader("Bestillinger med ugyldige datoer:")
-            st.dataframe(invalid_dates[['id', 'bruker', 'bestillings_dato', 'onske_dato']])
-        
         # Fjern rader med ugyldige datoer
-        valid_bestillinger = all_bestillinger.dropna(subset=['onske_dato'])
-        logger.info(f"Removed {len(all_bestillinger) - len(valid_bestillinger)} rows with invalid dates")
+        invalid_dates = all_bestillinger[
+            all_bestillinger['onske_dato'].isna() | 
+            all_bestillinger['bestillings_dato'].isna()
+        ]
+        
+        if not invalid_dates.empty:
+            st.warning(f"Fant {len(invalid_dates)} bestillinger med ugyldige datoer. Disse vil bli ekskludert.")
+            with st.expander("Vis bestillinger med ugyldige datoer"):
+                st.dataframe(invalid_dates[['id', 'bruker', 'bestillings_dato', 'onske_dato']])
+
+        # Fjern rader med ugyldige datoer og reset index
+        valid_bestillinger = all_bestillinger.dropna(subset=['onske_dato', 'bestillings_dato']).copy()
+        valid_bestillinger.reset_index(drop=True, inplace=True)
+
+        # Konverter 'onske_dato' til date for filtrering
+        valid_bestillinger['onske_dato_date'] = valid_bestillinger['onske_dato'].dt.date
 
         # Filtrer bestillinger for den valgte perioden
         bestillinger = valid_bestillinger[
-            (valid_bestillinger['onske_dato'].dt.date >= start_date) &
-            (valid_bestillinger['onske_dato'].dt.date <= end_date)
+            (valid_bestillinger['onske_dato_date'] >= start_date) &
+            (valid_bestillinger['onske_dato_date'] <= end_date)
         ]
 
         if bestillinger.empty:
             st.warning(f"Ingen gyldige strøingsbestillinger funnet for perioden {start_date} til {end_date}.")
-        else:
-            # Beregn 'dager_til'
-            bestillinger['dager_til'] = (bestillinger['onske_dato'] - pd.to_datetime(today)).dt.days.astype('int32')
+            return
 
-            # Vis daglig oppsummering
-            st.subheader("Daglig oppsummering")
-            daily_summary = bestillinger.groupby(bestillinger["onske_dato"].dt.date).size().reset_index(name="antall")
-            for _, row in daily_summary.iterrows():
-                st.write(f"{row['onske_dato']}: {row['antall']} bestilling(er)")
+        # Beregn dager til (sikrere versjon)
+        bestillinger['dager_til'] = (bestillinger['onske_dato'] - pd.Timestamp(today)).dt.days.astype('int32')
 
-            # Vis detaljert oversikt over bestillinger
-            st.subheader("Detaljert oversikt over strøingsbestillinger")
-            for _, row in bestillinger.iterrows():
-                col1, col2, col3 = st.columns([3, 2, 2])
-                with col1:
-                    st.write(f"Hytte: {row['bruker']}")
-                with col2:
-                    st.write(f"Bestilt: {row['bestillings_dato'].date()}")
-                with col3:
-                    st.write(f"Ønsket dato: {row['onske_dato'].date()}")
+        # Vis daglig oppsummering
+        st.subheader("Daglig oppsummering")
+        daily_summary = bestillinger.groupby('onske_dato_date').size().reset_index(name="antall")
+        for _, row in daily_summary.iterrows():
+            st.write(f"{row['onske_dato_date']}: {row['antall']} bestilling(er)")
 
-            # Legg til mulighet for å laste ned bestillinger som CSV
-            csv = bestillinger[['id', 'bruker', 'bestillings_dato', 'onske_dato', 'dager_til']].to_csv(index=False)
-            st.download_button(
-                label="Last ned som CSV",
-                data=csv,
-                file_name=f"stroingsbestillinger_{start_date}_{end_date}.csv",
-                mime="text/csv",
-            )
+        # Vis detaljert oversikt over bestillinger
+        st.subheader("Detaljert oversikt over strøingsbestillinger")
+        for _, row in bestillinger.iterrows():
+            col1, col2, col3 = st.columns([3, 2, 2])
+            with col1:
+                st.write(f"Hytte: {row['bruker']}")
+            with col2:
+                st.write(f"Bestilt: {row['bestillings_dato'].date()}")
+            with col3:
+                st.write(f"Ønsket dato: {row['onske_dato'].date()}")
+
+        # Eksporter til CSV
+        export_df = bestillinger[['id', 'bruker', 'bestillings_dato', 'onske_dato', 'dager_til']].copy()
+        csv = export_df.to_csv(index=False)
+        st.download_button(
+            label="Last ned som CSV",
+            data=csv,
+            file_name=f"stroingsbestillinger_{start_date}_{end_date}.csv",
+            mime="text/csv",
+        )
 
     except Exception as e:
         st.error(f"En feil oppstod: {str(e)}")
-        st.write("Feilsøkingsinformasjon:")
-        st.write(f"Start dato: {start_date}")
-        st.write(f"Slutt dato: {end_date}")
-        st.write(f"Feiltype: {type(e).__name__}")
-        st.write(f"Feilmelding: {str(e)}")
-        st.write("\nStack trace:")
-        st.code(traceback.format_exc())
-
-        # Vis datatyper for debugging
-        if 'bestillinger' in locals():
-            st.subheader("Datatyper for debugging:")
-            st.write(bestillinger.dtypes)
-
         logger.error(f"Error in admin_stroing_page: {str(e)}", exc_info=True)
- 
+        st.code(traceback.format_exc())
+        
 # Database initialization and maintenance
 def verify_stroing_data():
     with get_db_connection('stroing') as conn:

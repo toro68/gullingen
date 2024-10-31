@@ -118,35 +118,46 @@ def get_customer_id(identifier):
             conn.close()
 
 def get_user_subscription(user_id):
+    """Henter brukerens abonnement fra databasen"""
+    logger.info(f"Starting get_user_subscription for user_id: {user_id}")
+    print(f"DEBUG: Getting subscription for user: {user_id}")
+    
+    conn = None
     try:
         conn = sqlite3.connect('customer.db')
         cursor = conn.cursor()
         
-        # Konverter user_id til string for å sikre kompatibilitet
         user_id = str(user_id)
+        logger.info(f"Converted user_id to string: {user_id}")
         
         query = "SELECT Subscription FROM customers WHERE Id = ?"
+        logger.info(f"Executing query: {query} with user_id: {user_id}")
         cursor.execute(query, (user_id,))
         
         result = cursor.fetchone()
+        logger.info(f"Query result: {result}")
+        print(f"DEBUG: Database result: {result}")
         
         if result:
             subscription = result[0]
-            logger.info(f"Successfully retrieved subscription for user with ID: {user_id}")
+            logger.info(f"Found subscription: {subscription} for user: {user_id}")
             return subscription
         else:
-            logger.warning(f"No user found with ID: {user_id}")
+            logger.warning(f"No subscription found for user: {user_id}")
             return "Ingen abonnement"
-        
+            
     except sqlite3.Error as e:
-        logger.error(f"SQLite error occurred while retrieving subscription for user with ID {user_id}: {e}")
+        logger.error(f"SQLite error for user {user_id}: {e}", exc_info=True)
+        print(f"DEBUG ERROR: SQLite error: {str(e)}")
         return "Ingen abonnement"
     except Exception as e:
-        logger.error(f"Unexpected error occurred while retrieving subscription for user with ID {user_id}: {e}")
+        logger.error(f"Unexpected error for user {user_id}: {e}", exc_info=True)
+        print(f"DEBUG ERROR: Unexpected error: {str(e)}")
         return "Ingen abonnement"
     finally:
         if conn:
             conn.close()
+            logger.info("Database connection closed")
 
 def get_customer_details(user_id):
     try:
@@ -195,70 +206,97 @@ def get_cabin_coordinates() -> Dict[str, Tuple[float, float]]:
     Returns:
         Dict[str, Tuple[float, float]]: En dictionary med hytte-ID som nøkkel og (breddegrad, lengdegrad) som verdi.
     """
+    logger.info("Starting get_cabin_coordinates")
+    print("DEBUG: Fetching cabin coordinates")
+    
+    conn = None
     try:
         conn = sqlite3.connect('customer.db')
         cursor = conn.cursor()
         
         query = "SELECT Id, Latitude, Longitude FROM customers"
+        logger.info(f"Executing query: {query}")
         cursor.execute(query)
         
         results = cursor.fetchall()
+        logger.info(f"Found {len(results)} results")
+        print(f"DEBUG: Retrieved {len(results)} cabin records")
         
         coordinates = {}
+        valid_coords = 0
         for row in results:
             cabin_id, lat, lon = row
             if lat is not None and lon is not None:
-                coordinates[str(cabin_id)] = (float(lat), float(lon))
+                try:
+                    coordinates[str(cabin_id)] = (float(lat), float(lon))
+                    valid_coords += 1
+                except ValueError as e:
+                    logger.error(f"Invalid coordinate values for cabin {cabin_id}: {e}")
+                    print(f"DEBUG ERROR: Bad coordinates for cabin {cabin_id}")
         
+        logger.info(f"Processed {valid_coords} valid coordinates out of {len(results)} records")
+        print(f"DEBUG: Valid coordinates: {valid_coords}/{len(results)}")
         return coordinates
+        
     except sqlite3.Error as e:
-        logger.error(f"SQLite error occurred while retrieving cabin coordinates: {e}")
+        logger.error(f"SQLite error: {e}", exc_info=True)
+        print(f"DEBUG ERROR: Database error: {str(e)}")
         return {}
     except Exception as e:
-        logger.error(f"Unexpected error occurred while retrieving cabin coordinates: {e}")
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        print(f"DEBUG ERROR: General error: {str(e)}")
         return {}
     finally:
         if conn:
             conn.close()
+            logger.info("Database connection closed")
             
 def check_cabin_user_consistency():
+    """Sjekker konsistens mellom kunde- og passorddata"""
+    logger.info("Starting cabin user consistency check")
+    print("DEBUG: Starting consistency check")
+    
+    conn = None
     try:
         passwords = get_passwords()
+        logger.info(f"Retrieved {len(passwords)} passwords")
+        print(f"DEBUG: Found {len(passwords)} password entries")
         
         if not passwords:
-            logger.warning("No passwords found")
+            logger.warning("No passwords found in system")
             return
-
+            
         conn = sqlite3.connect('customer.db')
         cursor = conn.cursor()
-
-        # Hent alle kunde-IDer fra databasen
+        
         cursor.execute("SELECT Id FROM customers")
         customer_ids = set(str(row[0]) for row in cursor.fetchall())
-
-        if not customer_ids:
-            logger.warning("Customer database is empty")
-            return
-
-        # Sjekk for kunder uten passord
-        for customer_id in customer_ids:
-            if customer_id not in passwords:
-                logger.warning(f"Kunde-ID: {customer_id} har ikke et passord")
-
-        # Sjekk for passord uten tilsvarende kunde
-        for user_id in passwords:
-            if user_id not in customer_ids:
-                logger.warning(f"Passord funnet for ID {user_id}, men ingen tilsvarende kunde i databasen")
-
-        logger.info("Konsistenssjekk fullført")
-
-    except sqlite3.Error as e:
-        logger.error(f"SQLite error in check_cabin_user_consistency: {str(e)}")
+        
+        logger.info(f"Found {len(customer_ids)} customers in database")
+        print(f"DEBUG: Found {len(customer_ids)} customer records")
+        
+        # Detaljert logging av inkonsistenser
+        missing_passwords = customer_ids - set(passwords.keys())
+        extra_passwords = set(passwords.keys()) - customer_ids
+        
+        if missing_passwords:
+            logger.warning(f"Customers without passwords: {sorted(missing_passwords)}")
+            print(f"DEBUG: {len(missing_passwords)} customers lack passwords")
+            
+        if extra_passwords:
+            logger.warning(f"Passwords without customers: {sorted(extra_passwords)}")
+            print(f"DEBUG: {len(extra_passwords)} orphaned passwords")
+            
+        logger.info("Consistency check completed")
+        print("DEBUG: Consistency check finished")
+        
     except Exception as e:
-        logger.error(f"Unexpected error in check_cabin_user_consistency: {str(e)}")
+        logger.error(f"Error in consistency check: {e}", exc_info=True)
+        print(f"DEBUG ERROR: Check failed: {str(e)}")
     finally:
         if conn:
             conn.close()
+            logger.info("Database connection closed")
  
 def generate_credentials(customer):
     # Generer brukernavn basert på Id
@@ -551,5 +589,69 @@ def load_customer_database():
         return pd.DataFrame()
     except Exception as e:
         logger.error(f"Unexpected error occurred while loading customer database: {e}")
+        return pd.DataFrame()
+    
+def get_bookings(start_date=None, end_date=None):
+    """Henter bestillinger for gitt periode"""
+    logger.info(f"Starting get_bookings with start_date={start_date}, end_date={end_date}")
+    print(f"DEBUG: Getting bookings from {start_date} to {end_date}")
+    
+    try:
+        query = """SELECT id, bruker, ankomst_dato, ankomst_tid, 
+                          avreise_dato, avreise_tid, abonnement_type 
+                   FROM bookings"""
+        
+        logger.info(f"Executing query: {query}")
+        df = fetch_data('bookings', query)
+        
+        if df is None or df.empty:
+            logger.info("No bookings found")
+            return pd.DataFrame()
+            
+        # Lag en eksplisitt kopi av dataframe
+        logger.info(f"Initial dataframe shape: {df.shape}")
+        df = df.copy()
+        
+        # Konverter datoer
+        logger.info("Converting dates")
+        df.loc[:, 'ankomst_dato'] = pd.to_datetime(df['ankomst_dato'])
+        df.loc[:, 'avreise_dato'] = pd.to_datetime(df['avreise_dato'])
+        
+        # Filtrer på dato hvis spesifisert
+        if start_date:
+            logger.info(f"Filtering by start_date: {start_date}")
+            df = df[df['ankomst_dato'] >= start_date].copy()
+            
+        if end_date:
+            logger.info(f"Filtering by end_date: {end_date}")
+            df = df[df['ankomst_dato'] <= end_date].copy()
+            
+        # Kombiner dato og tid med .loc
+        logger.info("Combining date and time")
+        try:
+            # Rundt linje 474 - Oppdatert versjon
+            df.loc[:, 'ankomst'] = pd.to_datetime(
+                df['ankomst_dato'].astype(str) + ' ' + df['ankomst_tid']
+            ).dt.tz_localize('Europe/Oslo')
+            
+            # Rundt linje 507 - Oppdatert versjon
+            df.loc[:, 'avreise'] = pd.to_datetime(
+                df['avreise_dato'].astype(str) + ' ' + df['avreise_tid']
+            )
+            
+            logger.info("Successfully created datetime columns")
+        except Exception as e:
+            logger.error(f"Error creating datetime columns: {str(e)}")
+            print(f"DEBUG ERROR: Failed to create datetime columns: {str(e)}")
+            raise
+        
+        logger.info(f"Final dataframe shape: {df.shape}")
+        print(f"DEBUG: Processed {len(df)} bookings")
+        
+        return df
+        
+    except Exception as e:
+        logger.error(f"Error in get_bookings: {str(e)}", exc_info=True)
+        print(f"DEBUG ERROR: Failed to get bookings: {str(e)}")
         return pd.DataFrame()
     

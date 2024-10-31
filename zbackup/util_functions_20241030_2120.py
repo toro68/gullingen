@@ -26,14 +26,12 @@ def get_date_range(period):
     oslo_tz = pytz.timezone('Europe/Oslo')
     now = datetime.now(oslo_tz)
     
-    if period == "Siste 12 timer":
-        start_date = now - timedelta(hours=12)
-        logger.debug("Siste 12 timer - Start: %s, Slutt: %s", start_date, now)
-        return start_date, now
-    elif period == "Siste 24 timer":
+    if period == "Siste 24 timer":
         return now - timedelta(hours=24), now
     elif period == "Siste 7 dager":
         return now - timedelta(days=7), now
+    elif period == "Siste 12 timer":
+        return now - timedelta(hours=12), now
     elif period == "Siste 4 timer":
         return now - timedelta(hours=4), now
     elif period == "Siden sist fredag":

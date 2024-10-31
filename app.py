@@ -86,9 +86,6 @@ from feedback_utils import (
 # Strøing utilities
 from stroing_utils import bestill_stroing, admin_stroing_page, hent_bruker_stroing_bestillinger, vis_graf_stroing
 
-# Weather utilities
-from weather_display_utils import display_weather_data, display_alarms_homepage
-
 # Utility functions
 from util_functions import (
     get_date_range,
@@ -106,6 +103,9 @@ from alert_utils import clean_invalid_expiry_dates, get_active_alerts
 
 # Logging configuration
 from logging_config import setup_logging, get_logger
+
+from weather_display_utils import display_weather_data, handle_weather_page
+from weather_utils import fetch_and_process_data
 
 # Set up logging
 setup_logging()
@@ -141,9 +141,6 @@ def display_home_page(customer):
         logger.error(f"Feil ved henting av varsler: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av varsler. Vennligst prøv igjen senere.")
     
-    # vis siste alarmer for glatte veier og snøfokk
-    display_alarms_homepage()
-    
     # Vis daglige tunbrøytinger
     vis_hyttegrend_aktivitet()
     
@@ -152,8 +149,8 @@ def display_home_page(customer):
     display_maintenance_feedback()  # Legg til denne linjen
     
     # Lenker til ressurser
-    st.subheader("Nyttige lenker")
-    with st.expander("Kart og dokumenter"):
+    st.subheader("❗️ Nyttige lenker")
+    with st.expander("📍Kart og dokumenter"):
         st.markdown(
             """
             - [Brøytekart](https://sartopo.com/m/J881)
@@ -163,7 +160,7 @@ def display_home_page(customer):
             """
         )
 
-    with st.expander("Væroppdateringer og varsler"):
+    with st.expander("🌤️ 🌨️ Væroppdateringer og varsler"):
         st.markdown(
             """
             - Følg @gullingen365 p [X(Twitter)](https://x.com/gullingen365) 
@@ -263,24 +260,7 @@ def main():
                 if selected == "Hjem":
                     display_home_page(customer)
                 elif selected == "Værdata":
-                    client_id = st.secrets["api_keys"]["client_id"]
-                    period_options = [
-                        "Siste 24 timer",
-                        "Siste 7 dager",
-                        "Siste 12 timer",
-                        "Siste 4 timer",
-                        "Siden sist fredag",
-                        "Siden sist søndag",
-                        "Egendefinert periode",
-                        "Siste GPS-aktivitet til nå",
-                    ]
-                    period = st.selectbox("Velg en periode:", options=period_options)
-                    start_date, end_date = get_date_range(period)
-                    if start_date is None or end_date is None:
-                        st.error(f"Kunne ikke hente datoområde for perioden: {period}")
-                    else:
-                        st.write(f"Henter data fra: {start_date.strftime('%d.%m.%Y kl. %H:%M')} til: {end_date.strftime('%d.%m.%Y kl. %H:%M')}")
-                        display_weather_data(client_id, start_date, end_date)
+                    handle_weather_page()
                 elif selected == "Bestill Tunbrøyting":
                     bestill_tunbroyting()
                 elif selected == "Bestill Strøing":

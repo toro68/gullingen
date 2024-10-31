@@ -14,21 +14,10 @@ from util_functions import neste_fredag
 from utils import is_active_booking
 from customer_utils import get_customer_by_id, get_rode, load_customer_database, vis_arsabonnenter, customer_edit_component
 from map_utils import vis_dagens_tunkart
-from db_utils import get_db_connection
+from db_utils import get_db_connection, fetch_data
 from logging_config import get_logger
 
 logger = get_logger(__name__)
-
-
-# def get_db_connection() -> sqlite3.Connection:
-#     """
-#     Oppretter og returnerer en tilkobling til tunbrøyting-databasen.
-
-#     Returns:
-#         sqlite3.Connection: En tilkobling til tunbrøyting-databasen.
-#     """
-#     db_path = os.path.join(DATABASE_PATH, "tunbroyting.db")
-#     return sqlite3.connect(db_path, check_same_thread=False)
 
 # CREATE - hovedfunksjon i app.py
 def bestill_tunbroyting():
@@ -182,43 +171,10 @@ def lagre_bestilling(
 # READ
 # Viser brukerens tidligere bestillinger i bestill_tunbroyting
 def hent_bestillinger() -> pd.DataFrame:
-    try:
-        with get_db_connection('tunbroyting') as conn:
-            df = pd.read_sql_query("SELECT * FROM tunbroyting_bestillinger", conn)
-            
-            if df.empty:
-                return df
-                
-            # Konverter dato og tid kolonner
-            for col in ['ankomst_dato', 'avreise_dato']:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
-                
-            for col in ['ankomst_tid', 'avreise_tid']:
-                df[col] = pd.to_datetime(df[col], format='%H:%M:%S', errors='coerce').dt.time
-                
-            # Kombiner dato og tid til datetime
-            df['ankomst'] = df.apply(
-                lambda row: pd.Timestamp.combine(
-                    row['ankomst_dato'].date() if pd.notnull(row['ankomst_dato']) else None,
-                    row['ankomst_tid'] if pd.notnull(row['ankomst_tid']) else time()
-                ).tz_localize(TZ) if pd.notnull(row['ankomst_dato']) else pd.NaT,
-                axis=1
-            )
-            
-            df['avreise'] = df.apply(
-                lambda row: pd.Timestamp.combine(
-                    row['avreise_dato'].date() if pd.notnull(row['avreise_dato']) else None,
-                    row['avreise_tid'] if pd.notnull(row['avreise_tid']) else time()
-                ).tz_localize(TZ) if pd.notnull(row['avreise_dato']) else pd.NaT,
-                axis=1
-            )
-            
-            return df
-            
-    except Exception as e:
-        logger.error(f"Feil ved henting av bestillinger: {str(e)}")
-        return pd.DataFrame()
-    
+    """Deprecated: Bruk get_bookings() i stedet"""
+    logger.warning("hent_bestillinger() is deprecated, use get_bookings() instead")
+    return get_bookings()
+
 def hent_bruker_bestillinger(user_id):
     with get_db_connection('tunbroyting') as conn:
         query = """
@@ -278,21 +234,10 @@ def hent_statistikk_data(bestillinger: pd.DataFrame) -> Dict[str, Any]:
     }
 
 # READ for map
-def hent_dagens_bestillinger():
-    today = datetime.now(TZ).date()
-    with get_db_connection('tunbroyting') as conn:
-        query = """
-        SELECT * FROM tunbroyting_bestillinger 
-        WHERE date(ankomst_dato) = ? 
-        OR (date(ankomst_dato) <= ? AND date(avreise_dato) >= ?)
-        OR (abonnement_type = 'Årsabonnement' AND strftime('%w', ?) = '5')
-        """
-        df = pd.read_sql_query(query, conn, params=(today, today, today, today.isoformat()))
-
-    df["ankomst_dato"] = pd.to_datetime(df["ankomst_dato"])
-    df["avreise_dato"] = pd.to_datetime(df["avreise_dato"])
-
-    return df
+def hent_dagens_bestillinger() -> pd.DataFrame:
+    """Deprecated: Bruk get_bookings() og filter_todays_bookings() i stedet"""
+    logger.warning("hent_dagens_bestillinger() is deprecated, use get_bookings() and filter_todays_bookings() instead")
+    return filter_todays_bookings(get_bookings())
 
 def hent_aktive_bestillinger():
     today = datetime.now(TZ).date()
@@ -716,55 +661,46 @@ def filter_todays_bookings(bestillinger: pd.DataFrame) -> pd.DataFrame:
         bestillinger (pd.DataFrame): DataFrame med alle bestillinger
         
     Returns:
-        pd.DataFrame: DataFrame med kun dagens aktive bestillinger
+        pd.DataFrame: Filtrerte bestillinger for dagens dato
     """
     if bestillinger.empty:
         logger.info("No bookings found to filter")
         return bestillinger
         
-    today = pd.Timestamp.now(TZ).normalize()  # Normaliserer til midnatt
-    logger.info(f"Filtering bookings for date: {today}")
-
-    # Vis detaljert informasjon om dataene
-    logger.debug("\n--- Alle bestillinger ---\n"
-                f"Shape: {bestillinger.shape}\n"
-                f"Columns: {bestillinger.columns.tolist()}\n"
-                f"Data types:\n{bestillinger.dtypes}\n"
-                f"First few rows:\n{bestillinger.head()}\n---\n")
-    
-    # Opprett masker for hver betingelse
-    friday_mask = (today.weekday() == 4)  # Fredag
-    active_annual = (
-        (bestillinger['abonnement_type'] == 'Årsabonnement') & 
-        friday_mask
-    )
-    
-    active_weekly = (
-        (bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') & 
-        (bestillinger['ankomst'].dt.normalize() == today)
-    )
-    
-    # Kombiner maskene
-    active_mask = active_annual | active_weekly
-    
-    # Filtrer og kopier resultatet
-    result = bestillinger[active_mask].copy()
-    
-    # Logg resultatet
-    logger.debug("\n--- Dagens bestillinger ---\n"
-                f"Shape: {result.shape}\n"
-                f"Columns: {result.columns.tolist()}\n"
-                f"Data types:\n{result.dtypes}\n"
-                f"First few rows:\n{result}\n---\n")
-    
-    return result
-
-def filter_bookings_for_period(bestillinger, start_date, end_date):
-    return bestillinger[
-        ((bestillinger['ankomst'].dt.date >= start_date) & (bestillinger['ankomst'].dt.date <= end_date)) |
-        ((bestillinger['ankomst'].dt.date <= end_date) & (bestillinger['avreise'].dt.date >= start_date)) |
-        (bestillinger['abonnement_type'] == 'Årsabonnement')
-    ]
+    try:
+        today = pd.Timestamp.now(TZ).normalize()
+        logger.info(f"Filtering bookings for date: {today}")
+        
+        # Lag en ny kopi av DataFrame for å unngå advarsler
+        result = bestillinger.copy()
+        
+        # Sjekk at nødvendige kolonner eksisterer
+        required_columns = ['abonnement_type', 'ankomst']
+        if not all(col in result.columns for col in required_columns):
+            logger.error("Missing required columns in DataFrame")
+            return pd.DataFrame()
+        
+        # Opprett masker for hver betingelse
+        friday_mask = (today.weekday() == 4)
+        active_annual = (
+            (result['abonnement_type'] == 'Årsabonnement') & 
+            friday_mask
+        )
+        
+        active_weekly = (
+            (result['abonnement_type'] == 'Ukentlig ved bestilling') & 
+            (result['ankomst'].dt.normalize() == today)
+        )
+        
+        # Kombiner masker og filtrer
+        result = result[active_annual | active_weekly].copy()
+        
+        logger.info(f"Found {len(result)} active bookings for today")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error filtering today's bookings: {str(e)}", exc_info=True)
+        return pd.DataFrame()
 
 def tunbroyting_kommende_uke(bestillinger):
     current_date = datetime.now(TZ).date()
@@ -852,68 +788,9 @@ def vis_tunbestillinger_for_periode():
                 mime="text/csv",
             )
         
-# # statisk visning av tunbestillinger for bestill_tunbroyting
-# def vis_daglige_broytinger(bestillinger, start_date, end_date):
-#     if bestillinger.empty:
-#         st.write("Ingen data tilgjengelig for å vise daglige brøytinger.")
-#         return
-
-#     # Konverter 'ankomst_dato' til datetime hvis det ikke allerede er det, og så til date
-#     bestillinger["ankomst_dato"] = pd.to_datetime(bestillinger["ankomst_dato"], errors="coerce").dt.date
-
-#     # Hent alle unike brukere med årsabonnement
-#     yearly_subscribers = bestillinger[bestillinger["abonnement_type"] == "Årsabonnement"]["bruker"].unique()
-
-#     # Opprett en datoindeks for hele perioden
-#     date_index = pd.date_range(start=start_date, end=end_date, freq='D')
-
-#     # Initialiser en DataFrame for alle datoer
-#     all_dates_df = pd.DataFrame(index=date_index.date, columns=['antall'])
-#     all_dates_df['antall'] = 0
-
-#     # Teller bestillinger per dag
-#     daily_counts = bestillinger.groupby("ankomst_dato").size()
-
-#     # Legg til daglige tellinger og årlige abonnenter
-#     for date in date_index:
-#         date = date.date()
-#         if date in daily_counts.index:
-#             all_dates_df.loc[date, 'antall'] += daily_counts[date]
-        
-#         if date.weekday() == 4 and (date.month >= 11 or date.month <= 4):  # Fredag i vintersesongen
-#             all_dates_df.loc[date, 'antall'] += len(yearly_subscribers)
-
-#     # Opprett et søylediagram
-#     fig = px.bar(
-#         all_dates_df.reset_index(),
-#         x="index",
-#         y="antall",
-#         title="Oversikt over aktive bestillinger",
-#         labels={"index": "Dato", "antall": "Antall brøytinger"},
-#     )
-
-#     # Oppdater layout for bedre lesbarhet
-#     fig.update_layout(hovermode="x unified")
-#     fig.update_traces(hovertemplate="Dato: %{x}<br>Antall brøytinger: %{y}")
-
-#     # Vis grafen
-#     st.plotly_chart(fig)
-
-    # # Vis dataene i en tabell i en kollapsbar seksjon
-    # with st.expander("Vis antallet bestilinger i valgt periode i tabellform", expanded=False):
-    #     st.dataframe(all_dates_df.reset_index().rename(columns={"index": "Dato"}))
-
-    # # Legg til debugging informasjon
-    # st.write("Debugging informasjon:")
-    # st.write(f"Start dato: {start_date}, Slutt dato: {end_date}")
-    # st.write(f"Antall bestillinger: {len(bestillinger)}")
-    # st.write(f"Unike ankomstdatoer: {bestillinger['ankomst_dato'].nunique()}")
-    # st.write(f"Daglige tellinger:\n{daily_counts}")
-    # st.write(f"Ankomstdatoer:\n{bestillinger['ankomst_dato'].value_counts().sort_index()}")# Oppdatert hovedfunksjon
-
 # liste for tunkart-siden
 def vis_dagens_bestillinger():
-    st.subheader("Dagens tunbestillinger")
+    #st.subheader("Dagens tunbestillinger")
     bestillinger = hent_bestillinger()
     dagens_bestillinger = filter_todays_bookings(bestillinger)
 
@@ -945,7 +822,7 @@ def vis_dagens_bestillinger():
 
         # Fjern rader med 'Ikke aktiv' status for "Ukentlig ved bestilling"
         visnings_df = visnings_df[~((visnings_df['abonnement_type'] == 'Ukentlig ved bestilling') & 
-                                    (visnings_df['status'] == 'Ikke aktiv'))]
+                                (visnings_df['status'] == 'Ikke aktiv'))]
 
         # Sorter dataframe
         visnings_df = visnings_df.sort_values(['rode', 'hytte'])
@@ -976,54 +853,28 @@ def print_dataframe_info(df, name):
     print("---\n")
 
 
+# File: app.py
+# Category: View Functions
+
 def vis_tunbroyting_oversikt():
-    st.title("Viktig info til brøytefirma og oversikt over tunbestillinger")
-
-    with st.expander("Oppfordring til brøytefirma om å legge ut varsel", expanded=True):
-        st.info(
-            """
-            - Varsel er beskjeder til hytteeierne.
-            - Informer om vanskelige vei- og føreforhold, eventuelle forsinkelser, etc.
-            - Legg ut varsel hver gang det strøs, slik at FD kan fakturere for stikkveier.
-            """
-        )
-
-    with st.expander("Kart og dokumenter"):
-        st.markdown(
-            """
-            - [Brøytekart](https://sartopo.com/m/J881)
-            - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
-            - [Tunkart - alle tun](https://t.ly/2ewsw)
-            - Tunkart oversikt over årsabonnement, [se her](https://t.ly/Rgrm_)
-            """
-        )
-
-    with st.expander("Væroppdateringer og varsler"):
-        st.markdown(
-            """
-            - Følg @gullingen365 på [X(Twitter)](https://x.com/gullingen365) 
-              eller [Telegram](https://t.me/s/gullingen365) for å få 4 daglige væroppdateringer (ca kl 6, 11, 17, 22).
-            - Abonner på en daglig e-post med oppsummering av været siste døgn. Man vil også få alarm 
-              hvis det ikke brøytes ved mer enn 8mm nedbør som nysnø, [se her](https://t.ly/iFdRZ/)
-            """
-        )
+    st.title("Oversikt over tunbestillinger")
     
     bestillinger = hent_bestillinger()
     print_dataframe_info(bestillinger, "Alle bestillinger")
-
     if bestillinger.empty:
         st.write("Ingen bestillinger å vise.")
         return
 
     # Vis dagens bestillinger
     vis_dagens_bestillinger()
-
+    
     # Vis kart for dagens bestillinger
     dagens_bestillinger = filter_todays_bookings(bestillinger)
     print_dataframe_info(dagens_bestillinger, "Dagens bestillinger")
-
     fig_today = vis_dagens_tunkart(
-        dagens_bestillinger, st.secrets["mapbox"]["access_token"], "Dagens tunbrøyting"
+        dagens_bestillinger, 
+        st.secrets["mapbox"]["access_token"], 
+        "Dagens tunbrøyting"
     )
     st.plotly_chart(fig_today, use_container_width=True, key="today_chart")
     st.write("---")
@@ -1035,7 +886,7 @@ def vis_tunbroyting_oversikt():
     vis_arsabonnenter()
     
 def vis_aktive_bestillinger():
-    st.subheader("Oversikt over aktive tunbrøytingsbestillinger")
+    st.subheader("Aktive tunbestillinger")
 
     # Hent alle bestillinger
     bestillinger = hent_bestillinger()
@@ -1185,101 +1036,156 @@ def display_bookings(user_id):
 
 def vis_hyttegrend_aktivitet():
     """Viser oversikt over tunbrøytingsaktivitet for neste 7 dager."""
-    st.subheader("Aktive tunbestillinger i hyttegrenda")
-    st.info(
-        "💡  Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
-        "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
-    )
-    
-    alle_bestillinger = hent_bestillinger()
-    if alle_bestillinger.empty:
-        st.info("Ingen bestillinger funnet for perioden.")
-        return
-
-    dagens_dato = pd.Timestamp.now(TZ).normalize()
-    sluttdato = dagens_dato + pd.Timedelta(days=7)
-    dato_range = pd.date_range(dagens_dato, sluttdato)
-
-    # Opprett aktivitets-DataFrame
-    df_aktivitet = pd.DataFrame(index=dato_range)
-    df_aktivitet['dato_str'] = df_aktivitet.index.strftime('%d.%m')
-    df_aktivitet['ukedag'] = df_aktivitet.index.strftime('%A').map({
-        'Monday': 'Mandag', 'Tuesday': 'Tirsdag', 'Wednesday': 'Onsdag',
-        'Thursday': 'Torsdag', 'Friday': 'Fredag', 'Saturday': 'Lørdag', 
-        'Sunday': 'Søndag'
-    })
-    
-    # Tell bestillinger per dag
-    df_aktivitet['antall'] = 0
-    for dato in dato_range:
-        # Filter for årlige abonnementer på fredager
-        if dato.weekday() == 4:  # Fredag
-            yearly_count = len(alle_bestillinger[
-                alle_bestillinger['abonnement_type'] == 'Årsabonnement'
-            ])
-        else:
-            yearly_count = 0
-            
-        # Filter for ukentlige bestillinger på denne datoen
-        daily_count = len(alle_bestillinger[
-            (alle_bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') & 
-            (alle_bestillinger['ankomst'].dt.normalize() == dato)
-        ])
-        
-        df_aktivitet.loc[dato, 'antall'] = yearly_count + daily_count
-
-    # Vis aktivitetsoversikt
-    if df_aktivitet['antall'].sum() > 0:
-        # Vis som tabell med formattering
-        st.write("Oversikt over tunbrøytinger neste 7 dager:")
-        
-        # Formater visning
-        df_display = df_aktivitet.copy()
-        df_display['Dato'] = df_display['dato_str'] + ' (' + df_display['ukedag'] + ')'
-        df_display = df_display[['Dato', 'antall']].rename(columns={'antall': 'Antall tun'})
-        
-        # Bruk st.dataframe med styling
-        st.dataframe(
-            df_display.style.highlight_max(subset=['Antall tun'], color='lightgreen'),
-            hide_index=True
+    try:
+        st.subheader("Aktive tunbestillinger i hyttegrenda")
+        st.info(
+            "💡  Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
+            "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
         )
         
-        # Vis total
-        st.write(f"Totalt antall tunbrøytinger i perioden: {df_aktivitet['antall'].sum()}")
-    else:
-        st.info("Ingen planlagte tunbrøytinger de neste 7 dagene.")
-        
-    # Legg til ekstra informasjon om fredager
-    if df_aktivitet.loc[df_aktivitet.index[df_aktivitet.index.weekday == 4], 'antall'].sum() > 0:
-        st.info("💡 På fredager brøytes alle tun med årsabonnement automatisk.")
-    
-def tell_aktive_bestillinger(dato_ts):
+        alle_bestillinger = hent_bestillinger()
+        if alle_bestillinger is None:
+            logger.error("Kunne ikke hente bestillinger fra databasen")
+            st.error("Det oppstod en feil ved henting av bestillinger. Vennligst prøv igjen senere.")
+            return
+            
+        if alle_bestillinger.empty:
+            st.info("Ingen bestillinger funnet for perioden.")
+            return
+
+        dagens_dato = pd.Timestamp.now(TZ).normalize()
+        sluttdato = dagens_dato + pd.Timedelta(days=7)
+        dato_range = pd.date_range(dagens_dato, sluttdato)
+
+        # Opprett aktivitets-DataFrame med sikker konvertering
+        try:
+            df_aktivitet = pd.DataFrame(index=dato_range)
+            df_aktivitet['dato_str'] = df_aktivitet.index.strftime('%d.%m')
+            df_aktivitet['ukedag'] = df_aktivitet.index.strftime('%A').map({
+                'Monday': 'Mandag', 'Tuesday': 'Tirsdag', 'Wednesday': 'Onsdag',
+                'Thursday': 'Torsdag', 'Friday': 'Fredag', 'Saturday': 'Lørdag', 
+                'Sunday': 'Søndag'
+            })
+            
+            # Tell bestillinger per dag
+            df_aktivitet['antall'] = 0
+            for dato in dato_range:
+                # Filter for årlige abonnementer på fredager
+                if dato.weekday() == 4:  # Fredag
+                    yearly_count = len(alle_bestillinger[
+                        alle_bestillinger['abonnement_type'] == 'Årsabonnement'
+                    ])
+                else:
+                    yearly_count = 0
+                    
+                # Filter for ukentlige bestillinger på denne datoen
+                daily_count = len(alle_bestillinger[
+                    (alle_bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') & 
+                    (alle_bestillinger['ankomst'].dt.normalize() == dato)
+                ])
+                
+                df_aktivitet.loc[dato, 'antall'] = yearly_count + daily_count
+
+            # Vis aktivitetsoversikt
+            if df_aktivitet['antall'].sum() > 0:
+                st.write("Oversikt over tunbrøytinger neste 7 dager:")
+                
+                # Formater visning
+                df_display = df_aktivitet.copy()
+                df_display['Dato'] = df_display['dato_str'] + ' (' + df_display['ukedag'] + ')'
+                df_display = df_display[['Dato', 'antall']].rename(columns={'antall': 'Antall tun'})
+                
+                # Bruk st.dataframe med styling
+                st.dataframe(
+                    df_display.style.highlight_max(subset=['Antall tun'], color='lightgreen'),
+                    hide_index=True
+                )
+                
+                # Vis total
+                st.write(f"Totalt antall tunbrøytinger i perioden: {df_aktivitet['antall'].sum()}")
+            else:
+                st.info("Ingen planlagte tunbrøytinger de neste 7 dagene.")
+                
+            # Legg til ekstra informasjon om fredager
+            if df_aktivitet.loc[df_aktivitet.index[df_aktivitet.index.weekday == 4], 'antall'].sum() > 0:
+                st.info("💡 På fredager brøytes alle tun med årsabonnement automatisk.")
+                
+        except Exception as e:
+            logger.error(f"Feil ved behandling av bestillingsdata: {str(e)}", exc_info=True)
+            st.error("Det oppstod en feil ved behandling av bestillingsdataene.")
+            
+    except Exception as e:
+        logger.error(f"Feil i vis_hyttegrend_aktivitet: {str(e)}", exc_info=True)
+        st.error("Det oppstod en feil ved lasting av tunbrøytingsaktivitet. Vennligst prøv igjen senere.")
+
+def get_bookings(start_date=None, end_date=None):
     """
-    Teller aktive bestillinger for en gitt dato.
+    Henter tunbrøyting-bestillinger for en gitt periode.
     
     Args:
-        dato_ts: Timestamp fra dato_range
+        start_date (datetime, optional): Startdato for filtreringen
+        end_date (datetime, optional): Sluttdato for filtreringen
         
     Returns:
-        int: Antall aktive bestillinger
+        pd.DataFrame: DataFrame med bestillinger
     """
-    dato = pd.Timestamp(dato_ts).date()  # Konverter Timestamp til date
+    logger.info(f"Starting get_bookings with start_date={start_date}, end_date={end_date}")
     
-    # Konverter alle datoer til pandas Timestamps
-    ankomst_datoer = pd.to_datetime(alle_bestillinger['ankomst_dato']).dt.date
-    avreise_datoer = pd.to_datetime(alle_bestillinger['avreise_dato']).dt.date
-    
-    # Lag masker for de ulike betingelsene
-    standard_bestillinger = (
-        (ankomst_datoer <= dato) & 
-        (pd.Series([pd.isna(d) or d >= dato for d in avreise_datoer]))
-    )
-    
-    arsabonnement_fredag = (
-        (alle_bestillinger['abonnement_type'] == 'Årsabonnement') & 
-        (dato.weekday() == 4)  # Fredag
-    )
-    
-    # Kombiner maskene og tell antall True-verdier
-    return len(alle_bestillinger[standard_bestillinger | arsabonnement_fredag])
-                                                              
+    try:
+        query = """
+            SELECT id, bruker, ankomst_dato, ankomst_tid, 
+                   avreise_dato, avreise_tid, abonnement_type 
+            FROM tunbroyting_bestillinger
+        """
+        
+        # Hent data fra databasen
+        df = fetch_data('tunbroyting', query)
+        
+        if df is None or df.empty:
+            logger.info("No bookings found")
+            return pd.DataFrame(columns=[
+                'id', 'bruker', 'ankomst_dato', 'ankomst_tid', 
+                'avreise_dato', 'avreise_tid', 'abonnement_type',
+                'ankomst', 'avreise'
+            ])
+            
+        # Lag en ny DataFrame for å unngå SettingWithCopyWarning
+        df = df.copy()
+            
+        # Konverter datoer med eksplisitt format og feilhåndtering
+        for col in ['ankomst_dato', 'avreise_dato']:
+            try:
+                df[col] = pd.to_datetime(df[col], format='%Y-%m-%d', errors='coerce')
+            except Exception as e:
+                logger.error(f"Error converting {col}: {str(e)}")
+                df[col] = pd.NaT
+        
+        # Filtrer på dato hvis spesifisert
+        if start_date:
+            df = df.loc[df['ankomst_dato'] >= start_date]
+        if end_date:
+            df = df.loc[df['ankomst_dato'] <= end_date]
+        
+        # Kombiner dato og tid med sikker tidssone-håndtering
+        for col_pair in [('ankomst_dato', 'ankomst_tid', 'ankomst'), 
+                        ('avreise_dato', 'avreise_tid', 'avreise')]:
+            try:
+                df[col_pair[2]] = pd.to_datetime(
+                    df[col_pair[0]].dt.strftime('%Y-%m-%d') + ' ' + 
+                    df[col_pair[1]].astype(str)
+                ).dt.tz_localize('UTC').dt.tz_convert('Europe/Oslo')
+            except Exception as e:
+                logger.error(f"Error creating {col_pair[2]}: {str(e)}")
+                df[col_pair[2]] = pd.NaT
+        
+        logger.info(f"Successfully retrieved {len(df)} bookings")
+        return df
+        
+    except Exception as e:
+        logger.error(f"Error in get_bookings: {str(e)}", exc_info=True)
+        return pd.DataFrame(columns=[
+            'id', 'bruker', 'ankomst_dato', 'ankomst_tid', 
+            'avreise_dato', 'avreise_tid', 'abonnement_type',
+            'ankomst', 'avreise'
+        ])
+

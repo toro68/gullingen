@@ -9,7 +9,7 @@ TZ = ZoneInfo("Europe/Oslo")
 # Værdata
 STATION_ID = "SN46220"
 API_URL = "https://frost.met.no/observations/v0.jsonld"
-ELEMENTS = "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_from_direction,max(wind_speed_of_gust PT1H),mean(wind_speed PT1H),surface_temperature,relative_humidity,dew_point_temperature"
+ELEMENTS = "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),max_wind_speed(wind_from_direction PT1H),max(wind_speed_of_gust PT1H),wind_speed,surface_temperature,relative_humidity,dew_point_temperature"
 TIME_RESOLUTION = "PT1H"
 
 # GPS-data

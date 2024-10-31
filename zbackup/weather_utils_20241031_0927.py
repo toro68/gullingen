@@ -93,7 +93,9 @@ def create_dataframe_from_raw_data(data):
                 'air_temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'air_temperature'), np.nan),
                 'precipitation_amount': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
                 'surface_snow_thickness': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
+                'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan),
                 'max_wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'max(wind_speed_of_gust PT1H)'), np.nan),
+                'wind_from_direction': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'max_wind_speed(wind_from_direction PT1H)'), np.nan),
                 'surface_temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_temperature'), np.nan),
                 'relative_humidity': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'relative_humidity'), np.nan),
                 'dew_point_temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'dew_point_temperature'), np.nan)
@@ -183,11 +185,13 @@ def smooth_dataframe(df):
             smoothed_data[column] = df[column]
     
     smoothed_df = pd.DataFrame(smoothed_data, index=df.index)
+    smoothed_df['wind_direction_category'] = smoothed_df['wind_from_direction'].apply(categorize_direction)
     return smoothed_df
 
 def fetch_and_process_data(client_id, date_start, date_end):
+    """Hovedfunksjon for å hente og prosessere værdata"""
     try:
-        # Sjekk og konverter datoer
+        # Valider datoer
         current_time = datetime.now(TZ)
         if isinstance(date_start, str):
             date_start = datetime.fromisoformat(date_start)
@@ -207,23 +211,14 @@ def fetch_and_process_data(client_id, date_start, date_end):
         df = process_dataframe(df)
         df = handle_missing_and_validate(df)
         df = calculate_derived_values(df)
-        
-        # Legg til alarmer før glatting
-        df = calculate_snow_drift_alarms(df)  # Sjekk at denne kjører
-        df = calculate_slippery_road_alarms(df)  # Sjekk at denne kjører
-        
         df = smooth_dataframe(df)
 
-        # Legg til snønedbør etter glatting
         df['snow_precipitation'] = calculate_snow_precipitations(
             df['air_temperature'].values,
             df['precipitation_amount'].values,
             df['surface_snow_thickness'].values
         )
 
-        # Debug logging
-        logger.debug("Kolonner i DataFrame etter prosessering: %s", df.columns.tolist())
-        
         return {'df': df}
 
     except Exception as e:
@@ -234,7 +229,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
 def calculate_snow_drift_alarms(df):
     df['snow_depth_change'] = df['surface_snow_thickness'].diff()
     conditions = [
-        df['max_wind_speed'] > 6,  # Endret fra wind_speed
+        df['wind_speed'] > 6,
         df['air_temperature'] <= -1,
         ((df['precipitation_amount'] <= 0.1) & (df['surface_snow_thickness'].diff().fillna(0).abs() >= 1)) | 
         ((df['precipitation_amount'] > 0.1) & (df['surface_snow_thickness'].diff().fillna(0) <= -0.5))
@@ -409,9 +404,8 @@ def get_default_columns():
     return [
         'air_temperature',
         'precipitation_amount',
-        'max_wind_speed',
+        'wind_speed',
         'surface_snow_thickness',
-        'snow_precipitation',
         'snow_drift_alarm',
         'slippery_road_alarm'
     ]
@@ -421,16 +415,21 @@ def get_available_columns():
     Returnerer alle tilgjengelige kolonner med norske navn
     """
     return {
-        'air_temperature': 'Lufttemperatur',
-        'precipitation_amount': 'Nedbør',
-        'surface_snow_thickness': 'Snødybde',
-        'max_wind_speed': 'Maks vindhastighet',  # Oppdatert fra wind_speed
-        'surface_temperature': 'Overflatetemperatur',
-        'relative_humidity': 'Relativ luftfuktighet',
-        'dew_point_temperature': 'Duggpunkt',
-        'snow_precipitation': 'Antatt snønedbør',
+        'air_temperature': 'Lufttemperatur (°C)',
+        'precipitation_amount': 'Nedbør (mm)',
+        'surface_snow_thickness': 'Snødybde (cm)',
+        'wind_speed': 'Vindhastighet (m/s)',
+        'max_wind_speed': 'Maks vindkast (m/s)',
+        'min_wind_speed': 'Min vindhastighet (m/s)',
+        'wind_from_direction': 'Vindretning (grader)',
+        'wind_direction_category': 'Vindretning',
+        'surface_temperature': 'Bakketemperatur (°C)',
+        'relative_humidity': 'Relativ luftfuktighet (%)',
+        'dew_point_temperature': 'Duggpunkt (°C)',
         'snow_drift_alarm': 'Snøfokk-alarm',
-        'slippery_road_alarm': 'Glatt vei-alarm'
+        'slippery_road_alarm': 'Glatt vei-alarm',
+        'snow_precipitation': 'Snønedbør (mm)',
+        'snow_depth_change': 'Endring i snødybde (cm)'
     }
 
 def get_csv_download_link(df: pd.DataFrame, selected_columns: list = None) -> str:
@@ -672,7 +671,7 @@ def display_weather_statistics(df, available_columns):
             'air_temperature': 'Lufttemperatur (°C)',
             'precipitation_amount': 'Nedbør (mm)',
             'surface_snow_thickness': 'Snødybde (cm)',
-            'mean(wind_speed PT1H)': 'Vindhastighet (m/s)',
+            'wind_speed': 'Vindhastighet (m/s)',
             'max_wind_speed': 'Maks vindhastighet (m/s)',
             'snow_precipitation': 'Antatt snønedbør (mm)'
         }

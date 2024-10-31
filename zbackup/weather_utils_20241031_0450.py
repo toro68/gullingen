@@ -10,104 +10,53 @@ from util_functions import get_date_range
 from logging_config import get_logger
 import base64
 import streamlit as st
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 logger = get_logger(__name__)
-
-# Legg til rett etter imports
-print("DEBUG - Using ELEMENTS:", ELEMENTS)
-print("DEBUG - Using STATION_ID:", STATION_ID)
 
 def fetch_raw_weather_data(client_id, date_start, date_end):
     """Henter rådata fra API-et"""
     try:
-        # Formater datoene riktig for API-et
-        date_start_str = date_start.strftime('%Y-%m-%dT%H:%M:%S')
-        date_end_str = date_end.strftime('%Y-%m-%dT%H:%M:%S')
-        
-        # Debug-logging for å se hvilke elementer som faktisk brukes
-        logger.debug(f"Using ELEMENTS from constants: {ELEMENTS}")
-        
         params = {
             "sources": STATION_ID,
             "elements": ELEMENTS,
             "timeresolutions": TIME_RESOLUTION,
-            "referencetime": f"{date_start_str}/{date_end_str}"
+            "referencetime": f"{date_start.isoformat()}/{date_end.isoformat()}"
         }
-        
-        # Debug-logging for hele API-kallet
-        logger.debug(f"Full API request params: {params}")
-        logger.debug(f"API URL: {API_URL}")
-        
         response = requests.get(API_URL, params=params, auth=(client_id, ""))
-        
-        # Debug-logging for response
-        logger.debug(f"Response status code: {response.status_code}")
-        logger.debug(f"Response URL: {response.url}")
-        
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
         logger.error(f"Nettverksfeil ved henting av data: {str(e)}")
-        logger.error(f"Full URL som feilet: {e.response.url if hasattr(e, 'response') else 'Unknown URL'}")
         raise
 
 def create_dataframe_from_raw_data(data):
     """Konverterer rådata til DataFrame"""
     try:
+        st.write("Debug: Starter create_dataframe_from_raw_data")
         if not data or not data.get('data'):
             raise ValueError("Ingen data returnert fra API-et")
             
-        # Utvidet logging for å analysere elementId-er og deres verdier
-        if data['data']:
-            element_stats = {}
-            for item in data['data']:
-                for obs in item['observations']:
-                    element_id = obs['elementId']
-                    if element_id not in element_stats:
-                        element_stats[element_id] = {
-                            'total_values': 0,
-                            'non_null_values': 0,
-                            'sample_value': None
-                        }
-                    element_stats[element_id]['total_values'] += 1
-                    if obs['value'] is not None:
-                        element_stats[element_id]['non_null_values'] += 1
-                        if element_stats[element_id]['sample_value'] is None:
-                            element_stats[element_id]['sample_value'] = obs['value']
-
-            # Logg statistikk for hvert element
-            logger.info("Element statistikk:")
-            for element_id, stats in element_stats.items():
-                coverage = (stats['non_null_values'] / stats['total_values'] * 100) if stats['total_values'] > 0 else 0
-                logger.info(f"ElementId: {element_id}")
-                logger.info(f"  - Totalt antall verdier: {stats['total_values']}")
-                logger.info(f"  - Antall ikke-null verdier: {stats['non_null_values']}")
-                logger.info(f"  - Dekningsgrad: {coverage:.1f}%")
-                logger.info(f"  - Eksempelverdi: {stats['sample_value']}")
-
         df = pd.DataFrame([
             {
                 'timestamp': datetime.fromisoformat(item['referenceTime'].rstrip('Z')),
                 'air_temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'air_temperature'), np.nan),
                 'precipitation_amount': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'sum(precipitation_amount PT1H)'), np.nan),
                 'surface_snow_thickness': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_snow_thickness'), np.nan),
+                'wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'wind_speed'), np.nan),
                 'max_wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'max(wind_speed_of_gust PT1H)'), np.nan),
+                'min_wind_speed': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'min(wind_speed P1M)'), np.nan),
+                'wind_from_direction': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'max_wind_speed(wind_from_direction PT1H)'), np.nan),
                 'surface_temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'surface_temperature'), np.nan),
                 'relative_humidity': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'relative_humidity'), np.nan),
                 'dew_point_temperature': next((obs['value'] for obs in item['observations'] if obs['elementId'] == 'dew_point_temperature'), np.nan)
             }
             for item in data['data']
         ])
-        
-        # Legg til debugging for å se hvilke kolonner som har data
-        logger.debug("Kolonner med data: %s", 
-                    {col: df[col].notna().sum() for col in df.columns})
-        
+        st.write(f"Debug: Opprettet DataFrame med kolonner: {df.columns.tolist()}")
         return df
         
     except Exception as e:
+        st.error(f"Feil i create_dataframe_from_raw_data: {str(e)}")
         logger.error(f"Feil i create_dataframe_from_raw_data: {str(e)}", exc_info=True)
         raise
 
@@ -141,35 +90,32 @@ def handle_missing_and_validate(df):
 def calculate_derived_values(df):
     """Beregner avledede verdier"""
     try:
+        st.write("Debug: Starter calculate_derived_values")
+        st.write(f"Debug: Kolonner før beregning: {df.columns.tolist()}")
+        
         # Sjekk om nødvendige kolonner finnes
         required_columns = ['air_temperature', 'precipitation_amount', 'surface_snow_thickness']
         missing_columns = [col for col in required_columns if col not in df.columns]
-        
         if missing_columns:
-            logger.warning(f"Mangler kolonner for beregning: {missing_columns}")
+            st.error(f"Mangler nødvendige kolonner for beregning: {missing_columns}")
             return df
-            
-        # Beregn snønedbør bare hvis alle nødvendige kolonner finnes
+        
+        # Beregn snønedbør
         df['snow_precipitation'] = calculate_snow_precipitations(
             df['air_temperature'].values,
             df['precipitation_amount'].values,
             df['surface_snow_thickness'].values
         )
         
-        # Beregn alarmer basert p tilgjengelige data
-        if 'wind_speed' in df.columns:
-            df = calculate_snow_drift_alarms(df)
-        else:
-            logger.warning("Mangler vinddata for snøfokk-alarm")
-            
-        if all(col in df.columns for col in required_columns):
-            df = calculate_slippery_road_alarms(df)
-        else:
-            logger.warning("Mangler data for glatt vei-alarm")
-            
+        # Beregn alarmer
+        df = calculate_snow_drift_alarms(df)
+        df = calculate_slippery_road_alarms(df)
+        
+        st.write(f"Debug: Kolonner etter beregning: {df.columns.tolist()}")
         return df
         
     except Exception as e:
+        st.error(f"Feil i calculate_derived_values: {str(e)}")
         logger.error(f"Feil i calculate_derived_values: {str(e)}", exc_info=True)
         return df
 
@@ -183,11 +129,13 @@ def smooth_dataframe(df):
             smoothed_data[column] = df[column]
     
     smoothed_df = pd.DataFrame(smoothed_data, index=df.index)
+    smoothed_df['wind_direction_category'] = smoothed_df['wind_from_direction'].apply(categorize_direction)
     return smoothed_df
 
 def fetch_and_process_data(client_id, date_start, date_end):
+    """Hovedfunksjon for å hente og prosessere værdata"""
     try:
-        # Sjekk og konverter datoer
+        # Valider datoer
         current_time = datetime.now(TZ)
         if isinstance(date_start, str):
             date_start = datetime.fromisoformat(date_start)
@@ -207,23 +155,8 @@ def fetch_and_process_data(client_id, date_start, date_end):
         df = process_dataframe(df)
         df = handle_missing_and_validate(df)
         df = calculate_derived_values(df)
-        
-        # Legg til alarmer før glatting
-        df = calculate_snow_drift_alarms(df)  # Sjekk at denne kjører
-        df = calculate_slippery_road_alarms(df)  # Sjekk at denne kjører
-        
         df = smooth_dataframe(df)
 
-        # Legg til snønedbør etter glatting
-        df['snow_precipitation'] = calculate_snow_precipitations(
-            df['air_temperature'].values,
-            df['precipitation_amount'].values,
-            df['surface_snow_thickness'].values
-        )
-
-        # Debug logging
-        logger.debug("Kolonner i DataFrame etter prosessering: %s", df.columns.tolist())
-        
         return {'df': df}
 
     except Exception as e:
@@ -234,7 +167,7 @@ def fetch_and_process_data(client_id, date_start, date_end):
 def calculate_snow_drift_alarms(df):
     df['snow_depth_change'] = df['surface_snow_thickness'].diff()
     conditions = [
-        df['max_wind_speed'] > 6,  # Endret fra wind_speed
+        df['wind_speed'] > 6,
         df['air_temperature'] <= -1,
         ((df['precipitation_amount'] <= 0.1) & (df['surface_snow_thickness'].diff().fillna(0).abs() >= 1)) | 
         ((df['precipitation_amount'] > 0.1) & (df['surface_snow_thickness'].diff().fillna(0) <= -0.5))
@@ -409,9 +342,8 @@ def get_default_columns():
     return [
         'air_temperature',
         'precipitation_amount',
-        'max_wind_speed',
+        'wind_speed',
         'surface_snow_thickness',
-        'snow_precipitation',
         'snow_drift_alarm',
         'slippery_road_alarm'
     ]
@@ -421,16 +353,21 @@ def get_available_columns():
     Returnerer alle tilgjengelige kolonner med norske navn
     """
     return {
-        'air_temperature': 'Lufttemperatur',
-        'precipitation_amount': 'Nedbør',
-        'surface_snow_thickness': 'Snødybde',
-        'max_wind_speed': 'Maks vindhastighet',  # Oppdatert fra wind_speed
-        'surface_temperature': 'Overflatetemperatur',
-        'relative_humidity': 'Relativ luftfuktighet',
-        'dew_point_temperature': 'Duggpunkt',
-        'snow_precipitation': 'Antatt snønedbør',
+        'air_temperature': 'Lufttemperatur (°C)',
+        'precipitation_amount': 'Nedbør (mm)',
+        'surface_snow_thickness': 'Snødybde (cm)',
+        'wind_speed': 'Vindhastighet (m/s)',
+        'max_wind_speed': 'Maks vindkast (m/s)',
+        'min_wind_speed': 'Min vindhastighet (m/s)',
+        'wind_from_direction': 'Vindretning (grader)',
+        'wind_direction_category': 'Vindretning',
+        'surface_temperature': 'Bakketemperatur (°C)',
+        'relative_humidity': 'Relativ luftfuktighet (%)',
+        'dew_point_temperature': 'Duggpunkt (°C)',
         'snow_drift_alarm': 'Snøfokk-alarm',
-        'slippery_road_alarm': 'Glatt vei-alarm'
+        'slippery_road_alarm': 'Glatt vei-alarm',
+        'snow_precipitation': 'Snønedbør (mm)',
+        'snow_depth_change': 'Endring i snødybde (cm)'
     }
 
 def get_csv_download_link(df: pd.DataFrame, selected_columns: list = None) -> str:
@@ -500,233 +437,3 @@ def get_csv_download_link(df: pd.DataFrame, selected_columns: list = None) -> st
     except Exception as e:
         logger.error(f"Feil ved generering av nedlastingslink: {str(e)}")
         return "Kunne ikke generere nedlastingslink. Vennligst prøv igjen senere."
-
-def create_improved_graph(df):
-    """
-    Lager en forbedret graf med værdata
-    
-    Args:
-        df (pd.DataFrame): DataFrame med værdata
-        
-    Returns:
-        go.Figure eller None: Plotly figur-objekt hvis vellykket, None hvis feil
-    """
-    try:
-        # Først konverter alle kolonner til numeriske verdier og håndter manglende data
-        processed_data = {}
-        for column in df.columns:
-            # Konverter til numerisk og håndter feil
-            processed_data[column] = pd.to_numeric(df[column], errors='coerce')
-            
-            # Fjern NaN-verdier og interpoler manglende data
-            valid_data = processed_data[column].dropna()
-            if not valid_data.empty:
-                # Interpoler manglende verdier basert på tidsserie
-                processed_data[column] = pd.Series(valid_data).interpolate(method='time')
-        
-        # Opprett ny DataFrame med behandlede data
-        df = pd.DataFrame(processed_data, index=df.index)
-        
-        # Debug utskrift
-        logger.debug("Kolonner med data etter prosessering: %s", 
-                    {col: len(df[col].dropna()) for col in df.columns})
-        
-        # Definer standard plot-konfigurasjoner
-        plot_configs = {
-            'Lufttemperatur': {
-                'column': 'air_temperature',
-                'type': 'scatter',
-                'color': 'darkred',
-                'unit': '°C'
-            },
-            'Nedbør': {
-                'column': 'precipitation_amount',
-                'type': 'bar',
-                'color': 'blue',
-                'unit': 'mm'
-            },
-            'Snødybde': {
-                'column': 'surface_snow_thickness',
-                'type': 'scatter',
-                'color': 'cyan',
-                'unit': 'cm'
-            },
-            'Vindhastighet': {
-                'column': 'wind_speed',
-                'type': 'scatter',
-                'color': 'green',
-                'unit': 'm/s'
-            },
-            'Maks vindhastighet': {
-                'column': 'max_wind_speed',
-                'type': 'scatter',
-                'color': 'darkgreen',
-                'unit': 'm/s'
-            },
-            'Antatt snønedbør': {
-                'column': 'snow_precipitation',
-                'type': 'bar',
-                'color': 'lightblue',
-                'unit': 'mm'
-            }
-        }
-        
-        # Filtrer ut plots som har data
-        available_plots = {}
-        for name, config in plot_configs.items():
-            if config['column'] in df.columns:
-                data = df[config['column']]
-                if not data.isna().all():  # Sjekk om det finnes ikke-NaN verdier
-                    available_plots[name] = config
-                    logger.debug(f"Kolonne {config['column']} har {len(data.dropna())} gyldige verdier")
-        
-        if not available_plots:
-            logger.warning("Ingen gyldige data tilgjengelig for visning")
-            st.error("Ingen gyldige data tilgjengelig for visning")
-            return None
-        
-        # La brukeren velge fra tilgjengelige plots
-        selected_plots = st.multiselect(
-            "Velg grafer som skal vises:",
-            options=list(available_plots.keys()),
-            default=list(available_plots.keys())
-        )
-        
-        if not selected_plots:
-            st.warning("Velg minst én graf å vise")
-            return None
-        
-        # Opprett subplot figure
-        fig = make_subplots(
-            rows=len(selected_plots),
-            cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.05,
-            subplot_titles=selected_plots
-        )
-        
-        # Legg til hver valgte graf
-        for i, plot_name in enumerate(selected_plots, 1):
-            config = available_plots[plot_name]
-            data = df[config['column']].copy()
-            
-            # Fjern NaN-verdier for denne spesifikke serien
-            valid_data = data.dropna()
-            if valid_data.empty:
-                logger.warning(f"Ingen gyldige data for {plot_name}")
-                continue
-                
-            if config['type'] == 'scatter':
-                trace = go.Scatter(
-                    x=valid_data.index,
-                    y=valid_data.values,
-                    name=plot_name,
-                    line=dict(color=config['color']),
-                    hovertemplate=f"{plot_name}: %{{y:.1f}}{config['unit']}<br>Tid: %{{x|%Y-%m-%d %H:%M}}"
-                )
-            else:  # bar
-                trace = go.Bar(
-                    x=valid_data.index,
-                    y=valid_data.values,
-                    name=plot_name,
-                    marker_color=config['color'],
-                    hovertemplate=f"{plot_name}: %{{y:.1f}}{config['unit']}<br>Tid: %{{x|%Y-%m-%d %H:%M}}"
-                )
-            
-            fig.add_trace(trace, row=i, col=1)
-            fig.update_yaxes(title_text=f"{plot_name} ({config['unit']})", row=i, col=1)
-        
-        # Oppdater layout
-        fig.update_layout(
-            height=250 * len(selected_plots),
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
-        )
-        
-        logger.debug("Generert figur med følgende traces: %s", 
-                    [trace['name'] for trace in fig['data']])
-        
-        return fig
-        
-    except Exception as e:
-        logger.error("Feil i create_improved_graph: %s", str(e), exc_info=True)
-        st.error(f"Feil ved generering av graf: {str(e)}")
-        return None
-
-def display_weather_statistics(df, available_columns):
-    """
-    Viser værstatistikk
-    
-    Args:
-        df (pd.DataFrame): DataFrame med værdata
-        available_columns (list): Liste over tilgjengelige kolonner
-    """
-    try:
-        stats_columns = {
-            'air_temperature': 'Lufttemperatur (°C)',
-            'precipitation_amount': 'Nedbør (mm)',
-            'surface_snow_thickness': 'Snødybde (cm)',
-            'mean(wind_speed PT1H)': 'Vindhastighet (m/s)',
-            'max_wind_speed': 'Maks vindhastighet (m/s)',
-            'snow_precipitation': 'Antatt snønedbør (mm)'
-        }
-        
-        stats_data = {'Statistikk': ["Gjennomsnitt", "Median", "Minimum", "Maksimum", "Sum"]}
-        
-        for col, name in stats_columns.items():
-            if col in available_columns:
-                # Fjern NaN-verdier før beregning
-                valid_data = df[col].dropna()
-                
-                if len(valid_data) > 0:
-                    values = [
-                        f"{valid_data.mean():.1f}",
-                        f"{valid_data.median():.1f}",
-                        f"{valid_data.min():.1f}",
-                        f"{valid_data.max():.1f}",
-                        f"{valid_data.sum():.1f}" if col in ['precipitation_amount', 'snow_precipitation'] else "N/A"
-                    ]
-                else:
-                    values = ["nan", "nan", "nan", "nan", "N/A"]
-                
-                stats_data[name] = values
-        
-        stats = pd.DataFrame(stats_data)
-        st.table(stats)
-        
-    except Exception as e:
-        logger.error(f"Feil ved generering av værstatistikk: {str(e)}")
-        st.error("Kunne ikke generere værstatistikk")
-
-def test_element_coverage(client_id, days=7):
-    """
-    Tester dekning av værelementer over en gitt periode.
-    
-    Args:
-        client_id (str): API-nøkkel for Frost
-        days (int): Antall dager å teste bakover i tid
-    """
-    try:
-        end_date = datetime.now(TZ)
-        start_date = end_date - timedelta(days=days)
-        
-        logger.info(f"Tester elementdekning fra {start_date} til {end_date}")
-        logger.info(f"Bruker følgende elementer: {ELEMENTS}")
-        
-        # Hent rådata
-        raw_data = fetch_raw_weather_data(client_id, start_date, end_date)
-        
-        # Opprett DataFrame (dette vil logge elementstatistikken)
-        create_dataframe_from_raw_data(raw_data)
-        
-        logger.info("Test fullført")
-        
-    except Exception as e:
-        logger.error(f"Feil under testing av elementdekning: {str(e)}")
-        raise

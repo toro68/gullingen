@@ -138,10 +138,10 @@ def create_improved_graph(df):
             "units": "cm",
         }
     
-    if 'Vind' in selected_plots and 'max_wind_speed' in df.columns:
-        trace_data["Vind"] = {
-            "data": df["max_wind_speed"],
-            "color": "purple",
+    if 'Vind' in selected_plots and 'wind_speed' in df.columns:
+        trace_data["Vindhastighet"] = {
+            "data": df["wind_speed"],
+            "color": "green",
             "type": "scatter",
             "row": row_mapping['Vind'],
             "units": "m/s",
@@ -355,14 +355,21 @@ def display_additional_data(df, available_columns):
 
 def display_wind_data(df, available_columns):
     """Viser vinddata hvis tilgjengelig"""
-    # Endre required_columns til kun å sjekke max_wind_speed
-    required_columns = ['max_wind_speed']
+    required_columns = ['wind_speed', 'max_wind_speed', 'wind_direction_category']
     if not all(col in available_columns for col in required_columns):
         return
 
     with st.expander("Detaljert vinddata"):
         st.subheader("Vindhastighetsprofil")
         wind_fig = go.Figure()
+        wind_fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df["wind_speed"],
+                mode="lines",
+                name="Gjennomsnittlig vindhastighet",
+            )
+        )
         wind_fig.add_trace(
             go.Scatter(
                 x=df.index,
@@ -378,6 +385,26 @@ def display_wind_data(df, available_columns):
         )
         st.plotly_chart(wind_fig)
 
+        if 'wind_direction_category' in available_columns:
+            st.subheader("Vindretningsfordeling")
+            wind_direction_counts = df["wind_direction_category"].value_counts()
+            directions = ["N", "NØ", "Ø", "SØ", "S", "SV", "V", "NV"]
+            values = [wind_direction_counts.get(d, 0) for d in directions]
+
+            wind_direction_fig = go.Figure(
+                data=[
+                    go.Barpolar(r=values, theta=directions, marker_color="rgb(106,81,163)")
+                ]
+            )
+            wind_direction_fig.update_layout(
+                title="Fordeling av vindretninger",
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, max(values)]),
+                    angularaxis=dict(direction="clockwise"),
+                ),
+            )
+            st.plotly_chart(wind_direction_fig)
+
 def display_alarms(df, available_columns):
     with st.expander("Snøfokk-alarmer"):
         st.write("Alarmene er basert på værdata og ikke direkte observasjoner")
@@ -386,21 +413,17 @@ def display_alarms(df, available_columns):
         st.write("2) nedbør > 0.1 mm og minking i snødybde ≥ 0.5 cm")
         snow_drift_alarms = df[df["snow_drift_alarm"] == 1]
         if not snow_drift_alarms.empty:
-            columns_to_show = [
-                "air_temperature",
-                "max_wind_speed",
-                "surface_snow_thickness",
-                "precipitation_amount"
-            ]
-            
-            # Legg til snow_depth_change hvis den finnes
-            if 'snow_depth_change' in snow_drift_alarms.columns:
-                columns_to_show.append("snow_depth_change")
-                
-            # Filtrer kun kolonner som faktisk finnes i DataFrame
-            available_columns = [col for col in columns_to_show if col in snow_drift_alarms.columns]
-            
-            st.dataframe(snow_drift_alarms[available_columns])
+            st.dataframe(
+                snow_drift_alarms[
+                    [
+                        "air_temperature",
+                        "wind_speed",
+                        "surface_snow_thickness",
+                        "precipitation_amount",
+                        "snow_depth_change",
+                    ]
+                ]
+            )
             st.write(f"Totalt antall snøfokk-alarmer: {len(snow_drift_alarms)}")
         else:
             st.write("Ingen snøfokk-alarmer i den valgte perioden.")
@@ -434,6 +457,7 @@ def display_weather_statistics(df, available_columns):
         'precipitation_amount': 'Nedbør (mm)',
         'snow_precipitation': 'Antatt snønedbør (mm)',
         'surface_snow_thickness': 'Snødybde (cm)',
+        'wind_speed': 'Vindhastighet (m/s)',
         'max_wind_speed': 'Maks vindhastighet (m/s)'
     }
     
