@@ -489,18 +489,8 @@ def handle_weather_page():
     """
     client_id = st.secrets["api_keys"]["client_id"]
     
-    # Legg til kolonnevelger
-    st.sidebar.header("Innstillinger")
-    
-    available_columns = get_available_columns()
-    default_columns = get_default_columns()
-    
-    selected_columns = st.sidebar.multiselect(
-        "Velg kolonner som skal vises:",
-        options=list(available_columns.keys()),
-        default=default_columns,
-        format_func=lambda x: available_columns[x]
-    )
+    # Bruk heller default kolonner direkte
+    selected_columns = get_default_columns()
     
     period_options = [
         "Siste 24 timer",
