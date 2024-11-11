@@ -259,8 +259,6 @@ def main():
 
                 if selected == "Hjem":
                     display_home_page(customer)
-                elif selected == "Værdata":
-                    handle_weather_page()
                 elif selected == "Bestill Tunbrøyting":
                     bestill_tunbroyting()
                 elif selected == "Bestill Strøing":

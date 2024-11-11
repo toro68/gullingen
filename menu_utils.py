@@ -11,9 +11,11 @@ def create_menu(customer_id, user_type):
     with st.sidebar:
         st.success(f"Innlogget som {customer_id}")
 
+        # Legg til lenke til værdata-appen
+        st.markdown("[🌤️ Værdata](https://gulling1.streamlit.app/)", unsafe_allow_html=True)
+        
         main_menu_options = [
             "Hjem",
-            "Værdata",
             "Bestill Tunbrøyting",
             "Bestill Strøing",
             "Gi feedback",
@@ -24,7 +26,6 @@ def create_menu(customer_id, user_type):
 
         icons = [
             "house",
-            "cloud-sun",
             "snow",
             "moisture",
             "chat-dots",
