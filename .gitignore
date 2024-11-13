@@ -1,9 +1,35 @@
 venv/
-*.pyc
+.env/
+env/
+myenv311/
+new_clean_env/
+
+# Cache and temp files
 __pycache__/
-.env
-# Ignore Streamlit secrets
-.streamlit/secrets.toml
-app v2.0.py
-app v1.py
-app v1.2.py
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyc
+.DS_Store
+
+# Logs
+*.log
+logs/
+app.log.*
+
+# Build and dist
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Database
+*.db
+*.sqlite3
+
+# Mount points
+/mount/
