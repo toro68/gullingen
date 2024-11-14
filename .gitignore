@@ -78,3 +78,20 @@ dmypy.json
 .coverage
 coverage.xml
 *.cover
+
+# Prosjektspesifikke mapper
+.devcontainer/
+.streamlit/
+node_modules/
+zbackup/
+
+# Alle virtuelle miljøer
+env/
+myenv/
+myenv311/
+test_env/
+new_clean_env/
+
+# Data og komponenter
+data/
+components/
