@@ -6,7 +6,7 @@ new_clean_env/
 .venv/
 ENV/
 
-# Python cache og temp-filer
+# Python cache og  temp-filer
 __pycache__/
 *.py[cod]
 .pytest_cache/
