@@ -378,6 +378,34 @@ def verify_stroing_data():
         for row in data:
             logger.info(f"Row: {row}")
 
+def verify_stroing_database_state():
+    try:
+        with get_db_connection('stroing') as conn:
+            cursor = conn.cursor()
+            
+            # Sjekk tabellstruktur
+            cursor.execute("PRAGMA table_info(stroing_bestillinger)")
+            columns = cursor.fetchall()
+            logger.info(f"Strøing tabellstruktur: {columns}")
+            
+            # Sjekk antall rader
+            cursor.execute("SELECT COUNT(*) FROM stroing_bestillinger")
+            count = cursor.fetchone()[0]
+            logger.info(f"Antall strøingsbestillinger: {count}")
+            
+            # Sjekk siste bestilling
+            cursor.execute("""
+                SELECT * FROM stroing_bestillinger 
+                ORDER BY id DESC LIMIT 1
+            """)
+            latest = cursor.fetchone()
+            logger.info(f"Siste strøingsbestilling: {latest}")
+            
+            return True
+    except Exception as e:
+        logger.error(f"Feil ved verifisering av strøingsdatabase: {str(e)}", exc_info=True)
+        return False
+
 # Visninger
 def display_stroing_bookings(user_id, show_header=False):
     if show_header:

@@ -87,7 +87,13 @@ from feedback_utils import (
 )
 
 # Strøing utilities
-from stroing_utils import bestill_stroing, admin_stroing_page, hent_bruker_stroing_bestillinger, vis_graf_stroing
+from stroing_utils import (
+    bestill_stroing, 
+    admin_stroing_page, 
+    hent_bruker_stroing_bestillinger, 
+    vis_graf_stroing,
+    verify_stroing_database_state
+)
 
 # Utility functions
 from util_functions import (
@@ -231,6 +237,12 @@ def main():
         # Verifiser databasetilstand
         if not verify_database_state():
             logger.error("Feil ved verifisering av tunbrøyting-database")
+            st.error("Det oppstod en feil ved oppstart av appen. Vennligst prøv igjen senere.")
+            return
+            
+        # Verifiser strøingsdatabase
+        if not verify_stroing_database_state():
+            logger.error("Feil ved verifisering av strøingsdatabase")
             st.error("Det oppstod en feil ved oppstart av appen. Vennligst prøv igjen senere.")
             return
         
