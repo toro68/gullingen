@@ -1185,15 +1185,62 @@ def initialize_database():
     database_initialized = True
           
 def check_database_files():
-    databases = ['tunbroyting', 'stroing', 'feedback', 'login_history', 'customer']
+    databases = {
+        'tunbroyting': {
+            'table': 'tunbroyting_bestillinger',
+            'schema': """
+                CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bruker TEXT,
+                    ankomst_dato DATE,
+                    ankomst_tid TIME,
+                    avreise_dato DATE,
+                    avreise_tid TIME,
+                    abonnement_type TEXT
+                )
+            """
+        },
+        'stroing': {
+            'table': 'stroing_bestillinger',
+            'schema': """
+                CREATE TABLE IF NOT EXISTS stroing_bestillinger (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bruker TEXT,
+                    bestillings_dato TEXT,
+                    onske_dato TEXT
+                )
+            """
+        }
+    }
     
-    for db_name in databases:
-        db_path = f"{db_name}.db"
-        if not os.path.exists(db_path):
-            logger.warning(f"Oppretter ny database: {db_path}")
-            create_new_database(db_name)
-        else:
-            logger.info(f"Database eksisterer: {db_path}")
+    for db_name, config in databases.items():
+        db_path = os.path.join(DATABASE_PATH, f"{db_name}.db")
+        
+        try:
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Sjekk om tabellen eksisterer
+                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", 
+                             (config['table'],))
+                
+                if not cursor.fetchone():
+                    logger.info(f"Oppretter tabell {config['table']} i {db_name}")
+                    cursor.execute(config['schema'])
+                    conn.commit()
+                else:
+                    logger.info(f"Tabell {config['table']} eksisterer allerede i {db_name}")
+                    
+                # Verifiser antall rader
+                cursor.execute(f"SELECT COUNT(*) FROM {config['table']}")
+                count = cursor.fetchone()[0]
+                logger.info(f"Antall rader i {config['table']}: {count}")
+                
+        except Exception as e:
+            logger.error(f"Feil ved sjekk/opprettelse av {db_name}: {str(e)}", exc_info=True)
+            return False
+            
+    return True
             
 def create_new_database(db_name):
     with sqlite3.connect(f"{db_name}.db") as conn:
