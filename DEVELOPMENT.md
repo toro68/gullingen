@@ -27,3 +27,5 @@ Setting an item of incompatible dtype is deprecated and will raise in a future e
 ['NaT', 'NaT', 'NaT']
 
 Ikke implementer mange nye funksjoner, men forbedre eksisterende funksjoner.
+
+NB: Alltid oppgi hvilken fil funksjonen ligger i.

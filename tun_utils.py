@@ -134,38 +134,39 @@ def bestill_tunbroyting():
     st.write("---")
 
 # CREATE - lagre i bestill_tunbroyting
-def lagre_bestilling(
-    user_id: str,
-    ankomst_dato: str,
-    ankomst_tid: str,
-    avreise_dato: str,
-    avreise_tid: str,
-    abonnement_type: str,
-) -> bool:
+def lagre_bestilling(user_id: str, ankomst_dato: str, ankomst_tid: str, 
+                    avreise_dato: str, avreise_tid: str, abonnement_type: str) -> bool:
     try:
+        # Konverter til ISO format for konsistent lagring
+        ankomst = f"{ankomst_dato}T{ankomst_tid}"
+        avreise = f"{avreise_dato}T{avreise_tid}" if avreise_dato else None
+        
+        query = """INSERT INTO tunbroyting_bestillinger 
+                   (bruker, ankomst_dato, ankomst_tid, avreise_dato, avreise_tid, abonnement_type)
+                   VALUES (?, ?, ?, ?, ?, ?)"""
+        
         with get_db_connection('tunbroyting') as conn:
-            c = conn.cursor()
-            c.execute(
-                """INSERT INTO tunbroyting_bestillinger 
-                         (bruker, ankomst_dato, ankomst_tid, avreise_dato, avreise_tid, abonnement_type)
-                         VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    user_id,
-                    ankomst_dato,
-                    ankomst_tid,
-                    avreise_dato,
-                    avreise_tid,
-                    abonnement_type,
-                ),
-            )
+            cursor = conn.cursor()
+            cursor.execute(query, (
+                user_id,
+                ankomst_dato,
+                ankomst_tid,
+                avreise_dato,
+                avreise_tid,
+                abonnement_type
+            ))
             conn.commit()
-        logger.info("Ny tunbrøyting bestilling lagret for bruker: %s", user_id)
+            
+        logger.info(
+            f"Bestilling lagret: bruker={user_id}, "
+            f"ankomst={ankomst_dato} {ankomst_tid}, "
+            f"avreise={avreise_dato} {avreise_tid}, "
+            f"type={abonnement_type}"
+        )
         return True
-    except sqlite3.Error as e:
-        logger.error("Database error ved lagring av tunbrøyting bestilling: %s", str(e))
-        return False
+        
     except Exception as e:
-        logger.error("Uventet feil ved lagring av tunbrøyting bestilling: %s", e)
+        logger.error(f"Feil ved lagring av bestilling: {str(e)}", exc_info=True)
         return False
 
 # READ
