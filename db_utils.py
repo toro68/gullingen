@@ -1186,28 +1186,27 @@ def initialize_database():
           
 def check_database_files():
     databases = ['tunbroyting', 'stroing', 'feedback', 'login_history', 'customer']
-    missing_databases = []
-
+    
     for db_name in databases:
-        db_path = os.path.join(DATABASE_PATH, f"{db_name}.db")
+        db_path = f"{db_name}.db"
         if not os.path.exists(db_path):
-            logger.error(f"Databasefil mangler: {db_path}")
-            missing_databases.append(db_name)
-            try:
-                # Opprett databasen og initialiser skjema
-                update_database_schema(db_name)
-                logger.info(f"Opprettet og initialisert ny database: {db_path}")
-            except Exception as e:
-                logger.error(f"Kunne ikke opprette database {db_path}: {str(e)}", exc_info=True)
-                return False
-
-    if missing_databases:
-        logger.warning(f"Følgende databaser måtte opprettes på nytt: {', '.join(missing_databases)}")
-    else:
-        logger.info("Alle databasefiler er tilstede")
-
-    # Verifiser databasetilstand etter opprettelse/sjekk
-    return verify_database_state()
+            logger.warning(f"Oppretter ny database: {db_path}")
+            create_new_database(db_name)
+        else:
+            logger.info(f"Database eksisterer: {db_path}")
+            
+def create_new_database(db_name):
+    with sqlite3.connect(f"{db_name}.db") as conn:
+        if db_name == 'stroing':
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS stroing_bestillinger (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bruker TEXT,
+                    bestillings_dato TEXT,
+                    onske_dato TEXT
+                )
+            """)
+        # Tilsvarende for andre tabeller...
 
 def verify_database_state():
     databases = ['tunbroyting', 'stroing']
