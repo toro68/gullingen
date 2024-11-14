@@ -111,7 +111,7 @@ from weather_utils import fetch_and_process_data
 setup_logging()
 logger = get_logger(__name__)
 
-# Constants
+# Constants 
 MAX_ATTEMPTS = 5
 LOCKOUT_PERIOD = timedelta(minutes=15)
 SESSION_TIMEOUT = 3600  # 1 time
