@@ -1050,6 +1050,7 @@ def vis_hyttegrend_aktivitet():
 
 def get_bookings(start_date=None, end_date=None):
     logger.info(f"Starting get_bookings with start_date={start_date}, end_date={end_date}")
+    st.write("DEBUG: Loading bookings...")  # Synlig i Streamlit UI
     
     try:
         query = """
@@ -1059,9 +1060,11 @@ def get_bookings(start_date=None, end_date=None):
         """
         
         df = fetch_data('tunbroyting', query)
+        st.write(f"DEBUG: Raw data shape: {df.shape if df is not None else 'None'}")
         
         if df is None or df.empty:
             logger.info("No bookings found")
+            st.write("DEBUG: No bookings found in database")
             return pd.DataFrame(columns=[
                 'id', 'bruker', 'ankomst_dato', 'ankomst_tid', 
                 'avreise_dato', 'avreise_tid', 'abonnement_type',
@@ -1069,57 +1072,58 @@ def get_bookings(start_date=None, end_date=None):
             ])
         
         df = df.copy()
-        logger.debug(f"Raw data types:\n{df.dtypes}")
+        st.write(f"DEBUG: Data types before conversion:\n{df.dtypes}")
         
         try:
             # Konverter dato-kolonner
             for col in ['ankomst_dato', 'avreise_dato']:
                 df[col] = pd.to_datetime(df[col], errors='coerce')
+                st.write(f"DEBUG: Converted {col}. Sample values:\n{df[col].head()}")
             
             # Konverter tid-kolonner til datetime.time objekter
             for col in ['ankomst_tid', 'avreise_tid']:
                 df[col] = pd.to_datetime(df[col], format='%H:%M:%S', errors='coerce').dt.time
+                st.write(f"DEBUG: Converted {col}. Sample values:\n{df[col].head()}")
             
-            # Kombiner dato og tid for ankomst
-            df['ankomst'] = df.apply(
-                lambda row: pd.Timestamp.combine(
-                    row['ankomst_dato'],
-                    row['ankomst_tid']
-                ) if pd.notnull(row['ankomst_dato']) and row['ankomst_tid'] is not None 
-                else pd.NaT,
-                axis=1
-            )
-            
-            # Kombiner dato og tid for avreise
-            df['avreise'] = df.apply(
-                lambda row: pd.Timestamp.combine(
-                    row['avreise_dato'],
-                    row['avreise_tid']
-                ) if pd.notnull(row['avreise_dato']) and row['avreise_tid'] is not None 
-                else pd.NaT,
-                axis=1
-            )
+            # Kombiner dato og tid
+            for prefix in ['ankomst', 'avreise']:
+                dato_col = f'{prefix}_dato'
+                tid_col = f'{prefix}_tid'
+                df[prefix] = df.apply(
+                    lambda row: pd.Timestamp.combine(
+                        row[dato_col],
+                        row[tid_col]
+                    ) if pd.notnull(row[dato_col]) and row[tid_col] is not None 
+                    else pd.NaT,
+                    axis=1
+                )
+                st.write(f"DEBUG: Combined {prefix}. Sample values:\n{df[prefix].head()}")
             
             # Legg til tidssone
             df['ankomst'] = df['ankomst'].dt.tz_localize('Europe/Oslo')
             df['avreise'] = df['avreise'].dt.tz_localize('Europe/Oslo')
             
-            logger.debug(f"Datetime columns after conversion:\nAnkomst:\n{df['ankomst']}\nAvreise:\n{df['avreise']}")
-            
         except Exception as e:
             logger.error(f"Error combining date and time: {str(e)}")
+            st.error(f"DEBUG: Error processing dates: {str(e)}")
             df['ankomst'] = pd.NaT
             df['avreise'] = pd.NaT
         
         # Filtrer på dato hvis spesifisert
         if start_date:
             df = df[df['ankomst'] >= pd.to_datetime(start_date)].copy()
+            st.write(f"DEBUG: Filtered by start_date. Remaining rows: {len(df)}")
         if end_date:
             df = df[df['ankomst'] <= pd.to_datetime(end_date)].copy()
+            st.write(f"DEBUG: Filtered by end_date. Remaining rows: {len(df)}")
+        
+        st.write("DEBUG: Final data shape:", df.shape)
+        st.write("DEBUG: Sample of final data:", df.head())
         
         logger.info(f"Successfully processed {len(df)} bookings")
         return df
         
     except Exception as e:
         logger.error(f"Error in get_bookings: {str(e)}", exc_info=True)
+        st.error(f"DEBUG: Fatal error in get_bookings: {str(e)}")
         return pd.DataFrame()

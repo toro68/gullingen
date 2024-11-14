@@ -3807,3 +3807,126 @@
 2024-11-14 07:12:50 - tun_utils - INFO - Starting get_bookings with start_date=None, end_date=None
 2024-11-14 07:12:50 - tun_utils - INFO - Successfully processed 4 bookings
 2024-11-14 07:12:50 - __main__ - INFO - Application shutting down
+2024-11-14 07:14:26 - __main__ - INFO - Added validate_user_input function to app.py
+2024-11-14 07:14:26 - __main__ - INFO - Starting application initialization
+2024-11-14 07:14:26 - db_utils - INFO - Starting detailed database operations debugging
+2024-11-14 07:14:26 - db_utils - INFO - Debugging login_history database:
+2024-11-14 07:14:26 - db_utils - INFO -   Database version: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Tables in login_history.db: ['login_history']
+2024-11-14 07:14:26 - db_utils - INFO -   Structure of login_history table:
+2024-11-14 07:14:26 - db_utils - INFO -     Column: id, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: login_time, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: success, Type: INTEGER, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Indexes in login_history.db: ['idx_login_id', 'idx_login_time']
+2024-11-14 07:14:26 - db_utils - INFO -   Row count in login_history: 492
+2024-11-14 07:14:26 - db_utils - INFO -   Test query result: (1,)
+2024-11-14 07:14:26 - db_utils - INFO - Debugging tunbroyting database:
+2024-11-14 07:14:26 - db_utils - INFO -   Database version: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Tables in tunbroyting.db: ['tunbroyting_bestillinger']
+2024-11-14 07:14:26 - db_utils - INFO -   Structure of tunbroyting_bestillinger table:
+2024-11-14 07:14:26 - db_utils - INFO -     Column: id, Type: INTEGER, NotNull: 0, DefaultValue: None, PK: 1
+2024-11-14 07:14:26 - db_utils - INFO -     Column: bruker, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: ankomst_dato, Type: DATE, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: ankomst_tid, Type: TIME, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: avreise_dato, Type: DATE, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: avreise_tid, Type: TIME, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: abonnement_type, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Indexes in tunbroyting.db: ['idx_tunbroyting_bruker', 'idx_tunbroyting_ankomst_dato', 'idx_tunbroyting_avreise_dato', 'idx_tunbroyting_abonnement']
+2024-11-14 07:14:26 - db_utils - INFO -   Row count in tunbroyting_bestillinger: 4
+2024-11-14 07:14:26 - db_utils - INFO -   Test query result: (1,)
+2024-11-14 07:14:26 - db_utils - INFO - Debugging stroing database:
+2024-11-14 07:14:26 - db_utils - INFO -   Database version: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Tables in stroing.db: ['sqlite_sequence', 'stroing_bestillinger']
+2024-11-14 07:14:26 - db_utils - INFO -   Structure of sqlite_sequence table:
+2024-11-14 07:14:26 - db_utils - INFO -     Column: name, Type: , NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: seq, Type: , NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Structure of stroing_bestillinger table:
+2024-11-14 07:14:26 - db_utils - INFO -     Column: id, Type: INTEGER, NotNull: 0, DefaultValue: None, PK: 1
+2024-11-14 07:14:26 - db_utils - INFO -     Column: bruker, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: bestillings_dato, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: onske_dato, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Indexes in stroing.db: ['idx_stroing_bruker', 'idx_stroing_onske_dato', 'idx_stroing_bestillings_dato']
+2024-11-14 07:14:26 - db_utils - INFO -   Row count in sqlite_sequence: 1
+2024-11-14 07:14:26 - db_utils - INFO -   Row count in stroing_bestillinger: 8
+2024-11-14 07:14:26 - db_utils - INFO -   Test query result: (1,)
+2024-11-14 07:14:26 - db_utils - INFO - Debugging feedback database:
+2024-11-14 07:14:26 - db_utils - INFO -   Database version: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Tables in feedback.db: ['sqlite_sequence', 'feedback']
+2024-11-14 07:14:26 - db_utils - INFO -   Structure of sqlite_sequence table:
+2024-11-14 07:14:26 - db_utils - INFO -     Column: name, Type: , NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: seq, Type: , NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Structure of feedback table:
+2024-11-14 07:14:26 - db_utils - INFO -     Column: id, Type: INTEGER, NotNull: 0, DefaultValue: None, PK: 1
+2024-11-14 07:14:26 - db_utils - INFO -     Column: type, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: datetime, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: comment, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: innsender, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: status, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: status_changed_by, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: status_changed_at, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: hidden, Type: INTEGER, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: is_alert, Type: INTEGER, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: display_on_weather, Type: INTEGER, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: expiry_date, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -     Column: target_group, Type: TEXT, NotNull: 0, DefaultValue: None, PK: 0
+2024-11-14 07:14:26 - db_utils - INFO -   Indexes in feedback.db: ['idx_feedback_datetime', 'idx_feedback_innsender', 'idx_feedback_status', 'idx_feedback_type']
+2024-11-14 07:14:26 - db_utils - INFO -   Row count in sqlite_sequence: 1
+2024-11-14 07:14:26 - db_utils - INFO -   Row count in feedback: 16
+2024-11-14 07:14:26 - db_utils - INFO -   Test query result: (1,)
+2024-11-14 07:14:26 - db_utils - INFO - Detailed database operations debugging completed
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for customer
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for feedback
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for login_history
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for stroing
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for tunbroyting
+2024-11-14 07:14:26 - db_utils - INFO - All database schemas verified and updated
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for customer
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for feedback
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for login_history
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for stroing
+2024-11-14 07:14:26 - db_utils - INFO - Oppdatert skjema for tunbroyting
+2024-11-14 07:14:26 - db_utils - INFO - All database schemas verified and updated
+2024-11-14 07:14:26 - db_utils - INFO - Database already initialized. Skipping.
+2024-11-14 07:14:26 - db_utils - INFO - Query executed successfully on login_history.db. Rows affected: -1
+2024-11-14 07:14:26 - db_utils - INFO - login_history table structure is correct
+2024-11-14 07:14:26 - customer_utils - INFO - Starting cabin user consistency check
+2024-11-14 07:14:26 - utils - INFO - Attempting to load passwords from secrets
+2024-11-14 07:14:26 - utils - INFO - Successfully loaded passwords. Number of entries: 94
+2024-11-14 07:14:26 - customer_utils - INFO - Retrieved 94 passwords
+2024-11-14 07:14:26 - customer_utils - INFO - Found 94 customers in database
+2024-11-14 07:14:26 - customer_utils - INFO - Consistency check completed
+2024-11-14 07:14:26 - customer_utils - INFO - Database connection closed
+2024-11-14 07:14:26 - customer_utils - INFO - Validating customers and passwords
+2024-11-14 07:14:26 - utils - INFO - Attempting to load passwords from secrets
+2024-11-14 07:14:26 - utils - INFO - Successfully loaded passwords. Number of entries: 94
+2024-11-14 07:14:26 - customer_utils - INFO - Customer and password validation complete
+2024-11-14 07:14:26 - db_utils - INFO - Successfully created indexes for tunbroyting database
+2024-11-14 07:14:26 - db_utils - INFO - Successfully created indexes for stroing database
+2024-11-14 07:14:26 - db_utils - INFO - Successfully created indexes for feedback database
+2024-11-14 07:14:26 - db_utils - INFO - Successfully created indexes for login_history database
+2024-11-14 07:14:26 - db_utils - INFO - Successfully created indexes for customer database
+2024-11-14 07:14:26 - db_utils - INFO - Database index creation completed
+2024-11-14 07:14:26 - __main__ - INFO - Application initialization completed successfully
+2024-11-14 07:14:26 - __main__ - INFO - Application initialization completed successfully
+2024-11-14 07:14:26 - __main__ - INFO - Application setup complete
+2024-11-14 07:14:26 - customer_utils - INFO - Successfully retrieved customer with ID: 22
+2024-11-14 07:14:26 - tun_utils - WARNING - hent_bestillinger() is deprecated, use get_bookings() instead
+2024-11-14 07:14:26 - tun_utils - INFO - Starting get_bookings with start_date=None, end_date=None
+2024-11-14 07:14:26 - tun_utils - INFO - Successfully processed 4 bookings
+2024-11-14 07:14:26 - tun_utils - WARNING - hent_bestillinger() is deprecated, use get_bookings() instead
+2024-11-14 07:14:26 - tun_utils - INFO - Starting get_bookings with start_date=None, end_date=None
+2024-11-14 07:14:26 - tun_utils - INFO - Successfully processed 4 bookings
+2024-11-14 07:14:26 - tun_utils - INFO - Filtering bookings for date: 2024-11-14 00:00:00+01:00
+2024-11-14 07:14:26 - tun_utils - INFO - Found 0 active bookings for today
+2024-11-14 07:14:26 - tun_utils - INFO - Filtering bookings for date: 2024-11-14 00:00:00+01:00
+2024-11-14 07:14:26 - tun_utils - INFO - Found 0 active bookings for today
+2024-11-14 07:14:26 - map_utils - INFO - Starter vis_dagens_tunkart med 0 bestillinger
+2024-11-14 07:14:26 - customer_utils - INFO - Starting get_cabin_coordinates
+2024-11-14 07:14:26 - customer_utils - INFO - Executing query: SELECT Id, Latitude, Longitude FROM customers
+2024-11-14 07:14:26 - customer_utils - INFO - Found 94 results
+2024-11-14 07:14:26 - customer_utils - INFO - Processed 94 valid coordinates out of 94 records
+2024-11-14 07:14:26 - customer_utils - INFO - Database connection closed
+2024-11-14 07:14:26 - customer_utils - INFO - Successfully loaded 94 customers from database
+2024-11-14 07:14:26 - customer_utils - INFO - Kolonner i kundedatabasen: ['Id', 'Latitude', 'Longitude', 'Subscription', 'Type']
+2024-11-14 07:14:26 - customer_utils - INFO - Kolonner i kundedatabasen: ['Id', 'Latitude', 'Longitude', 'Subscription', 'Type']
+2024-11-14 07:14:26 - __main__ - INFO - Application shutting down
