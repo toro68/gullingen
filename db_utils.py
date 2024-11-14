@@ -1185,21 +1185,64 @@ def initialize_database():
     database_initialized = True
           
 def check_database_files():
-    databases = ['login_history', 'tunbroyting', 'stroing', 'feedback', 'customer']
+    databases = ['tunbroyting', 'stroing', 'feedback', 'login_history', 'customer']
     missing_databases = []
 
-    for db in databases:
-        db_path = os.path.join(DATABASE_PATH, f"{db}.db")
+    for db_name in databases:
+        db_path = os.path.join(DATABASE_PATH, f"{db_name}.db")
         if not os.path.exists(db_path):
-            logger.error(f"Database file {db_path} does not exist!")
-            missing_databases.append(db)
-        else:
-            logger.info(f"Database file {db_path} exists.")
+            logger.error(f"Databasefil mangler: {db_path}")
+            missing_databases.append(db_name)
+            try:
+                # Opprett databasen og initialiser skjema
+                update_database_schema(db_name)
+                logger.info(f"Opprettet og initialisert ny database: {db_path}")
+            except Exception as e:
+                logger.error(f"Kunne ikke opprette database {db_path}: {str(e)}", exc_info=True)
+                return False
 
     if missing_databases:
-        logger.warning(f"The following databases are missing: {', '.join(missing_databases)}")
+        logger.warning(f"Følgende databaser måtte opprettes på nytt: {', '.join(missing_databases)}")
     else:
-        logger.info("All database files are present.")
+        logger.info("Alle databasefiler er tilstede")
+
+    # Verifiser databasetilstand etter opprettelse/sjekk
+    return verify_database_state()
+
+def verify_database_state():
+    databases = ['tunbroyting', 'stroing']
+    for db_name in databases:
+        try:
+            with get_db_connection(db_name) as conn:
+                cursor = conn.cursor()
+                
+                # Sjekk om tabellene eksisterer
+                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table'")
+                tables = cursor.fetchall()
+                logger.info(f"Tabeller i {db_name}: {tables}")
+                
+                # Sjekk antall rader
+                if db_name == 'tunbroyting':
+                    cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
+                elif db_name == 'stroing':
+                    cursor.execute("SELECT COUNT(*) FROM stroing_bestillinger")
+                    
+                count = cursor.fetchone()[0]
+                logger.info(f"Antall bestillinger i {db_name}: {count}")
+                
+                # Sjekk siste bestilling
+                if count > 0:
+                    if db_name == 'tunbroyting':
+                        cursor.execute("SELECT * FROM tunbroyting_bestillinger ORDER BY id DESC LIMIT 1")
+                    elif db_name == 'stroing':
+                        cursor.execute("SELECT * FROM stroing_bestillinger ORDER BY id DESC LIMIT 1")
+                    latest = cursor.fetchone()
+                    logger.info(f"Siste bestilling i {db_name}: {latest}")
+                
+        except Exception as e:
+            logger.error(f"Feil ved verifisering av {db_name} database: {str(e)}", exc_info=True)
+            return False
+    return True
 
 # Kall denne funksjonen ved oppstart av applikasjonen
 if __name__ == "__main__":

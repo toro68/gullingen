@@ -47,8 +47,8 @@ from db_utils import (
     initialize_database,
     ensure_login_history_table_exists,
     debug_database_operations,
-    create_database_indexes
-    #close_all_connections
+    create_database_indexes,
+    check_database_files
 )
 
 # Tun utilities
@@ -209,18 +209,26 @@ logger.info("Added validate_user_input function to app.py")
 
 def initialize_app():
     try:
-        verify_and_update_schemas()
+        # Sjekk om databasefilene eksisterer
+        check_database_files()
+        
+        # Verifiser databasetilstand
+        if not verify_database_state():
+            logger.error("Kritisk feil: Databasetilstand er ikke gyldig")
+            st.error("Det oppstod en kritisk feil ved oppstart. Kontakt administrator.")
+            return False
+            
+        # Initialiser databasene
         initialize_database()
-        ensure_login_history_table_exists()
-        clean_invalid_expiry_dates()
-        check_cabin_user_consistency()
-        validate_customers_and_passwords()
-        create_database_indexes() 
-        logger.info("Application initialization completed successfully")
+        verify_and_update_schemas()
+        
+        logger.info("Applikasjon initialisert vellykket")
+        return True
+        
     except Exception as e:
-        logger.error(f"Error during application initialization: {str(e)}")
-        st.error("Det oppstod en feil under initialisering av applikasjonen. Vennligst kontakt support.")
-        raise
+        logger.error(f"Kritisk feil ved initialisering: {str(e)}", exc_info=True)
+        st.error("Kritisk feil ved oppstart. Kontakt administrator.")
+        return False
 
 def main():
     try:
