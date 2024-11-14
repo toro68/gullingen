@@ -17,9 +17,9 @@ htmlcov/
 *.so
 
 # Loggfiler
+app.log
 *.log
-logs/
-app.log.*
+
 
 # Bygge- og distribusjonsfiler
 build/
