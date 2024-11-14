@@ -94,4 +94,4 @@ test_env/
 new_clean_env/
 
 # Data
-data/
+data/app.log
