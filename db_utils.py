@@ -1185,10 +1185,10 @@ def initialize_database():
     database_initialized = True
           
 def check_database_files():
-    databases = {
-        'tunbroyting': {
-            'table': 'tunbroyting_bestillinger',
-            'schema': """
+    try:
+        with get_db_connection('tunbroyting') as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     bruker TEXT,
@@ -1198,49 +1198,41 @@ def check_database_files():
                     avreise_tid TIME,
                     abonnement_type TEXT
                 )
-            """
-        },
-        'stroing': {
-            'table': 'stroing_bestillinger',
-            'schema': """
+            """)
+            
+            # Opprett indekser hvis de ikke eksisterer
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker);
+                CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato);
+                CREATE INDEX IF NOT EXISTS idx_tunbroyting_avreise_dato ON tunbroyting_bestillinger(avreise_dato);
+                CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement ON tunbroyting_bestillinger(abonnement_type);
+            """)
+            conn.commit()
+            
+        with get_db_connection('stroing') as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS stroing_bestillinger (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     bruker TEXT,
                     bestillings_dato TEXT,
                     onske_dato TEXT
                 )
-            """
-        }
-    }
-    
-    for db_name, config in databases.items():
-        db_path = os.path.join(DATABASE_PATH, f"{db_name}.db")
-        
-        try:
-            with sqlite3.connect(db_path) as conn:
-                cursor = conn.cursor()
-                
-                # Sjekk om tabellen eksisterer
-                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", 
-                             (config['table'],))
-                
-                if not cursor.fetchone():
-                    logger.info(f"Oppretter tabell {config['table']} i {db_name}")
-                    cursor.execute(config['schema'])
-                    conn.commit()
-                else:
-                    logger.info(f"Tabell {config['table']} eksisterer allerede i {db_name}")
-                    
-                # Verifiser antall rader
-                cursor.execute(f"SELECT COUNT(*) FROM {config['table']}")
-                count = cursor.fetchone()[0]
-                logger.info(f"Antall rader i {config['table']}: {count}")
-                
-        except Exception as e:
-            logger.error(f"Feil ved sjekk/opprettelse av {db_name}: {str(e)}", exc_info=True)
-            return False
+            """)
             
-    return True
+            # Opprett indekser hvis de ikke eksisterer
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker);
+                CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato);
+                CREATE INDEX IF NOT EXISTS idx_stroing_bestillings_dato ON stroing_bestillinger(bestillings_dato);
+            """)
+            conn.commit()
+            
+        return True
+        
+    except Exception as e:
+        logger.error(f"Feil ved sjekk/opprettelse av databaser: {str(e)}", exc_info=True)
+        return False
             
 def create_new_database(db_name):
     with sqlite3.connect(f"{db_name}.db") as conn:
@@ -1256,39 +1248,34 @@ def create_new_database(db_name):
         # Tilsvarende for andre tabeller...
 
 def verify_database_state():
-    databases = ['tunbroyting', 'stroing']
-    for db_name in databases:
-        try:
+    """Verifiserer tilstanden til alle databaser"""
+    try:
+        databases = ['tunbroyting', 'stroing']
+        for db_name in databases:
             with get_db_connection(db_name) as conn:
                 cursor = conn.cursor()
                 
                 # Sjekk om tabellene eksisterer
-                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table'")
-                tables = cursor.fetchall()
-                logger.info(f"Tabeller i {db_name}: {tables}")
-                
-                # Sjekk antall rader
                 if db_name == 'tunbroyting':
-                    cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
-                elif db_name == 'stroing':
-                    cursor.execute("SELECT COUNT(*) FROM stroing_bestillinger")
+                    table_name = 'tunbroyting_bestillinger'
+                else:
+                    table_name = 'stroing_bestillinger'
                     
+                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+                if not cursor.fetchone():
+                    logger.warning(f"Tabell {table_name} mangler i {db_name}")
+                    return False
+                    
+                # Verifiser at vi kan lese data
+                cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
                 count = cursor.fetchone()[0]
-                logger.info(f"Antall bestillinger i {db_name}: {count}")
+                logger.info(f"Antall rader i {table_name}: {count}")
                 
-                # Sjekk siste bestilling
-                if count > 0:
-                    if db_name == 'tunbroyting':
-                        cursor.execute("SELECT * FROM tunbroyting_bestillinger ORDER BY id DESC LIMIT 1")
-                    elif db_name == 'stroing':
-                        cursor.execute("SELECT * FROM stroing_bestillinger ORDER BY id DESC LIMIT 1")
-                    latest = cursor.fetchone()
-                    logger.info(f"Siste bestilling i {db_name}: {latest}")
-                
-        except Exception as e:
-            logger.error(f"Feil ved verifisering av {db_name} database: {str(e)}", exc_info=True)
-            return False
-    return True
+        return True
+        
+    except Exception as e:
+        logger.error(f"Feil ved verifisering av databaser: {str(e)}", exc_info=True)
+        return False
 
 # Kall denne funksjonen ved oppstart av applikasjonen
 if __name__ == "__main__":

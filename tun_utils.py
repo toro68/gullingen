@@ -1149,29 +1149,3 @@ def get_bookings(start_date=None, end_date=None):
         logger.error(f"Error in get_bookings: {str(e)}", exc_info=True)
         st.error(f"Feil ved henting av bestillinger: {str(e)}")
         return pd.DataFrame()
-
-def verify_database_state():
-    try:
-        with get_db_connection('tunbroyting') as conn:
-            cursor = conn.cursor()
-            
-            # Sjekk om tabellen eksisterer først
-            cursor.execute("""
-                SELECT name FROM sqlite_master 
-                WHERE type='table' AND name='tunbroyting_bestillinger'
-            """)
-            
-            if not cursor.fetchone():
-                logger.warning("Tunbrøyting-tabell mangler - oppretter på nytt")
-                return False
-                
-            # Verifiser eksisterende data
-            cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
-            count = cursor.fetchone()[0]
-            logger.info(f"Antall bestillinger: {count}")
-            
-            return True
-            
-    except Exception as e:
-        logger.error(f"Feil ved verifisering av tunbrøyting-database: {str(e)}", exc_info=True)
-        return False

@@ -48,11 +48,9 @@ from db_utils import (
     ensure_login_history_table_exists,
     debug_database_operations,
     create_database_indexes,
-    check_database_files
+    check_database_files,
+    verify_database_state
 )
-
-# Tun utilities
-from tun_utils import verify_database_state
 
 # Validation utilities
 from validation_utils import sanitize_input
@@ -239,9 +237,6 @@ def main():
         # Sjekk og oppdater databaseskjemaer
         verify_and_update_schemas()
         
-        # Initialisering av applikasjonen
-        initialize_app()
-        
         # Verifiser databasetilstand
         if not verify_database_state():
             logger.error("Feil ved verifisering av tunbrøyting-database")
@@ -253,6 +248,9 @@ def main():
             logger.error("Feil ved verifisering av strøingsdatabase")
             st.error("Det oppstod en feil ved oppstart av appen. Vennligst prøv igjen senere.")
             return
+        
+        # Initialiser applikasjonen
+        initialize_app()
         
         # Sesjonshåndtering
         check_session_timeout()
