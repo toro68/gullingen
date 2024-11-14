@@ -1188,6 +1188,7 @@ def check_database_files():
     try:
         with get_db_connection('tunbroyting') as conn:
             cursor = conn.cursor()
+            # Opprett hovedtabell
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1199,18 +1200,18 @@ def check_database_files():
                     abonnement_type TEXT
                 )
             """)
+            conn.commit()
             
-            # Opprett indekser hvis de ikke eksisterer
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker);
-                CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato);
-                CREATE INDEX IF NOT EXISTS idx_tunbroyting_avreise_dato ON tunbroyting_bestillinger(avreise_dato);
-                CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement ON tunbroyting_bestillinger(abonnement_type);
-            """)
+            # Opprett indekser én etter én
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_avreise_dato ON tunbroyting_bestillinger(avreise_dato)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement ON tunbroyting_bestillinger(abonnement_type)")
             conn.commit()
             
         with get_db_connection('stroing') as conn:
             cursor = conn.cursor()
+            # Opprett hovedtabell
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS stroing_bestillinger (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1219,13 +1220,12 @@ def check_database_files():
                     onske_dato TEXT
                 )
             """)
+            conn.commit()
             
-            # Opprett indekser hvis de ikke eksisterer
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker);
-                CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato);
-                CREATE INDEX IF NOT EXISTS idx_stroing_bestillings_dato ON stroing_bestillinger(bestillings_dato);
-            """)
+            # Opprett indekser én etter én
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bestillings_dato ON stroing_bestillinger(bestillings_dato)")
             conn.commit()
             
         return True
