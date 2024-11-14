@@ -1055,7 +1055,7 @@ def vis_hyttegrend_aktivitet():
             
         # Legg til ekstra informasjon om fredager
         if df_aktivitet.loc[df_aktivitet.index[df_aktivitet.index.weekday == 4], 'antall'].sum() > 0:
-            st.info("💡 På fredager brøytes alle tun med årsabonnement automatisk.")
+            st.info("��� På fredager brøytes alle tun med årsabonnement automatisk.")
             
     except Exception as e:
         logger.error(f"Feil ved behandling av bestillingsdata: {str(e)}", exc_info=True)
@@ -1155,25 +1155,23 @@ def verify_database_state():
         with get_db_connection('tunbroyting') as conn:
             cursor = conn.cursor()
             
-            # Sjekk tabellstruktur
-            cursor.execute("PRAGMA table_info(tunbroyting_bestillinger)")
-            columns = cursor.fetchall()
-            logger.info(f"Tabellstruktur: {columns}")
+            # Sjekk om tabellen eksisterer først
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='tunbroyting_bestillinger'
+            """)
             
-            # Sjekk antall rader
+            if not cursor.fetchone():
+                logger.warning("Tunbrøyting-tabell mangler - oppretter på nytt")
+                return False
+                
+            # Verifiser eksisterende data
             cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
             count = cursor.fetchone()[0]
             logger.info(f"Antall bestillinger: {count}")
             
-            # Sjekk siste bestilling
-            cursor.execute("""
-                SELECT * FROM tunbroyting_bestillinger 
-                ORDER BY id DESC LIMIT 1
-            """)
-            latest = cursor.fetchone()
-            logger.info(f"Siste bestilling: {latest}")
-            
             return True
+            
     except Exception as e:
-        logger.error(f"Feil ved verifisering av database: {str(e)}", exc_info=True)
+        logger.error(f"Feil ved verifisering av tunbrøyting-database: {str(e)}", exc_info=True)
         return False
