@@ -3,33 +3,78 @@ venv/
 env/
 myenv311/
 new_clean_env/
+.venv/
+ENV/
 
-# Cache and temp files
+# Python cache og temp-filer
 __pycache__/
+*.py[cod]
 .pytest_cache/
 .coverage
 htmlcov/
-*.pyc
-.DS_Store
+.tox/
+.nox/
+*.so
 
-# Logs
+# Loggfiler
 *.log
 logs/
 app.log.*
 
-# Build and dist
+# Bygge- og distribusjonsfiler
 build/
 dist/
 *.egg-info/
+*.egg
+wheels/
+MANIFEST
 
-# IDE
+# IDE-spesifikke filer
 .vscode/
 .idea/
 *.swp
+*.swo
+.vs/
+*.sublime-workspace
+*.sublime-project
 
 # Database
 *.db
 *.sqlite3
+*.sqlite
 
-# Mount points
+# Miljøvariabler og konfigurasjonsfiler
+.env
+.env.local
+.env.*.local
+config.local.py
+
+# OS-genererte filer
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Midlertidige filer
+*.tmp
+*.bak
+*.swp
+*~
+
+# Mount points og lokale mapper
 /mount/
+/local/
+/temp/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pytest
+.pytest_cache/
+.coverage
+coverage.xml
+*.cover
