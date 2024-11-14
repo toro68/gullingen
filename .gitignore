@@ -42,6 +42,7 @@ MANIFEST
 *.db
 *.sqlite
 *.sqlite3
+!customer.db
 tunbroyting.db
 stroing.db
 customer.db
