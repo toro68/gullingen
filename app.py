@@ -243,7 +243,7 @@ def main():
         logger.info("Application initialization completed successfully")
 
         # UI-elementer (ikke i bruk)
-        # show_database_update_button()
+        # - show_database_update_button()     
 
         logger.info("Application setup complete")
 
