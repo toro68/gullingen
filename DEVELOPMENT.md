@@ -26,3 +26,4 @@ FutureWarning:
 Setting an item of incompatible dtype is deprecated and will raise in a future error of pandas. Value '<DatetimeArray>
 ['NaT', 'NaT', 'NaT']
 
+Ikke implementer mange nye funksjoner, men forbedre eksisterende funksjoner.
