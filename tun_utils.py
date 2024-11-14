@@ -1071,12 +1071,13 @@ def get_bookings(start_date=None, end_date=None):
         
         df = df.copy()
         
-        # Debug info i en mer lesbar format
-        with st.expander("🔍 Debug Info"):
+        # Debug info kun én gang
+        debug_container = st.empty()
+        with debug_container.expander("🔍 Debug Info", expanded=False):
             st.write("Rådata:", {
                 "Antall rader": df.shape[0],
-                "Kolonner": df.columns.tolist(),
-                "Datatyper": df.dtypes.to_dict()
+                "Kolonner": list(df.columns),
+                "Datatyper": {col: str(dtype) for col, dtype in df.dtypes.items()}
             })
             
             try:
@@ -1105,7 +1106,7 @@ def get_bookings(start_date=None, end_date=None):
                 df['ankomst'] = df['ankomst'].dt.tz_localize('Europe/Oslo')
                 df['avreise'] = df['avreise'].dt.tz_localize('Europe/Oslo')
                 
-                # Vis prosessert data
+                # Vis prosessert data én gang
                 st.write("Prosessert data:", {
                     "Antall bestillinger": len(df),
                     "Første bestilling": df['ankomst'].iloc[0] if not df.empty else None,
