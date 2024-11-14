@@ -1184,7 +1184,25 @@ def initialize_database():
     logger.info("All databases initialized, updated, and verified")
     database_initialized = True
           
-# Call this function when the application starts
+def check_database_files():
+    databases = ['login_history', 'tunbroyting', 'stroing', 'feedback', 'customer']
+    missing_databases = []
+
+    for db in databases:
+        db_path = os.path.join(DATABASE_PATH, f"{db}.db")
+        if not os.path.exists(db_path):
+            logger.error(f"Database file {db_path} does not exist!")
+            missing_databases.append(db)
+        else:
+            logger.info(f"Database file {db_path} exists.")
+
+    if missing_databases:
+        logger.warning(f"The following databases are missing: {', '.join(missing_databases)}")
+    else:
+        logger.info("All database files are present.")
+
+# Kall denne funksjonen ved oppstart av applikasjonen
 if __name__ == "__main__":
+    check_database_files()
     debug_database_operations()
 

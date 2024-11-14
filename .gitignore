@@ -43,9 +43,6 @@ MANIFEST
 *.sqlite
 *.sqlite3
 !customer.db
-tunbroyting.db
-stroing.db
-customer.db
 
 # Miljøvariabler og konfigurasjonsfiler
 .env
