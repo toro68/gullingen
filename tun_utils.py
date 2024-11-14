@@ -134,39 +134,55 @@ def bestill_tunbroyting():
     st.write("---")
 
 # CREATE - lagre i bestill_tunbroyting
-def lagre_bestilling(user_id: str, ankomst_dato: str, ankomst_tid: str, 
-                    avreise_dato: str, avreise_tid: str, abonnement_type: str) -> bool:
+def lagre_bestilling(
+    user_id: str,
+    ankomst_dato: str,
+    ankomst_tid: str,
+    avreise_dato: str,
+    avreise_tid: str,
+    abonnement_type: str
+) -> bool:
     try:
-        # Konverter til ISO format for konsistent lagring
-        ankomst = f"{ankomst_dato}T{ankomst_tid}"
-        avreise = f"{avreise_dato}T{avreise_tid}" if avreise_dato else None
-        
-        query = """INSERT INTO tunbroyting_bestillinger 
-                   (bruker, ankomst_dato, ankomst_tid, avreise_dato, avreise_tid, abonnement_type)
-                   VALUES (?, ?, ?, ?, ?, ?)"""
-        
         with get_db_connection('tunbroyting') as conn:
             cursor = conn.cursor()
+            
+            # Valider input
+            if not all([user_id, ankomst_dato, ankomst_tid, abonnement_type]):
+                logger.error("Manglende påkrevde felter i bestilling")
+                return False
+
+            # SQL-spørring med eksplisitte kolonnenavn
+            query = """
+            INSERT INTO tunbroyting_bestillinger 
+            (bruker, ankomst_dato, ankomst_tid, avreise_dato, avreise_tid, abonnement_type)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """
+            
+            # Utfør spørringen med validerte parametre
             cursor.execute(query, (
-                user_id,
-                ankomst_dato,
-                ankomst_tid,
-                avreise_dato,
-                avreise_tid,
-                abonnement_type
+                str(user_id),
+                str(ankomst_dato),
+                str(ankomst_tid),
+                str(avreise_dato) if avreise_dato else None,
+                str(avreise_tid) if avreise_tid else None,
+                str(abonnement_type)
             ))
+            
             conn.commit()
             
-        logger.info(
-            f"Bestilling lagret: bruker={user_id}, "
-            f"ankomst={ankomst_dato} {ankomst_tid}, "
-            f"avreise={avreise_dato} {avreise_tid}, "
-            f"type={abonnement_type}"
-        )
-        return True
-        
+            logger.info(
+                f"Bestilling lagret: bruker={user_id}, "
+                f"ankomst={ankomst_dato} {ankomst_tid}, "
+                f"avreise={avreise_dato} {avreise_tid}, "
+                f"type={abonnement_type}"
+            )
+            return True
+            
+    except sqlite3.Error as e:
+        logger.error(f"Database-feil ved lagring av bestilling: {str(e)}", exc_info=True)
+        return False
     except Exception as e:
-        logger.error(f"Feil ved lagring av bestilling: {str(e)}", exc_info=True)
+        logger.error(f"Uventet feil ved lagring av bestilling: {str(e)}", exc_info=True)
         return False
 
 # READ
@@ -1133,3 +1149,31 @@ def get_bookings(start_date=None, end_date=None):
         logger.error(f"Error in get_bookings: {str(e)}", exc_info=True)
         st.error(f"Feil ved henting av bestillinger: {str(e)}")
         return pd.DataFrame()
+
+def verify_database_state():
+    try:
+        with get_db_connection('tunbroyting') as conn:
+            cursor = conn.cursor()
+            
+            # Sjekk tabellstruktur
+            cursor.execute("PRAGMA table_info(tunbroyting_bestillinger)")
+            columns = cursor.fetchall()
+            logger.info(f"Tabellstruktur: {columns}")
+            
+            # Sjekk antall rader
+            cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
+            count = cursor.fetchone()[0]
+            logger.info(f"Antall bestillinger: {count}")
+            
+            # Sjekk siste bestilling
+            cursor.execute("""
+                SELECT * FROM tunbroyting_bestillinger 
+                ORDER BY id DESC LIMIT 1
+            """)
+            latest = cursor.fetchone()
+            logger.info(f"Siste bestilling: {latest}")
+            
+            return True
+    except Exception as e:
+        logger.error(f"Feil ved verifisering av database: {str(e)}", exc_info=True)
+        return False

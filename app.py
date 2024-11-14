@@ -51,6 +51,9 @@ from db_utils import (
     #close_all_connections
 )
 
+# Tun utilities
+from tun_utils import verify_database_state
+
 # Validation utilities
 from validation_utils import sanitize_input
 
@@ -224,6 +227,12 @@ def main():
         
         # Initialisering av applikasjonen
         initialize_app()
+        
+        # Verifiser databasetilstand
+        if not verify_database_state():
+            logger.error("Feil ved verifisering av tunbrøyting-database")
+            st.error("Det oppstod en feil ved oppstart av appen. Vennligst prøv igjen senere.")
+            return
         
         # Sesjonshåndtering
         check_session_timeout()
