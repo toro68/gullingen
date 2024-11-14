@@ -1072,35 +1072,39 @@ def get_bookings(start_date=None, end_date=None):
         logger.debug(f"Raw data types:\n{df.dtypes}")
         
         try:
-            # Konverter dato-kolonner først
+            # Konverter dato-kolonner
             for col in ['ankomst_dato', 'avreise_dato']:
-                df[col] = pd.to_datetime(df[col], format='%Y-%m-%d', errors='coerce')
+                df[col] = pd.to_datetime(df[col], errors='coerce')
             
-            # Konverter tid-kolonner
+            # Konverter tid-kolonner til datetime.time objekter
             for col in ['ankomst_tid', 'avreise_tid']:
                 df[col] = pd.to_datetime(df[col], format='%H:%M:%S', errors='coerce').dt.time
             
             # Kombiner dato og tid for ankomst
             df['ankomst'] = df.apply(
                 lambda row: pd.Timestamp.combine(
-                    row['ankomst_dato'].date() if pd.notnull(row['ankomst_dato']) else None,
-                    row['ankomst_tid'] if pd.notnull(row['ankomst_tid']) else None
-                ) if pd.notnull(row['ankomst_dato']) and pd.notnull(row['ankomst_tid']) else pd.NaT,
+                    row['ankomst_dato'],
+                    row['ankomst_tid']
+                ) if pd.notnull(row['ankomst_dato']) and row['ankomst_tid'] is not None 
+                else pd.NaT,
                 axis=1
             )
             
             # Kombiner dato og tid for avreise
             df['avreise'] = df.apply(
                 lambda row: pd.Timestamp.combine(
-                    row['avreise_dato'].date() if pd.notnull(row['avreise_dato']) else None,
-                    row['avreise_tid'] if pd.notnull(row['avreise_tid']) else None
-                ) if pd.notnull(row['avreise_dato']) and pd.notnull(row['avreise_tid']) else pd.NaT,
+                    row['avreise_dato'],
+                    row['avreise_tid']
+                ) if pd.notnull(row['avreise_dato']) and row['avreise_tid'] is not None 
+                else pd.NaT,
                 axis=1
             )
             
             # Legg til tidssone
             df['ankomst'] = df['ankomst'].dt.tz_localize('Europe/Oslo')
             df['avreise'] = df['avreise'].dt.tz_localize('Europe/Oslo')
+            
+            logger.debug(f"Datetime columns after conversion:\nAnkomst:\n{df['ankomst']}\nAvreise:\n{df['avreise']}")
             
         except Exception as e:
             logger.error(f"Error combining date and time: {str(e)}")
@@ -1114,7 +1118,6 @@ def get_bookings(start_date=None, end_date=None):
             df = df[df['ankomst'] <= pd.to_datetime(end_date)].copy()
         
         logger.info(f"Successfully processed {len(df)} bookings")
-        logger.debug(f"Final DataFrame:\n{df.head()}")
         return df
         
     except Exception as e:
