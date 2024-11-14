@@ -5,7 +5,7 @@ from db_utils import get_db_connection, fetch_data
 import logging
 import sqlite3
 from typing import Optional, Dict, Any
-from config import TZ
+from constants import TZ
 
 logger = logging.getLogger(__name__)
 
