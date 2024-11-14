@@ -1049,16 +1049,6 @@ def vis_hyttegrend_aktivitet():
         st.error("Det oppstod en feil ved lasting av tunbrøytingsaktivitet. Vennligst prøv igjen senere.")
 
 def get_bookings(start_date=None, end_date=None):
-    """
-    Henter tunbrøyting-bestillinger for en gitt periode.
-    
-    Args:
-        start_date (datetime, optional): Startdato for filtreringen
-        end_date (datetime, optional): Sluttdato for filtreringen
-        
-    Returns:
-        pd.DataFrame: DataFrame med bestillinger
-    """
     logger.info(f"Starting get_bookings with start_date={start_date}, end_date={end_date}")
     
     try:
@@ -1068,7 +1058,6 @@ def get_bookings(start_date=None, end_date=None):
             FROM tunbroyting_bestillinger
         """
         
-        # Hent data fra databasen
         df = fetch_data('tunbroyting', query)
         
         if df is None or df.empty:
@@ -1078,46 +1067,56 @@ def get_bookings(start_date=None, end_date=None):
                 'avreise_dato', 'avreise_tid', 'abonnement_type',
                 'ankomst', 'avreise'
             ])
-            
-        # Lag en eksplisitt kopi av dataframe
-        df = df.copy()
         
-        # Bruk .loc for datokonvertering
-        for col in ['ankomst_dato', 'avreise_dato']:
-            try:
-                df.loc[:, col] = pd.to_datetime(df[col], format='%Y-%m-%d', errors='coerce')
-            except Exception as e:
-                logger.error(f"Error converting {col}: {str(e)}")
-                df.loc[:, col] = pd.NaT
+        df = df.copy()
+        logger.debug(f"Raw data types:\n{df.dtypes}")
+        
+        try:
+            # Konverter dato-kolonner først
+            for col in ['ankomst_dato', 'avreise_dato']:
+                df[col] = pd.to_datetime(df[col], format='%Y-%m-%d', errors='coerce')
+            
+            # Konverter tid-kolonner
+            for col in ['ankomst_tid', 'avreise_tid']:
+                df[col] = pd.to_datetime(df[col], format='%H:%M:%S', errors='coerce').dt.time
+            
+            # Kombiner dato og tid for ankomst
+            df['ankomst'] = df.apply(
+                lambda row: pd.Timestamp.combine(
+                    row['ankomst_dato'].date() if pd.notnull(row['ankomst_dato']) else None,
+                    row['ankomst_tid'] if pd.notnull(row['ankomst_tid']) else None
+                ) if pd.notnull(row['ankomst_dato']) and pd.notnull(row['ankomst_tid']) else pd.NaT,
+                axis=1
+            )
+            
+            # Kombiner dato og tid for avreise
+            df['avreise'] = df.apply(
+                lambda row: pd.Timestamp.combine(
+                    row['avreise_dato'].date() if pd.notnull(row['avreise_dato']) else None,
+                    row['avreise_tid'] if pd.notnull(row['avreise_tid']) else None
+                ) if pd.notnull(row['avreise_dato']) and pd.notnull(row['avreise_tid']) else pd.NaT,
+                axis=1
+            )
+            
+            # Legg til tidssone
+            df['ankomst'] = df['ankomst'].dt.tz_localize('Europe/Oslo')
+            df['avreise'] = df['avreise'].dt.tz_localize('Europe/Oslo')
+            
+        except Exception as e:
+            logger.error(f"Error combining date and time: {str(e)}")
+            df['ankomst'] = pd.NaT
+            df['avreise'] = pd.NaT
         
         # Filtrer på dato hvis spesifisert
-        mask = pd.Series(True, index=df.index)
         if start_date:
-            mask &= df['ankomst_dato'] >= start_date
+            df = df[df['ankomst'] >= pd.to_datetime(start_date)].copy()
         if end_date:
-            mask &= df['ankomst_dato'] <= end_date
-        df = df.loc[mask].copy()
+            df = df[df['ankomst'] <= pd.to_datetime(end_date)].copy()
         
-        # Kombiner dato og tid med sikker tidssone-håndtering
-        for col_pair in [('ankomst_dato', 'ankomst_tid', 'ankomst'), 
-                        ('avreise_dato', 'avreise_tid', 'avreise')]:
-            try:
-                df[col_pair[2]] = pd.to_datetime(
-                    df[col_pair[0]].dt.strftime('%Y-%m-%d') + ' ' + 
-                    df[col_pair[1]].astype(str)
-                ).dt.tz_localize('UTC').dt.tz_convert('Europe/Oslo')
-            except Exception as e:
-                logger.error(f"Error creating {col_pair[2]}: {str(e)}")
-                df[col_pair[2]] = pd.NaT
-        
-        logger.info(f"Successfully retrieved {len(df)} bookings")
+        logger.info(f"Successfully processed {len(df)} bookings")
+        logger.debug(f"Final DataFrame:\n{df.head()}")
         return df
         
     except Exception as e:
         logger.error(f"Error in get_bookings: {str(e)}", exc_info=True)
-        return pd.DataFrame(columns=[
-            'id', 'bruker', 'ankomst_dato', 'ankomst_tid', 
-            'avreise_dato', 'avreise_tid', 'abonnement_type',
-            'ankomst', 'avreise'
-        ])
-
+        return pd.DataFrame()

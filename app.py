@@ -51,7 +51,7 @@ from db_utils import (
     #close_all_connections
 )
 
-# Validation utilities 
+# Validation utilities
 from validation_utils import sanitize_input
 
 # Authentication and session management

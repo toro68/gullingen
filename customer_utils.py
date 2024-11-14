@@ -16,6 +16,7 @@ from config import DATABASE_PATH
 from utils import get_passwords
 
 from logging_config import get_logger
+from db_utils import fetch_data
 
 logger = get_logger(__name__)
 
@@ -566,30 +567,30 @@ def extract_numeric_id(customer_id):
 
 def load_customer_database():
     try:
-        conn = sqlite3.connect('customer.db')
         query = "SELECT * FROM customers"
-        df = pd.read_sql_query(query, conn)
-        conn.close()
+        df = fetch_data('customer', query)
         
-        # Konverter kolonner til riktig datatype
-        if 'Id' in df.columns:
-            df['Id'] = df['Id'].astype(str)
-        if 'Latitude' in df.columns:
-            df['Latitude'] = pd.to_numeric(df['Latitude'], errors='coerce')
-        if 'Longitude' in df.columns:
-            df['Longitude'] = pd.to_numeric(df['Longitude'], errors='coerce')
+        if df is None or df.empty:
+            logger.error("Failed to load customer database")
+            return pd.DataFrame(columns=['Id', 'Latitude', 'Longitude', 'Subscription', 'Type'])
+            
+        # Lag en eksplisitt kopi før modifikasjoner
+        df = df.copy()
+        
+        # Sjekk at alle påkrevde kolonner eksisterer
+        required_columns = ['Id', 'Subscription', 'Type']
+        if not all(col in df.columns for col in required_columns):
+            logger.error(f"Manglende påkrevde kolonner i kundedatabasen: {[col for col in required_columns if col not in df.columns]}")
+            return pd.DataFrame(columns=['Id', 'Latitude', 'Longitude', 'Subscription', 'Type'])
         
         logger.info(f"Successfully loaded {len(df)} customers from database")
+        logger.info(f"Kolonner i kundedatabasen: {df.columns.tolist()}")
+        
         return df
-    except sqlite3.Error as e:
-        logger.error(f"SQLite error occurred while loading customer database: {e}")
-        return pd.DataFrame()  # Return an empty DataFrame in case of error
-    except pd.io.sql.DatabaseError as e:
-        logger.error(f"Pandas SQL error occurred while loading customer database: {e}")
-        return pd.DataFrame()
+        
     except Exception as e:
-        logger.error(f"Unexpected error occurred while loading customer database: {e}")
-        return pd.DataFrame()
+        logger.error(f"Error loading customer database: {str(e)}")
+        return pd.DataFrame(columns=['Id', 'Latitude', 'Longitude', 'Subscription', 'Type'])
     
 def get_bookings(start_date=None, end_date=None):
     """Henter bestillinger for gitt periode"""
