@@ -29,3 +29,15 @@ Setting an item of incompatible dtype is deprecated and will raise in a future e
 Ikke implementer mange nye funksjoner, men forbedre eksisterende funksjoner.
 
 NB: Alltid oppgi hvilken fil funksjonen ligger i.
+
+# config.py:
+DATABASE_PATH = os.path.dirname(os.path.abspath(__file__))
+
+alt ligger i rotmappa: 
+./weather_utils.py
+./db_utils.py
+./util_functions.py
+./gps_utils.py
+./admin_utils.py
+./stroing_utils.py
+./logging_utils.py

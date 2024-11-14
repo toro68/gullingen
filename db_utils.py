@@ -766,25 +766,41 @@ def robust_update_customer_schema():
     
 # Database connection
 @contextmanager
-def get_db_connection(db_name, timeout=30, check_same_thread=True, journal_mode=None):
-    db_path = os.path.join(DATABASE_PATH, f'{db_name}.db')
-    conn = None
+def get_db_connection(db_name, timeout=10, check_same_thread=False, journal_mode='WAL'):
+    """Opprett databasetilkobling med absolutt filsti"""
     try:
-        conn = sqlite3.connect(db_path, timeout=timeout, check_same_thread=check_same_thread, uri=True)
-        if journal_mode:
-            conn.execute(f"PRAGMA journal_mode={journal_mode};")
+        # Bruk absolutt filsti i rotmappen
+        db_path = os.path.join(DATABASE_PATH, f'{db_name}.db')
+        
+        # Logg filstien for debugging
+        logger.info(f"Connecting to database at: {db_path}")
+        
+        # Opprett mappen hvis den ikke eksisterer
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+        conn = sqlite3.connect(
+            db_path,
+            timeout=timeout,
+            check_same_thread=check_same_thread
+        )
+        
+        # Sett journal mode til WAL for bedre ytelse og stabilitet
+        conn.execute(f"PRAGMA journal_mode={journal_mode}")
         conn.row_factory = sqlite3.Row
-        logger.debug(f"Opened connection to {db_path}")
+        
+        # Registrer tilkobling for opprydding
+        increment_connection_count()
+        
         yield conn
-    except sqlite3.Error as e:
-        logger.error(f"Error with connection to {db_name}.db: {e}")
-        if db_name == 'stroing':
-            st.error(f"Kunne ikke koble til strøingsdatabasen. Vennligst kontakt systemadministrator.")
+        
+    except Exception as e:
+        logger.error(f"Error connecting to {db_name}.db: {str(e)}", exc_info=True)
         raise
     finally:
         if conn:
             try:
                 conn.close()
+                decrement_connection_count()
                 logger.debug(f"Closed connection to {db_path}")
             except Exception as e:
                 logger.error(f"Error closing connection to {db_name}.db: {e}")
@@ -1186,48 +1202,70 @@ def initialize_database():
           
 def check_database_files():
     try:
-        with get_db_connection('tunbroyting') as conn:
-            cursor = conn.cursor()
-            # Opprett hovedtabell
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bruker TEXT,
-                    ankomst_dato DATE,
-                    ankomst_tid TIME,
-                    avreise_dato DATE,
-                    avreise_tid TIME,
-                    abonnement_type TEXT
-                )
-            """)
-            conn.commit()
+        # Sjekk om databasefilene eksisterer først
+        databases = {
+            'tunbroyting': os.path.join(DATABASE_PATH, 'tunbroyting.db'),
+            'stroing': os.path.join(DATABASE_PATH, 'stroing.db')
+        }
+        
+        for db_name, db_path in databases.items():
+            # Sjekk om databasen allerede eksisterer
+            db_exists = os.path.exists(db_path)
+            logger.info(f"Database {db_name} exists: {db_exists}")
             
-            # Opprett indekser én etter én
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_avreise_dato ON tunbroyting_bestillinger(avreise_dato)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement ON tunbroyting_bestillinger(abonnement_type)")
-            conn.commit()
-            
-        with get_db_connection('stroing') as conn:
-            cursor = conn.cursor()
-            # Opprett hovedtabell
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS stroing_bestillinger (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bruker TEXT,
-                    bestillings_dato TEXT,
-                    onske_dato TEXT
-                )
-            """)
-            conn.commit()
-            
-            # Opprett indekser én etter én
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bestillings_dato ON stroing_bestillinger(bestillings_dato)")
-            conn.commit()
-            
+            with get_db_connection(db_name) as conn:
+                cursor = conn.cursor()
+                
+                if db_name == 'tunbroyting':
+                    # Opprett kun hvis den ikke finnes
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            bruker TEXT,
+                            ankomst_dato DATE,
+                            ankomst_tid TIME,
+                            avreise_dato DATE,
+                            avreise_tid TIME,
+                            abonnement_type TEXT
+                        )
+                    """)
+                    conn.commit()
+                    
+                    # Opprett indekser
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)")
+                    conn.commit()
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)")
+                    conn.commit()
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_avreise_dato ON tunbroyting_bestillinger(avreise_dato)")
+                    conn.commit()
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement ON tunbroyting_bestillinger(abonnement_type)")
+                    conn.commit()
+                    
+                elif db_name == 'stroing':
+                    # Opprett kun hvis den ikke finnes
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS stroing_bestillinger (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            bruker TEXT,
+                            bestillings_dato TEXT,
+                            onske_dato TEXT
+                        )
+                    """)
+                    conn.commit()
+                    
+                    # Opprett indekser
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bruker ON stroing_bestillinger(bruker)")
+                    conn.commit()
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_onske_dato ON stroing_bestillinger(onske_dato)")
+                    conn.commit()
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stroing_bestillings_dato ON stroing_bestillinger(bestillings_dato)")
+                    conn.commit()
+                
+                # Verifiser data
+                cursor.execute(f"SELECT COUNT(*) FROM {db_name}_bestillinger")
+                count = cursor.fetchone()[0]
+                logger.info(f"Antall rader i {db_name}_bestillinger: {count}")
+                
         return True
         
     except Exception as e:
