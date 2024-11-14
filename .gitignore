@@ -40,8 +40,11 @@ MANIFEST
 
 # Database
 *.db
-*.sqlite3
 *.sqlite
+*.sqlite3
+tunbroyting.db
+stroing.db
+customer.db
 
 # Miljøvariabler og konfigurasjonsfiler
 .env
@@ -92,6 +95,5 @@ myenv311/
 test_env/
 new_clean_env/
 
-# Data og komponenter
+# Data
 data/
-components/

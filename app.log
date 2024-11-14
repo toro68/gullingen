@@ -6261,3 +6261,5 @@ ValueError: Startdato kan ikke være i fremtiden
 2024-11-14 04:23:33 - tun_utils - INFO - Starting get_bookings with start_date=None, end_date=None
 2024-11-14 04:23:33 - tun_utils - INFO - Successfully retrieved 2 bookings
 2024-11-14 04:23:33 - __main__ - INFO - Application shutting down
+2024-11-14 04:35:03 - db_utils - INFO - Starting to close all database connections
+2024-11-14 04:35:03 - db_utils - INFO - Finished closing all database connections and cleaning up files
