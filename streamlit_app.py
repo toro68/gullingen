@@ -43,6 +43,10 @@ try:
         f"=== MAIN EXECUTION START - Run #{st.session_state._script_run_count} ==="
     )
     
+    # Legg til prosjektets rotmappe i Python path
+    root_path = Path(__file__).parent.absolute()
+    sys.path.append(str(root_path))
+
     # Import main etter logging setup
     from src.app import main
     
