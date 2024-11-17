@@ -5,6 +5,17 @@ from pathlib import Path
 
 import streamlit as st
 
+# Legg til korrekt mappesti for Streamlit Cloud
+if os.path.exists("/mount/src/gullingen"):
+    # Vi er på Streamlit Cloud
+    root_path = Path("/mount/src/gullingen")
+else:
+    # Vi er lokalt
+    root_path = Path(__file__).parent.absolute()
+
+sys.path.append(str(root_path))
+
+# Nå kan vi importere utils
 from utils.core.logging_config import get_logger, setup_logging
 
 # Sett opp logging først
@@ -22,26 +33,28 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-# Legg til prosjektets rotmappe i Python path
-root_path = Path(__file__).parent.absolute()
-sys.path.append(str(root_path))
-
-# Import nødvendige funksjoner fra src.app
-from src.app import (
-    initialize_app,
-    initialize_session_state,
-    display_home_page,
-    get_customer_by_id,
-    create_menu,
-    login_page,
-    check_session_timeout
-)
-
-# Initialize session state variables
-if "_script_run_count" not in st.session_state:
-    st.session_state._script_run_count = 0
+# Legg til logging av mappestier for debugging
+logger.info(f"Current working directory: {os.getcwd()}")
+logger.info(f"Root path: {root_path}")
+logger.info(f"Python path: {sys.path}")
 
 try:
+    # Import app.py etter at paths er satt opp
+    from src.app import (
+        initialize_app,
+        initialize_session_state,
+        display_home_page,
+        get_customer_by_id,
+        create_menu,
+        login_page,
+        check_session_timeout
+    )
+    
+    # Resten av koden forblir uendret...
+    # Initialize session state variables
+    if "_script_run_count" not in st.session_state:
+        st.session_state._script_run_count = 0
+
     # Increment counter at start of execution
     st.session_state._script_run_count += 1
     
