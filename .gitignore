@@ -20,6 +20,7 @@ htmlcov/
 # Loggfiler
 *.log
 data/app.log
+data/app.log.*
 
 # Database-filer
 *.db
