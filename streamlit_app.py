@@ -6,9 +6,9 @@ from pathlib import Path
 import streamlit as st
 
 # Legg til korrekt mappesti for Streamlit Cloud
-if os.path.exists("/mount/src/gullingen"):
+if os.path.exists("/mount/gullingen"):
     # Vi er på Streamlit Cloud
-    root_path = Path("/mount/src/gullingen")
+    root_path = Path("/mount/gullingen")
 else:
     # Vi er lokalt
     root_path = Path(__file__).parent.absolute()
