@@ -22,14 +22,20 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-# Legg til en guard mot multiple handlers
-if not hasattr(st.session_state, "logging_configured"):
-    logger.info("=== STREAMLIT APP STARTUP ===")
-    logger.info(f"Process ID: {os.getpid()}")
-    logger.info(f"Parent Process ID: {os.getppid()}")
-    logger.info(f"Session State Keys: {st.session_state.keys()}")
-    logger.info(f"Script Rerun Count: {st.session_state.get('_script_run_count', 0)}")
-    st.session_state.logging_configured = True
+# Legg til prosjektets rotmappe i Python path
+root_path = Path(__file__).parent.absolute()
+sys.path.append(str(root_path))
+
+# Import nødvendige funksjoner fra src.app
+from src.app import (
+    initialize_app,
+    initialize_session_state,
+    display_home_page,
+    get_customer_by_id,
+    create_menu,
+    login_page,
+    check_session_timeout
+)
 
 # Initialize session state variables
 if "_script_run_count" not in st.session_state:
@@ -42,20 +48,41 @@ try:
     logger.info(
         f"=== MAIN EXECUTION START - Run #{st.session_state._script_run_count} ==="
     )
-    
-    # Legg til prosjektets rotmappe i Python path
-    root_path = Path(__file__).parent.absolute()
-    sys.path.append(str(root_path))
 
-    # Import main etter logging setup
-    from src.app import main
-    
-    main()
-    
+    # Initialiser session state
+    initialize_session_state()
+
+    # Kjør app initialisering én gang
+    if not st.session_state.get("app_initialized", False):
+        logger.info("App not initialized, starting initialization")
+        if not initialize_app():
+            logger.error("Failed to initialize app")
+            st.error("Kunne ikke starte applikasjonen. Vennligst sjekk loggene.")
+            st.stop()
+        st.session_state.app_initialized = True
+
+    # Håndter autentisering
+    if not check_session_timeout():
+        st.session_state.authenticated = False
+        login_page()
+        st.stop()
+
+    if not st.session_state.get("authenticated", False):
+        login_page()
+    else:
+        customer = get_customer_by_id(st.session_state.user_id)
+        if customer is None:
+            st.error("Kunne ikke finne brukerinformasjon")
+            st.session_state.authenticated = False
+            st.session_state.is_admin = False
+            st.rerun()
+        else:
+            user_type = customer.get("Type", "Standard")
+            st.session_state.is_admin = user_type in ["Admin", "Superadmin"]
+            display_home_page(customer)
+
 except Exception as e:
     logger.error(f"Error in main execution: {str(e)}", exc_info=True)
-    raise e
+    st.error("Det oppstod en feil. Vennligst prøv igjen senere.")
 finally:
-    # Safely log end of execution even if session state is cleared
-    run_count = getattr(st.session_state, "_script_run_count", "Unknown")
-    logger.info(f"=== MAIN EXECUTION END - Run #{run_count} ===")
+    logger.info(f"=== MAIN EXECUTION END - Run #{st.session_state._script_run_count} ===")
