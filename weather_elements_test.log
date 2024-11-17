@@ -1,2 +1,0 @@
-DEBUG - Using ELEMENTS: air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),max_wind_speed(wind_from_direction PT1H),max(wind_speed_of_gust PT1H),min(wind_speed P1M),wind_speed,surface_temperature,relative_humidity,dew_point_temperature
-DEBUG - Using STATION_ID: SN46220
