@@ -38,51 +38,6 @@ def retry_on_db_error(retries: int = 3, delay: float = 0.1) -> Callable:
 
     return decorator
 
-
-@contextmanager
-@retry_on_db_error(retries=3)
-def get_db_connection(db_name: str):
-    """Forbedret database connection manager med bedre feilhåndtering"""
-    db_path = DATABASE_PATH / f"{db_name}.db"
-    conn = None
-    try:
-        # Sjekk at databasemappen eksisterer
-        if not DATABASE_PATH.exists():
-            DATABASE_PATH.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Created database directory: {DATABASE_PATH}")
-
-        # Opprett connection med timeout og bedre isolation level
-        conn = sqlite3.connect(
-            str(db_path),
-            timeout=30,
-            isolation_level="IMMEDIATE",  # Prevent writer starvation
-        )
-        conn.row_factory = sqlite3.Row
-
-        # Enable foreign keys
-        conn.execute("PRAGMA foreign_keys = ON")
-
-        # Test connection
-        conn.execute("SELECT 1")
-
-        logger.debug(f"Successfully connected to database: {db_name}")
-        yield conn
-
-    except sqlite3.Error as e:
-        logger.error(f"Database error for {db_name} at {db_path}: {str(e)}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error with database {db_name}: {str(e)}")
-        raise
-    finally:
-        if conn:
-            try:
-                conn.close()
-                logger.debug(f"Closed connection to database: {db_name}")
-            except Exception as e:
-                logger.error(f"Error closing connection to {db_name}: {str(e)}")
-
-
 def create_tables():
     """Oppretter alle nødvendige databasetabeller."""
     try:

@@ -57,45 +57,24 @@ def import_customers_from_csv() -> bool:
 
         logger.info(f"Read {len(df)} customers from CSV")
 
-        # Hent eksisterende kunde-IDer
         with get_db_connection("customer") as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT customer_id FROM customer")
-            existing_ids = {row[0] for row in cursor.fetchall()}
-            
-            # Behandle hver rad
             for _, row in df.iterrows():
-                try:
-                    customer_id = str(row['Id']).strip()
-                    
-                    # Hopp over hvis kunde-ID allerede eksisterer
-                    if customer_id in existing_ids:
-                        logger.debug(f"Skipping existing customer: {customer_id}")
-                        continue
-                        
-                    lat = 0.0 if row['Latitude'] == '0' else float(row['Latitude'])
-                    lon = 0.0 if row['Longitude'] == '0' else float(row['Longitude'])
-                    
-                    cursor.execute("""
-                        INSERT INTO customer 
-                        (customer_id, lat, lon, subscription, type)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (
-                        customer_id,
-                        lat,
-                        lon,
-                        str(row['Subscription']).strip(),
-                        str(row['Type']).strip()
-                    ))
-                    
-                except Exception as e:
-                    logger.error(f"Error importing customer {row['Id']}: {str(e)}")
-                    continue
-                    
-            conn.commit()
-            logger.info("Successfully imported new customer data")
+                cursor.execute("""
+                    INSERT OR REPLACE INTO customer 
+                    (customer_id, lat, lon, subscription, type)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    str(row['Id']),
+                    row['Latitude'],
+                    row['Longitude'],
+                    str(row['Subscription']),
+                    str(row['Type'])
+                ))
+            
+            logger.info("Customer import completed successfully")
             return True
-
+                
     except Exception as e:
         logger.error(f"Error importing customer data: {str(e)}")
         return False

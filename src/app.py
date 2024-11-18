@@ -46,6 +46,7 @@ from utils.core.validation_utils import (
     validate_customers_and_passwords,
     validate_user_input,
 )
+from utils.db import db_utils  # Legg til denne importen øverst med de andre importene
 from utils.db.db_utils import (
     close_all_connections,
     get_db_connection,
@@ -171,32 +172,27 @@ def display_home_page(customer):
         )
 
 
-def initialize_app() -> bool:
+@st.cache_resource
+def initialize_app():
     try:
         logger.info("=== INITIALIZE_APP START ===")
-        logger.info(f"Current working directory: {os.getcwd()}")
-        logger.info(f"DATABASE_PATH from config: {DATABASE_PATH}")
-
-        # Initialiser databasesystem
-        logger.info("Starting database system initialization")
-        if not initialize_database_system():
-            logger.error("Failed to initialize database system")
-            return False
-        logger.info("Database system initialization completed")
-
-        # Sett opp kundedata
-        logger.info("Setting up customer data")
-        if not setup_customer_data():
-            logger.error("Failed to setup customer data")
-            return False
-        logger.info("Customer data setup completed")
-
-        st.session_state.app_initialized = True
-        logger.info("App initialization completed successfully")
+        
+        # Lukk eventuelle åpne tilkoblinger
+        db_utils.close_all_connections()
+        
+        # Initialiser databasestruktur
+        if not db_utils.initialize_database_system():
+            raise Exception("Failed to initialize database system")
+            
+        # Import kundedata
+        if not import_customers_from_csv():
+            raise Exception("Failed to import customer data")
+            
+        logger.info("=== INITIALIZE_APP COMPLETE ===")
         return True
-
+        
     except Exception as e:
-        logger.error(f"Application initialization error: {str(e)}", exc_info=True)
+        logger.error(f"Failed to initialize app: {str(e)}")
         return False
 
 
