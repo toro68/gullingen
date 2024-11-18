@@ -5,20 +5,27 @@ from pathlib import Path
 
 import streamlit as st
 
-# Legg til korrekt mappesti for Streamlit Cloud
-if os.path.exists("/mount/gullingen"):
-    # Vi er på Streamlit Cloud
-    root_path = Path("/mount/gullingen")
-else:
-    # Vi er lokalt
-    root_path = Path(__file__).parent.absolute()
+# Sett opp paths
+current_dir = Path(__file__).parent.absolute()
+sys.path.append(str(current_dir))
 
-sys.path.append(str(root_path))
+# For Streamlit Cloud
+if os.path.exists("/mount/gullingen"):
+    os.chdir("/mount/gullingen")
+    logger.info(f"Running on Streamlit Cloud, changed directory to: {os.getcwd()}")
+    logger.info(f"Files in directory: {os.listdir()}")
 
 # Nå kan vi importere utils
 from utils.core.logging_config import get_logger, setup_logging
+from src.app import (
+    initialize_app,
+    initialize_session_state,
+    display_home_page,
+    get_customer_by_id
+)
+from utils.core.auth_utils import check_session_timeout, login_page
 
-# Sett opp logging først
+# Sett opp logging
 setup_logging()
 logger = get_logger(__name__)
 
@@ -35,7 +42,7 @@ logger.addHandler(console_handler)
 
 # Legg til logging av mappestier for debugging
 logger.info(f"Current working directory: {os.getcwd()}")
-logger.info(f"Root path: {root_path}")
+logger.info(f"Root path: {current_dir}")
 logger.info(f"Python path: {sys.path}")
 
 try:
