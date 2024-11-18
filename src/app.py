@@ -62,9 +62,9 @@ from utils.services.alert_utils import (
     display_active_alerts
 )
 from utils.services.customer_utils import (
+    get_cabin_coordinates,
     get_customer_by_id,
-    insert_customer,
-    setup_customer_data,
+    load_customer_database,
 )
 from utils.services.feedback_utils import (
     display_daily_maintenance_rating,
@@ -92,6 +92,7 @@ from utils.services.weather_display_utils import (
     handle_weather_page,
 )
 from utils.services.weather_utils import fetch_and_process_data
+from utils.db.data_import import import_customers_from_csv
 
 # Set up logging ONCE
 setup_logging()

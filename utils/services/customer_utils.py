@@ -320,38 +320,27 @@ def vis_arsabonnenter():
         logger.error(f"Feil ved visning av årsabonnenter: {str(e)}", exc_info=True)
         st.error("Kunne ikke vise årsabonnenter")
 
-def get_customer_by_id(customer_id):
+def get_customer_by_id(customer_id: str) -> Optional[Dict]:
+    """Henter kundedata for en spesifikk kunde"""
     try:
         with get_db_connection("customer") as conn:
             cursor = conn.cursor()
-            # Først, la oss se på tabellstrukturen
-            cursor.execute("PRAGMA table_info(customer)")
-            columns = cursor.fetchall()
-            logger.info(f"Customer table columns: {columns}")
-            
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT customer_id, lat, lon, subscription, type, created_at 
                 FROM customer 
                 WHERE customer_id = ?
-                """, 
-                (customer_id,)
-            )
-            row = cursor.fetchone()
+            """, (customer_id,))
             
+            row = cursor.fetchone()
             if row:
-                customer_data = {
+                return {
                     "customer_id": row[0],
                     "lat": row[1],
                     "lon": row[2],
                     "subscription": row[3],
-                    "Type": row[4],
+                    "type": row[4],
                     "created_at": row[5]
                 }
-                logger.info(f"Retrieved customer data: {customer_data}")
-                return customer_data
-                
-            logger.warning(f"No customer found with ID {customer_id}")
             return None
             
     except Exception as e:
