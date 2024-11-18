@@ -13,15 +13,16 @@ def import_customers_from_csv() -> bool:
     try:
         # Sjekk alle mulige stier for CSV-filen
         possible_paths = [
+            Path(DATABASE_PATH) / "customers.csv",
             Path(".streamlit/customers.csv"),
             Path("data/customers.csv"),
-            DATABASE_PATH / "customers.csv",
             Path("customers.csv")
         ]
         
         csv_path = None
         for path in possible_paths:
             if path.exists():
+                logger.info(f"Found customer CSV file at: {path}")
                 csv_path = path
                 break
                 
@@ -31,17 +32,31 @@ def import_customers_from_csv() -> bool:
             
         logger.info(f"Reading customers from: {csv_path}")
         
-        # Les CSV med eksplisitte datatyper
-        df = pd.read_csv(
-            csv_path,
-            dtype={
-                'Id': str,
-                'Latitude': str,
-                'Longitude': str,
-                'Subscription': str,
-                'Type': str
-            }
-        )
+        # Les CSV med eksplisitte datatyper og håndter encoding
+        try:
+            df = pd.read_csv(
+                csv_path,
+                dtype={
+                    'Id': str,
+                    'Latitude': str,
+                    'Longitude': str,
+                    'Subscription': str,
+                    'Type': str
+                },
+                encoding='utf-8'
+            )
+        except UnicodeDecodeError:
+            df = pd.read_csv(
+                csv_path,
+                dtype={
+                    'Id': str,
+                    'Latitude': str,
+                    'Longitude': str,
+                    'Subscription': str,
+                    'Type': str
+                },
+                encoding='latin-1'
+            )
         
         logger.info(f"Read {len(df)} customers from CSV")
 
@@ -50,7 +65,6 @@ def import_customers_from_csv() -> bool:
             
             for _, row in df.iterrows():
                 try:
-                    # Konverter koordinater til float, håndter '0' spesielt
                     lat = 0.0 if row['Latitude'] == '0' else float(row['Latitude'])
                     lon = 0.0 if row['Longitude'] == '0' else float(row['Longitude'])
                     
@@ -72,7 +86,7 @@ def import_customers_from_csv() -> bool:
             conn.commit()
             logger.info("Successfully imported customer data")
             return True
-        
+            
     except Exception as e:
         logger.error(f"Error importing customer data: {str(e)}")
         return False
