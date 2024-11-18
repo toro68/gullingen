@@ -4,16 +4,29 @@ import pandas as pd
 from pathlib import Path
 from utils.core.logging_config import get_logger
 from utils.db.connection import get_db_connection
+from utils.core.config import DATABASE_PATH
 
 logger = get_logger(__name__)
 
-def import_customers_from_csv():
+def import_customers_from_csv() -> bool:
     """Importerer kundedata fra CSV-fil."""
     try:
-        # Sjekk først .streamlit/customers.csv
-        csv_path = Path(".streamlit/customers.csv")
-        if not csv_path.exists():
-            logger.error(f"Customer data file not found at {csv_path}")
+        # Sjekk alle mulige stier for CSV-filen
+        possible_paths = [
+            Path(".streamlit/customers.csv"),
+            Path("data/customers.csv"),
+            DATABASE_PATH / "customers.csv",
+            Path("customers.csv")
+        ]
+        
+        csv_path = None
+        for path in possible_paths:
+            if path.exists():
+                csv_path = path
+                break
+                
+        if csv_path is None:
+            logger.error(f"Customer CSV file not found in any of: {[str(p) for p in possible_paths]}")
             return False
             
         logger.info(f"Reading customers from: {csv_path}")

@@ -299,62 +299,6 @@ def vis_arsabonnenter():
         logger.error(f"Feil ved visning av årsabonnenter: {str(e)}", exc_info=True)
         st.error("Kunne ikke vise årsabonnenter")
 
-
-def setup_customer_data() -> bool:
-    """Setter opp kundetabellen"""
-    try:
-        with get_db_connection("customer") as conn:
-            cursor = conn.cursor()
-
-            # Sjekk om tabellen eksisterer og har data
-            cursor.execute("SELECT COUNT(*) FROM customer")
-            count = cursor.fetchone()[0]
-            logger.info(f"Found {count} existing customers in database")
-
-            if count > 0:
-                logger.info("Customer database already initialized")
-                return True
-            else:
-                logger.info("Customer database is empty, attempting to import from CSV")
-                csv_path = ".streamlit/customers.csv"
-
-                if not os.path.exists(csv_path):
-                    logger.error(f"Customer CSV file not found at: {csv_path}")
-                    return False
-
-                try:
-                    df = pd.read_csv(csv_path)
-                    logger.info(f"Read {len(df)} customers from CSV")
-
-                    for _, row in df.iterrows():
-                        cursor.execute(
-                            """
-                            INSERT INTO customer 
-                            (customer_id, lat, lon, subscription, type)
-                            VALUES (?, ?, ?, ?, ?)
-                        """,
-                            (
-                                str(row["Id"]),
-                                float(row["Latitude"]),
-                                float(row["Longitude"]),
-                                row["Subscription"],
-                                row["Type"],
-                            ),
-                        )
-
-                    conn.commit()
-                    logger.info(f"Successfully imported {len(df)} customers from CSV")
-                    return True
-
-                except Exception as csv_error:
-                    logger.error(f"Failed to import from CSV: {str(csv_error)}")
-                    return False
-
-    except Exception as e:
-        logger.error(f"Error checking customer data: {str(e)}", exc_info=True)
-        return False
-
-
 def get_customer_by_id(customer_id):
     try:
         with get_db_connection("customer") as conn:
