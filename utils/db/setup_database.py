@@ -5,7 +5,7 @@ import sqlite3
 from utils.core.config import DATABASE_PATH
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import create_customer_table, get_db_connection
-from utils.db.import_customers import import_customers_from_csv
+from utils.db.data_import import import_customers_from_csv
 
 # Sett opp logging
 logging.basicConfig(

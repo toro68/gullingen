@@ -10,9 +10,30 @@ import streamlit as st
 from utils.core.config import DATABASE_PATH, TZ
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import fetch_data, get_db_connection
+from utils.db.data_import import import_customers_from_csv
 from utils.services.utils import get_passwords
 
 logger = get_logger(__name__)
+
+
+def setup_customer_data() -> bool:
+    """Setter opp kundetabellen"""
+    try:
+        with get_db_connection("customer") as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM customer")
+            count = cursor.fetchone()[0]
+            
+            if count > 0:
+                logger.info("Customer database already initialized")
+                return True
+            else:
+                logger.info("Customer database is empty, importing initial data")
+                return import_customers_from_csv()
+                
+    except Exception as e:
+        logger.error(f"Error setting up customer data: {str(e)}")
+        return False
 
 
 def insert_customer(
