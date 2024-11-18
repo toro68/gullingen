@@ -83,12 +83,60 @@ def get_db_connection(db_name: str):
                 logger.error(f"Error closing connection to {db_name}: {str(e)}")
 
 
+def create_tables():
+    """Oppretter alle nødvendige databasetabeller."""
+    try:
+        schemas = get_database_schemas()
+        
+        for db_name, schema in schemas.items():
+            logger.info(f"=== Creating tables for {db_name} database ===")
+            logger.info(f"Database path: {DATABASE_PATH}")
+            
+            try:
+                conn = get_db_connection(db_name)
+                cursor = conn.cursor()
+                
+                logger.info(f"Using schema: {schema}")
+                cursor.execute(schema)
+                logger.info(f"Successfully created table {db_name}")
+                
+                # Opprett indekser hvis nødvendig
+                if db_name == "login_history":
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_login_history_user_id 
+                        ON login_history(user_id)
+                    """)
+                    cursor.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_login_history_login_time 
+                        ON login_history(login_time)
+                    """)
+                
+                conn.commit()
+                conn.close()
+                logger.info(f"Successfully created indexes for {db_name} database")
+                
+            except Exception as e:
+                logger.error(f"Unexpected error with database {db_name}: {str(e)}")
+                raise
+                
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error creating tables: {str(e)}")
+        return False
+
+
 def initialize_database_system() -> bool:
-    """Hovedfunksjon for å initialisere hele databasesystemet"""
+    """Initialiserer hele databasesystemet."""
     try:
         logger.info("Starting complete database system initialization")
-        create_tables()
         
+        # Opprett tabeller
+        if not create_tables():
+            logger.error("Failed to create tables")
+            return False
+        
+        # Importer kunder hvis tabellen er tom
         conn = get_db_connection("customer")
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM customers")
@@ -96,9 +144,12 @@ def initialize_database_system() -> bool:
         
         if count == 0:
             logger.info("Customer table is empty, importing initial data")
-            import_customers_from_csv()
+            if not import_customers_from_csv():
+                logger.error("Failed to import customer data")
+                return False
         
         conn.close()
+        logger.info("Database system initialization completed successfully")
         return True
         
     except Exception as e:
