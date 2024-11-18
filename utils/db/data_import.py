@@ -11,25 +11,36 @@ logger = get_logger(__name__)
 def import_customers_from_csv() -> bool:
     """Importerer kundedata fra CSV-fil."""
     try:
+        # Finn prosjektets rotmappe
+        root_dir = Path(__file__).parent.parent.parent.absolute()
+        logger.info(f"Project root directory: {root_dir}")
+        
         # Sjekk alle mulige stier for CSV-filen
         possible_paths = [
             Path(DATABASE_PATH) / "customers.csv",
+            root_dir / ".streamlit/customers.csv",
+            root_dir / "data/customers.csv",
+            root_dir / "customers.csv",
             Path(".streamlit/customers.csv"),
             Path("data/customers.csv"),
-            Path("customers.csv"),
-            Path(__file__).parent.parent.parent / "data/customers.csv",
-            Path(__file__).parent.parent.parent / ".streamlit/customers.csv"
+            Path("customers.csv")
         ]
         
         # Logg alle stier som sjekkes
+        csv_path = None
         for path in possible_paths:
-            logger.info(f"Checking for CSV at: {path.absolute()}")
-            if path.exists():
-                logger.info(f"Found customer CSV file at: {path.absolute()}")
-                csv_path = path
-                break
-        else:
-            logger.error(f"Customer CSV file not found in any of: {[str(p.absolute()) for p in possible_paths]}")
+            try:
+                logger.info(f"Checking for CSV at: {path.absolute()}")
+                if path.exists():
+                    logger.info(f"Found customer CSV file at: {path.absolute()}")
+                    csv_path = path
+                    break
+            except Exception as e:
+                logger.error(f"Error checking path {path}: {str(e)}")
+                continue
+                
+        if csv_path is None:
+            logger.error(f"Customer CSV file not found in any of: {[str(p) for p in possible_paths]}")
             return False
             
         logger.info(f"Reading customers from: {csv_path}")
