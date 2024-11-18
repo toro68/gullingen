@@ -16,18 +16,20 @@ def import_customers_from_csv() -> bool:
             Path(DATABASE_PATH) / "customers.csv",
             Path(".streamlit/customers.csv"),
             Path("data/customers.csv"),
-            Path("customers.csv")
+            Path("customers.csv"),
+            Path(__file__).parent.parent.parent / "data/customers.csv",
+            Path(__file__).parent.parent.parent / ".streamlit/customers.csv"
         ]
         
-        csv_path = None
+        # Logg alle stier som sjekkes
         for path in possible_paths:
+            logger.info(f"Checking for CSV at: {path.absolute()}")
             if path.exists():
-                logger.info(f"Found customer CSV file at: {path}")
+                logger.info(f"Found customer CSV file at: {path.absolute()}")
                 csv_path = path
                 break
-                
-        if csv_path is None:
-            logger.error(f"Customer CSV file not found in any of: {[str(p) for p in possible_paths]}")
+        else:
+            logger.error(f"Customer CSV file not found in any of: {[str(p.absolute()) for p in possible_paths]}")
             return False
             
         logger.info(f"Reading customers from: {csv_path}")
