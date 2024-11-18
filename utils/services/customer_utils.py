@@ -15,6 +15,13 @@ from utils.services.utils import get_passwords
 
 logger = get_logger(__name__)
 
+__all__ = [
+    'get_customer_by_id',
+    'handle_customers',
+    'customer_edit_component',
+    'vis_arsabonnenter'
+]
+
 def setup_customer_data() -> bool:
     """Setter opp kundetabellen"""
     try:
@@ -318,29 +325,124 @@ def vis_arsabonnenter():
         logger.error(f"Feil ved visning av årsabonnenter: {str(e)}", exc_info=True)
         st.error("Kunne ikke vise årsabonnenter")
 
-def get_customer_by_id(customer_id: str) -> Optional[Dict]:
-    """Henter kundedata for en spesifikk kunde"""
+def get_customer_by_id(customer_id):
+    """Henter kundeinformasjon fra databasen"""
     try:
         with get_db_connection("customer") as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT customer_id, lat, lon, subscription, type, created_at 
+            query = """
+                SELECT 
+                    customer_id,
+                    lat,
+                    lon,
+                    subscription,
+                    type,
+                    created_at
                 FROM customer 
                 WHERE customer_id = ?
-            """, (customer_id,))
+            """
+            cursor = conn.cursor()
+            cursor.execute(query, (customer_id,))
+            result = cursor.fetchone()
             
-            row = cursor.fetchone()
-            if row:
+            if result:
+                # Legg til logging for å se hva som returneres
+                logger.info(f"Found customer data: {result}")
                 return {
-                    "customer_id": row[0],
-                    "lat": row[1],
-                    "lon": row[2],
-                    "subscription": row[3],
-                    "type": row[4],
-                    "created_at": row[5]
+                    "customer_id": result[0],
+                    "lat": result[1],
+                    "lon": result[2],
+                    "subscription": result[3],
+                    "type": result[4],  # Sjekk at dette feltet er riktig
+                    "created_at": result[5]
                 }
             return None
             
     except Exception as e:
-        logger.error(f"Error getting customer {customer_id}: {str(e)}")
+        logger.error(f"Error getting customer by id: {str(e)}")
         return None
+
+def handle_customers():
+    """Administrasjonsfunksjon for å håndtere kunder"""
+    try:
+        st.title("Kundehåndtering")
+        logger.info("Starting customer management page")
+
+        # Last kundedata
+        with get_db_connection("customer") as conn:
+            query = """
+                SELECT 
+                    customer_id,
+                    lat,
+                    lon,
+                    subscription,
+                    type,
+                    created_at
+                FROM customer
+                ORDER BY customer_id
+            """
+            df = pd.read_sql_query(query, conn)
+            
+        if df.empty:
+            st.warning("Ingen kunder funnet i databasen")
+            return
+
+        # Vis statistikk
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Totalt antall kunder", len(df))
+        with col2:
+            st.metric("Årsabonnenter", len(df[df['subscription'] == 'star_white']))
+        with col3:
+            st.metric("Administratorer", len(df[df['type'].isin(['Admin', 'Superadmin'])]))
+
+        # Filtreringsmuligheter
+        st.subheader("Filtrer kunder")
+        col1, col2 = st.columns(2)
+        with col1:
+            selected_types = st.multiselect(
+                "Velg kundetype",
+                options=sorted(df['type'].unique()),
+                default=[]
+            )
+        with col2:
+            selected_subscriptions = st.multiselect(
+                "Velg abonnement",
+                options=sorted(df['subscription'].unique()),
+                default=[]
+            )
+
+        # Filtrer dataframe
+        filtered_df = df.copy()
+        if selected_types:
+            filtered_df = filtered_df[filtered_df['type'].isin(selected_types)]
+        if selected_subscriptions:
+            filtered_df = filtered_df[filtered_df['subscription'].isin(selected_subscriptions)]
+
+        # Vis kundetabell
+        st.subheader("Kundeoversikt")
+        st.dataframe(
+            filtered_df,
+            hide_index=True,
+            column_config={
+                "customer_id": "Kunde ID",
+                "lat": "Breddegrad",
+                "lon": "Lengdegrad",
+                "subscription": "Abonnement",
+                "type": "Type",
+                "created_at": "Opprettet"
+            }
+        )
+
+        # Rediger kunde
+        st.subheader("Rediger kunde")
+        kunde_id = st.text_input("Skriv inn kunde-ID for redigering")
+        if kunde_id:
+            customer_edit_component(kunde_id)
+
+        # Vis årsabonnenter
+        if st.checkbox("Vis detaljert oversikt over årsabonnenter"):
+            vis_arsabonnenter()
+            
+    except Exception as e:
+        logger.error(f"Feil i handle_customers: {str(e)}", exc_info=True)
+        st.error("Det oppstod en feil ved håndtering av kunder")

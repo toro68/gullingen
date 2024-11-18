@@ -16,6 +16,7 @@ if os.path.exists("/mount/gullingen"):
 # Now we can import utils
 from utils.core.logging_config import get_logger, setup_logging
 from utils.core.menu_utils import create_menu
+from utils.services.customer_utils import handle_customers
 
 # Set up logging
 setup_logging()
@@ -37,6 +38,8 @@ try:
         admin_alert,
         handle_user_feedback,
         admin_stroing_page,
+        handle_tun,
+        unified_report_page,
     )
 
     # Initialize session state
@@ -67,8 +70,15 @@ try:
             st.session_state.is_admin = False
             st.rerun()
         else:
-            user_type = customer.get("Type", "Standard")
+            # Legg til logging for å sjekke customer data
+            logger.info(f"Customer data: {customer}")
+            
+            # Sjekk at vi bruker riktig felt for brukertype
+            user_type = customer.get("type", "Standard")  # Endre fra "Type" til "type"
+            logger.info(f"User type from customer: {user_type}")
+            
             st.session_state.is_admin = user_type in ["Admin", "Superadmin"]
+            logger.info(f"Is admin: {st.session_state.is_admin}")
             
             # Create menu and handle navigation
             selected, admin_choice = create_menu(customer["customer_id"], user_type)
@@ -99,6 +109,11 @@ try:
                     handle_tun()
                 elif admin_choice == "Dashbord for rapporter" and user_type == "Superadmin":
                     unified_report_page(include_hidden=True)
+
+            logger.info(f"User type: {user_type}")
+            logger.info(f"Is admin: {st.session_state.is_admin}")
+            logger.info(f"Selected menu: {selected}")
+            logger.info(f"Admin choice: {admin_choice}")
 
 except Exception as e:
     logger.error(f"Error in main execution: {str(e)}", exc_info=True)
