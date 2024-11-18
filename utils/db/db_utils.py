@@ -137,18 +137,17 @@ def initialize_database_system() -> bool:
             return False
         
         # Importer kunder hvis tabellen er tom
-        conn = get_db_connection("customer")
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM customers")
-        count = cursor.fetchone()[0]
+        with get_db_connection("customer") as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM customer")  # Endret fra customers til customer
+            count = cursor.fetchone()[0]
+            
+            if count == 0:
+                logger.info("Customer table is empty, importing initial data")
+                if not import_customers_from_csv():
+                    logger.error("Failed to import customer data")
+                    return False
         
-        if count == 0:
-            logger.info("Customer table is empty, importing initial data")
-            if not import_customers_from_csv():
-                logger.error("Failed to import customer data")
-                return False
-        
-        conn.close()
         logger.info("Database system initialization completed successfully")
         return True
         
