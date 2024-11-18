@@ -27,15 +27,17 @@ def setup_customer_data() -> bool:
     try:
         with get_db_connection("customer") as conn:
             cursor = conn.cursor()
+            
+            # Sjekk om tabellen eksisterer og har data
             cursor.execute("SELECT COUNT(*) FROM customer")
             count = cursor.fetchone()[0]
             
             if count > 0:
-                logger.info("Customer database already initialized")
+                logger.info(f"Customer database already contains {count} records")
                 return True
-            else:
-                logger.info("Customer database is empty, importing initial data")
-                return import_customers_from_csv()
+            
+            logger.info("Customer database is empty, importing initial data")
+            return import_customers_from_csv()
                 
     except Exception as e:
         logger.error(f"Error setting up customer data: {str(e)}")

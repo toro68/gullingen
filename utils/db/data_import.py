@@ -15,7 +15,8 @@ def import_customers_from_csv() -> bool:
         root_dir = Path(__file__).parent.parent.parent.absolute()
         logger.info(f"Project root directory: {root_dir}")
         
-        # Sjekk alle mulige stier for CSV-filen
+        # Finn CSV-filen
+        csv_path = None
         possible_paths = [
             Path(DATABASE_PATH) / "customers.csv",
             root_dir / ".streamlit/customers.csv",
@@ -26,58 +27,52 @@ def import_customers_from_csv() -> bool:
             Path("customers.csv")
         ]
         
-        # Logg alle stier som sjekkes
-        csv_path = None
         for path in possible_paths:
-            try:
-                logger.info(f"Checking for CSV at: {path.absolute()}")
-                if path.exists():
-                    logger.info(f"Found customer CSV file at: {path.absolute()}")
-                    csv_path = path
-                    break
-            except Exception as e:
-                logger.error(f"Error checking path {path}: {str(e)}")
-                continue
+            if path.exists():
+                csv_path = path
+                logger.info(f"Found customer CSV at: {path.absolute()}")
+                break
                 
         if csv_path is None:
-            logger.error(f"Customer CSV file not found in any of: {[str(p) for p in possible_paths]}")
+            logger.error("Customer CSV file not found")
             return False
-            
-        logger.info(f"Reading customers from: {csv_path}")
-        
-        # Les CSV med eksplisitte datatyper og håndter encoding
+
+        # Les CSV-filen
         try:
-            df = pd.read_csv(
-                csv_path,
-                dtype={
-                    'Id': str,
-                    'Latitude': str,
-                    'Longitude': str,
-                    'Subscription': str,
-                    'Type': str
-                },
-                encoding='utf-8'
-            )
+            df = pd.read_csv(csv_path, dtype={
+                'Id': str,
+                'Latitude': str,
+                'Longitude': str,
+                'Subscription': str,
+                'Type': str
+            }, encoding='utf-8')
         except UnicodeDecodeError:
-            df = pd.read_csv(
-                csv_path,
-                dtype={
-                    'Id': str,
-                    'Latitude': str,
-                    'Longitude': str,
-                    'Subscription': str,
-                    'Type': str
-                },
-                encoding='latin-1'
-            )
-        
+            df = pd.read_csv(csv_path, dtype={
+                'Id': str,
+                'Latitude': str,
+                'Longitude': str,
+                'Subscription': str,
+                'Type': str
+            }, encoding='latin-1')
+
         logger.info(f"Read {len(df)} customers from CSV")
 
+        # Hent eksisterende kunde-IDer
         with get_db_connection("customer") as conn:
             cursor = conn.cursor()
+            cursor.execute("SELECT customer_id FROM customer")
+            existing_ids = {row[0] for row in cursor.fetchall()}
             
+            # Behandle hver rad
             for _, row in df.iterrows():
                 try:
+                    customer_id = str(row['Id']).strip()
+                    
+                    # Hopp over hvis kunde-ID allerede eksisterer
+                    if customer_id in existing_ids:
+                        logger.debug(f"Skipping existing customer: {customer_id}")
+                        continue
+                        
                     lat = 0.0 if row['Latitude'] == '0' else float(row['Latitude'])
                     lon = 0.0 if row['Longitude'] == '0' else float(row['Longitude'])
                     
@@ -86,20 +81,21 @@ def import_customers_from_csv() -> bool:
                         (customer_id, lat, lon, subscription, type)
                         VALUES (?, ?, ?, ?, ?)
                     """, (
-                        str(row['Id']).strip(),
+                        customer_id,
                         lat,
                         lon,
                         str(row['Subscription']).strip(),
                         str(row['Type']).strip()
                     ))
-                except Exception as row_error:
-                    logger.error(f"Error importing row {row['Id']}: {str(row_error)}")
+                    
+                except Exception as e:
+                    logger.error(f"Error importing customer {row['Id']}: {str(e)}")
                     continue
                     
             conn.commit()
-            logger.info("Successfully imported customer data")
+            logger.info("Successfully imported new customer data")
             return True
-            
+
     except Exception as e:
         logger.error(f"Error importing customer data: {str(e)}")
         return False
