@@ -15,7 +15,6 @@ from utils.services.utils import get_passwords
 
 logger = get_logger(__name__)
 
-
 def setup_customer_data() -> bool:
     """Setter opp kundetabellen"""
     try:
@@ -34,7 +33,6 @@ def setup_customer_data() -> bool:
     except Exception as e:
         logger.error(f"Error setting up customer data: {str(e)}")
         return False
-
 
 def insert_customer(
     customer_id: str, lat: float, lon: float, subscription: str, type: str

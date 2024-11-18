@@ -65,6 +65,7 @@ from utils.services.customer_utils import (
     get_cabin_coordinates,
     get_customer_by_id,
     load_customer_database,
+    setup_customer_data
 )
 from utils.services.feedback_utils import (
     display_daily_maintenance_rating,

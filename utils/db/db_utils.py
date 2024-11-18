@@ -499,29 +499,6 @@ def create_customer_table() -> bool:
         logger.error(f"Error creating customer table: {str(e)}")
         return False
 
-
-def insert_customer(
-    customer_id: str, lat: float, lon: float, subscription: str, type: str
-) -> bool:
-    """Sett inn en ny kunde"""
-    try:
-        with get_db_connection("customer") as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO customer (customer_id, lat, lon, subscription, type)
-                VALUES (?, ?, ?, ?, ?)
-            """,
-                (customer_id, lat, lon, subscription, type),
-            )
-            conn.commit()
-            logger.info(f"Inserted customer {customer_id} successfully")
-            return True
-    except sqlite3.Error as e:
-        logger.error(f"Error inserting customer {customer_id}: {str(e)}")
-        return False
-
-
 def verify_customer_database() -> bool:
     """Verifiser customer database"""
     try:
