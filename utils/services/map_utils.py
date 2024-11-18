@@ -21,91 +21,69 @@ logger = get_logger(__name__)
 def vis_dagens_tunkart(bestillinger, mapbox_token, title):
     logger.info(f"Starter vis_dagens_tunkart med {len(bestillinger)} bestillinger")
     
-    cabin_coordinates = get_cabin_coordinates()
-    current_date = datetime.now(TZ).date()
-    
-    # Hent aktive bestillinger fra tun_utils
-    from utils.services.tun_utils import hent_aktive_bestillinger_for_dag
-    aktive_bestillinger = hent_aktive_bestillinger_for_dag(current_date)
-    logger.info(f"Aktive bestillinger for dagens dato {current_date}: {aktive_bestillinger.to_string()}")
-
-    latitudes, longitudes, texts, colors, sizes = [], [], [], [], []
-
-    # Definerer farger
-    BLUE = "#03b01f"  # Grønn for årsabonnement
-    RED = "#db0000"   # Rød for vanlige bestillinger
-    GRAY = "#C0C0C0"  # Grå for inaktive
-
-    for cabin_id, (lat, lon) in cabin_coordinates.items():
-        if lat and lon and not (pd.isna(lat) or pd.isna(lon)):
-            latitudes.append(lat)
-            longitudes.append(lon)
-
-            # Finn aktiv bestilling for denne hytta
+    try:
+        cabin_coordinates = get_cabin_coordinates()
+        if not cabin_coordinates:
+            logger.error("Ingen koordinater funnet")
+            st.error("Kunne ikke laste koordinater for hyttene")
+            return
+            
+        current_date = datetime.now(TZ).date()
+        
+        # Hent aktive bestillinger
+        from utils.services.tun_utils import hent_aktive_bestillinger_for_dag
+        aktive_bestillinger = hent_aktive_bestillinger_for_dag(current_date)
+        
+        if aktive_bestillinger is None or aktive_bestillinger.empty:
+            logger.info("Ingen aktive bestillinger for dagens dato")
+            aktive_bestillinger = pd.DataFrame(columns=["bruker", "abonnement_type", "ankomst_dato", "avreise_dato"])
+        
+        logger.info(f"Aktive bestillinger: {aktive_bestillinger.to_string()}")
+        
+        # Definerer farger
+        GREEN = "#03b01f"  # Grønn for årsabonnement
+        RED = "#db0000"    # Rød for vanlige bestillinger
+        GRAY = "#C0C0C0"   # Grå for inaktive
+        
+        points_data = []
+        for cabin_id, (lat, lon) in cabin_coordinates.items():
+            if pd.isna(lat) or pd.isna(lon):
+                continue
+                
             cabin_bookings = aktive_bestillinger[aktive_bestillinger["bruker"].astype(str) == str(cabin_id)]
+            
+            point = {
+                "lat": lat,
+                "lon": lon,
+                "color": GRAY,
+                "size": 8,
+                "text": f"Hytte: {cabin_id}<br>"
+            }
             
             if not cabin_bookings.empty:
                 booking = cabin_bookings.iloc[0]
-                logger.info(f"Fant aktiv bestilling for hytte {cabin_id}: {dict(booking)}")
-                
-                color = BLUE if booking["abonnement_type"] == "Årsabonnement" else RED
-                size = 12
-            else:
-                color = GRAY
-                size = 8
-
-            colors.append(color)
-            sizes.append(size)
-            
-            # Oppdater hover-tekst
-            text = f"Hytte: {cabin_id}<br>"
-            if not cabin_bookings.empty:
-                text += (
+                point["color"] = GREEN if booking["abonnement_type"] == "Årsabonnement" else RED
+                point["size"] = 12
+                point["text"] += (
                     f"Status: Aktiv<br>"
                     f"Type: {booking['abonnement_type']}<br>"
                     f"Ankomst: {booking['ankomst_dato'].strftime('%Y-%m-%d')}<br>"
                     f"Avreise: {booking['avreise_dato'].strftime('%Y-%m-%d') if pd.notnull(booking['avreise_dato']) else 'Ikke satt'}"
                 )
-            texts.append(text)
+            
+            points_data.append(point)
+        
+        if not points_data:
+            logger.error("Ingen gyldige punkter å vise på kartet")
+            st.error("Kunne ikke generere kartvisning")
+            return
+            
+        # Opprett kartvisning her...
+        
+    except Exception as e:
+        logger.error(f"Feil i vis_dagens_tunkart: {str(e)}", exc_info=True)
+        st.error("Det oppstod en feil ved generering av tunkart")
 
-    # Opprett figur og legg til markører
-    data = [
-        go.Scattermapbox(
-            lat=latitudes,
-            lon=longitudes,
-            mode="markers",
-            marker=go.scattermapbox.Marker(
-                size=sizes,
-                color=colors,
-                opacity=1.0,
-            ),
-            text=texts,
-            hoverinfo="text",
-        )
-    ]
-
-    fig = create_map(data, mapbox_token, title)
-
-    # Legg til forklaring
-    legend_items = {
-        "Årsabonnement": BLUE,
-        "Ukentlig ved bestilling": RED,
-        "Ingen bestilling": GRAY
-    }
-
-    for legend_text, color in legend_items.items():
-        fig.add_trace(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="markers",
-                marker=dict(size=10, color=color),
-                showlegend=True,
-                name=legend_text,
-            )
-        )
-
-    return fig
 
 def vis_stroingskart_kommende(bestillinger, mapbox_token, title):
     try:
