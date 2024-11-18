@@ -5,42 +5,35 @@ from pathlib import Path
 
 import streamlit as st
 
-# Sett opp paths
+# Set up paths
 current_dir = Path(__file__).parent.absolute()
 sys.path.append(str(current_dir))
 
-# For Streamlit Cloud
-if os.path.exists("/mount/gullingen"):
-    os.chdir("/mount/gullingen")
-    logger.info(f"Running on Streamlit Cloud, changed directory to: {os.getcwd()}")
-    logger.info(f"Files in directory: {os.listdir()}")
-
-# Nå kan vi importere utils
+# Now we can import utils
 from utils.core.logging_config import get_logger, setup_logging
-from src.app import (
-    initialize_app,
-    initialize_session_state,
-    display_home_page,
-    get_customer_by_id
-)
-from utils.core.auth_utils import check_session_timeout, login_page
 
-# Sett opp logging
+# Set up logging first
 setup_logging()
 logger = get_logger(__name__)
 
-# Fjern alle eksisterende handlers for å unngå dupliserte logger outputs
+# Remove all existing handlers to avoid duplicate logging outputs
 for handler in logger.handlers[:]:
     logger.removeHandler(handler)
 
-# Legg til EN console handler
+# Add a console handler
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-# Legg til logging av mappestier for debugging
+# For Streamlit Cloud - moved after logger setup
+if os.path.exists("/mount/gullingen"):
+    os.chdir("/mount/gullingen")
+    logger.info(f"Running on Streamlit Cloud, changed directory to: {os.getcwd()}")
+    logger.info(f"Files in directory: {os.listdir()}")
+
+# Log directory paths for debugging
 logger.info(f"Current working directory: {os.getcwd()}")
 logger.info(f"Root path: {current_dir}")
 logger.info(f"Python path: {sys.path}")
@@ -81,7 +74,7 @@ try:
             st.stop()
         st.session_state.app_initialized = True
 
-    # Håndter autentisering
+    # H��ndter autentisering
     if not check_session_timeout():
         st.session_state.authenticated = False
         login_page()
