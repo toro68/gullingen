@@ -93,27 +93,27 @@ def create_tables():
             logger.info(f"Database path: {DATABASE_PATH}")
             
             try:
-                conn = get_db_connection(db_name)
-                cursor = conn.cursor()
-                
-                logger.info(f"Using schema: {schema}")
-                cursor.execute(schema)
-                logger.info(f"Successfully created table {db_name}")
-                
-                # Opprett indekser hvis nødvendig
-                if db_name == "login_history":
-                    cursor.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_login_history_user_id 
-                        ON login_history(user_id)
-                    """)
-                    cursor.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_login_history_login_time 
-                        ON login_history(login_time)
-                    """)
-                
-                conn.commit()
-                conn.close()
-                logger.info(f"Successfully created indexes for {db_name} database")
+                # Riktig bruk av context manager
+                with get_db_connection(db_name) as conn:
+                    cursor = conn.cursor()
+                    
+                    logger.info(f"Using schema: {schema}")
+                    cursor.execute(schema)
+                    logger.info(f"Successfully created table {db_name}")
+                    
+                    # Opprett indekser hvis nødvendig
+                    if db_name == "login_history":
+                        cursor.execute("""
+                            CREATE INDEX IF NOT EXISTS idx_login_history_user_id 
+                            ON login_history(user_id)
+                        """)
+                        cursor.execute("""
+                            CREATE INDEX IF NOT EXISTS idx_login_history_login_time 
+                            ON login_history(login_time)
+                        """)
+                    
+                    conn.commit()
+                    logger.info(f"Successfully created indexes for {db_name} database")
                 
             except Exception as e:
                 logger.error(f"Unexpected error with database {db_name}: {str(e)}")
