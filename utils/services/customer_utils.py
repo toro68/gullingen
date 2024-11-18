@@ -122,7 +122,7 @@ def load_customer_database():
             SELECT customer_id, lat, lon, subscription, type, created_at
             FROM customer
         """
-        with get_db_connection() as conn:
+        with get_db_connection("customer") as conn:
             df = pd.read_sql_query(query, conn)
             
         logger.info(f"Lastet {len(df)} kunder fra databasen")
