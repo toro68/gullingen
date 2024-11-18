@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional
 from utils.core.config import DATABASE_PATH
 from utils.core.logging_config import get_logger, setup_logging
 from utils.db.schemas import get_database_schemas
+from utils.db.data_import import import_customers_from_csv
 
 # Sett opp logging
 logger = get_logger(__name__)
