@@ -13,19 +13,18 @@ logger = get_logger(__name__)
 
 # Finn riktig prosjektmappe basert på kjørende script
 current_dir = Path(__file__).parent.parent.parent
-if "src" in str(current_dir):
-    BASE_PATH = current_dir.parent
-else:
-    BASE_PATH = current_dir
 
 # Sjekk om vi kjører på Streamlit Cloud
 IS_STREAMLIT_CLOUD = os.getenv('IS_STREAMLIT_CLOUD', 'false').lower() == 'true'
 
 # Sett riktig databasesti basert på miljø
 if IS_STREAMLIT_CLOUD:
-    DATABASE_PATH = "/mount/src/gullingen/database"
+    DATABASE_PATH = Path("/mount/src/gullingen/database")
 else:
-    DATABASE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database")
+    DATABASE_PATH = current_dir / "database"
+
+# Opprett databasemappen hvis den ikke eksisterer
+DATABASE_PATH.mkdir(parents=True, exist_ok=True)
 
 # Logging konfigurasjon
 logger.info(f"Database path set to: {DATABASE_PATH}")
