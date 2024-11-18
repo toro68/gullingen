@@ -1,27 +1,39 @@
+import os
 import pandas as pd
-
+from pathlib import Path
 from utils.core.logging_config import get_logger
-from utils.db.db_utils import get_db_connection
+from utils.db.connection import get_db_connection
 
 logger = get_logger(__name__)
 
-
-def import_customers_from_csv(csv_path: str) -> bool:
+def import_customers_from_csv() -> bool:
+    """Importerer kundedata fra CSV-fil."""
     try:
+        # Sjekk først .streamlit/customers.csv
+        csv_path = Path(".streamlit/customers.csv")
+        if not csv_path.exists():
+            # Prøv data/customers.csv som backup
+            csv_path = Path("data/customers.csv")
+            if not csv_path.exists():
+                logger.error("Customer CSV file not found in .streamlit/ or data/")
+                return False
+        
+        logger.info(f"Reading customers from: {csv_path}")
         df = pd.read_csv(csv_path)
-        logger.info(f"Reading {len(df)} customers from CSV")
+        logger.info(f"Read {len(df)} customers from CSV")
 
         with get_db_connection("customer") as conn:
             cursor = conn.cursor()
 
             # Tøm eksisterende data
             cursor.execute("DELETE FROM customer")
-
+            
             # Importer nye data
             for _, row in df.iterrows():
                 cursor.execute(
                     """
-                    INSERT INTO customer (customer_id, lat, lon, subscription, type)
+                    INSERT INTO customer 
+                    (customer_id, lat, lon, subscription, type)
                     VALUES (?, ?, ?, ?, ?)
                 """,
                     (
@@ -34,7 +46,7 @@ def import_customers_from_csv(csv_path: str) -> bool:
                 )
 
             conn.commit()
-            logger.info(f"Imported {len(df)} customers successfully")
+            logger.info(f"Successfully imported {len(df)} customers")
             return True
 
     except Exception as e:
