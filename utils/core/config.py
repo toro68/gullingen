@@ -18,9 +18,14 @@ if "src" in str(current_dir):
 else:
     BASE_PATH = current_dir
 
-# Sett database path
-DATABASE_PATH = BASE_PATH / "database"
-os.makedirs(DATABASE_PATH, exist_ok=True)
+# Sjekk om vi kjører på Streamlit Cloud
+IS_STREAMLIT_CLOUD = os.getenv('IS_STREAMLIT_CLOUD', 'false').lower() == 'true'
+
+# Sett riktig databasesti basert på miljø
+if IS_STREAMLIT_CLOUD:
+    DATABASE_PATH = "/mount/src/gullingen/database"
+else:
+    DATABASE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database")
 
 # Logging konfigurasjon
 logger.info(f"Database path set to: {DATABASE_PATH}")
