@@ -9,63 +9,40 @@ import streamlit as st
 current_dir = Path(__file__).parent.absolute()
 sys.path.append(str(current_dir))
 
+# For Streamlit Cloud
+if os.path.exists("/mount/gullingen"):
+    os.chdir("/mount/gullingen")
+
 # Now we can import utils
 from utils.core.logging_config import get_logger, setup_logging
+from utils.core.menu_utils import create_menu
 
-# Set up logging first
+# Set up logging
 setup_logging()
 logger = get_logger(__name__)
 
-# Remove all existing handlers to avoid duplicate logging outputs
-for handler in logger.handlers[:]:
-    logger.removeHandler(handler)
-
-# Add a console handler
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-# For Streamlit Cloud - moved after logger setup
-if os.path.exists("/mount/gullingen"):
-    os.chdir("/mount/gullingen")
-    logger.info(f"Running on Streamlit Cloud, changed directory to: {os.getcwd()}")
-    logger.info(f"Files in directory: {os.listdir()}")
-
-# Log directory paths for debugging
-logger.info(f"Current working directory: {os.getcwd()}")
-logger.info(f"Root path: {current_dir}")
-logger.info(f"Python path: {sys.path}")
-
 try:
-    # Import app.py etter at paths er satt opp
     from src.app import (
         initialize_app,
         initialize_session_state,
         display_home_page,
         get_customer_by_id,
-        create_menu,
         login_page,
-        check_session_timeout
-    )
-    
-    # Resten av koden forblir uendret...
-    # Initialize session state variables
-    if "_script_run_count" not in st.session_state:
-        st.session_state._script_run_count = 0
-
-    # Increment counter at start of execution
-    st.session_state._script_run_count += 1
-    
-    logger.info(
-        f"=== MAIN EXECUTION START - Run #{st.session_state._script_run_count} ==="
+        check_session_timeout,
+        bestill_tunbroyting,
+        bestill_stroing,
+        give_feedback,
+        display_live_plowmap,
+        vis_tunbroyting_oversikt,
+        admin_alert,
+        handle_user_feedback,
+        admin_stroing_page,
     )
 
-    # Initialiser session state
+    # Initialize session state
     initialize_session_state()
 
-    # Kjør app initialisering én gang
+    # Run app initialization once
     if not st.session_state.get("app_initialized", False):
         logger.info("App not initialized, starting initialization")
         if not initialize_app():
@@ -74,7 +51,7 @@ try:
             st.stop()
         st.session_state.app_initialized = True
 
-    # H��ndter autentisering
+    # Handle authentication
     if not check_session_timeout():
         st.session_state.authenticated = False
         login_page()
@@ -92,10 +69,37 @@ try:
         else:
             user_type = customer.get("Type", "Standard")
             st.session_state.is_admin = user_type in ["Admin", "Superadmin"]
-            display_home_page(customer)
+            
+            # Create menu and handle navigation
+            selected, admin_choice = create_menu(customer["customer_id"], user_type)
+            
+            # Handle page navigation based on menu selection
+            if selected == "Hjem":
+                display_home_page(customer)
+            elif selected == "Bestill Tunbrøyting":
+                bestill_tunbroyting()
+            elif selected == "Bestill Strøing":
+                bestill_stroing()
+            elif selected == "Gi feedback":
+                give_feedback()
+            elif selected == "Live Brøytekart":
+                display_live_plowmap()
+            elif selected == "Administrasjon" and st.session_state.is_admin:
+                if admin_choice == "Tunkart":
+                    vis_tunbroyting_oversikt()
+                elif admin_choice == "Varsler":
+                    admin_alert()
+                elif admin_choice == "Feedback":
+                    handle_user_feedback()
+                elif admin_choice == "Strøing":
+                    admin_stroing_page()
+                elif admin_choice == "Kunder" and user_type == "Superadmin":
+                    handle_customers()
+                elif admin_choice == "Håndter tunbestillinger" and user_type == "Superadmin":
+                    handle_tun()
+                elif admin_choice == "Dashbord for rapporter" and user_type == "Superadmin":
+                    unified_report_page(include_hidden=True)
 
 except Exception as e:
     logger.error(f"Error in main execution: {str(e)}", exc_info=True)
     st.error("Det oppstod en feil. Vennligst prøv igjen senere.")
-finally:
-    logger.info(f"=== MAIN EXECUTION END - Run #{st.session_state._script_run_count} ===")
