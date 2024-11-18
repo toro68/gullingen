@@ -10,6 +10,7 @@ from utils.core.config import DATABASE_PATH
 from utils.core.logging_config import get_logger, setup_logging
 from utils.db.schemas import get_database_schemas
 from utils.db.data_import import import_customers_from_csv
+from utils.db.connection import get_db_connection
 
 # Sett opp logging
 logger = get_logger(__name__)
@@ -86,62 +87,20 @@ def initialize_database_system() -> bool:
     """Hovedfunksjon for å initialisere hele databasesystemet"""
     try:
         logger.info("Starting complete database system initialization")
-
-        # Opprett databasemappe
-        os.makedirs(DATABASE_PATH, exist_ok=True)
-
-        # Definer versjon og forventede tabeller
-        SCHEMA_VERSION = "1.0"
-        databases = ["login_history", "stroing", "tunbroyting", "customer", "feedback"]
-        expected_tables = {
-            "login_history": ["login_history"],
-            "stroing": ["stroing_bestillinger"],
-            "tunbroyting": ["tunbroyting_bestillinger"],
-            "customer": ["customer"],
-            "feedback": ["feedback"],
-        }
-
-        # Sjekk eksisterende versjon
-        if not verify_schema_version(SCHEMA_VERSION):
-            logger.error("Schema version mismatch. Manual migration required.")
-            return False
-
-        # Opprett/verifiser alle tabeller
-        for db_name in databases:
-            # Sjekk eksisterende tabeller
-            existing_tables = get_existing_tables(db_name)
-            if existing_tables and existing_tables != expected_tables[db_name]:
-                logger.error(f"Unexpected tables in {db_name}.db: {existing_tables}")
-                return False
-
-            # Opprett/oppdater tabeller
-            if not create_database_tables(db_name):
-                logger.error(f"Failed to create tables for {db_name}")
-                return False
-
-            if not create_indexes(db_name):
-                logger.error(f"Failed to create indexes for {db_name}")
-                return False
-
-        # Verifiser skjemaer
-        if not verify_database_schemas():
-            logger.error("Database schema verification failed")
-            return False
-
-        # Importer kundedata hvis nødvendig
-        if verify_customer_database():
-            with get_db_connection("customer") as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM customer")
-                if cursor.fetchone()[0] == 0:
-                    if not import_customers_from_csv(".streamlit/customers.csv"):
-                        logger.error("Failed to import customer data")
-                        return False
-                    logger.info("Successfully imported customer data")
-
-        logger.info("Database system initialization completed successfully")
+        create_tables()
+        
+        conn = get_db_connection("customer")
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM customers")
+        count = cursor.fetchone()[0]
+        
+        if count == 0:
+            logger.info("Customer table is empty, importing initial data")
+            import_customers_from_csv()
+        
+        conn.close()
         return True
-
+        
     except Exception as e:
         logger.error(f"Critical database initialization error: {str(e)}")
         return False

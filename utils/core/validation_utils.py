@@ -11,7 +11,7 @@ import streamlit as st
 
 from utils.core.config import TZ
 from utils.core.logging_config import get_logger
-from utils.db.db_utils import get_db_connection
+from utils.db.connection import get_db_connection
 
 logger = get_logger(__name__)
 
