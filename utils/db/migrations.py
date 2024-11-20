@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 def run_migrations():
     """Kjører nødvendige databasemigrasjoner"""
     try:
-        CURRENT_VERSION = "1.4"  # Økt versjonsnummer for å trigge nye migrasjoner
+        CURRENT_VERSION = "1.5"  # Økt versjonsnummer for å trigge nye migrasjoner
         
         # Sjekk/opprett versjonstabell først
         with get_db_connection("system") as conn:
@@ -57,16 +57,16 @@ def run_migrations():
         return False
 
 def migrate_feedback_table():
-    """Migrerer feedback-tabellen for å legge til type-kolonne"""
+    """Migrerer feedback-tabellen"""
     try:
         with get_db_connection("feedback") as conn:
             cursor = conn.cursor()
             
-            # Sjekk om type-kolonnen eksisterer
+            # Sjekk om customer_id-kolonnen mangler
             cursor.execute("PRAGMA table_info(feedback)")
             columns = [row[1] for row in cursor.fetchall()]
             
-            if 'type' not in columns:
+            if 'customer_id' not in columns:
                 # Fjern eventuell eksisterende backup
                 cursor.execute("DROP TABLE IF EXISTS feedback_backup")
                 
@@ -76,14 +76,14 @@ def migrate_feedback_table():
                 # Dropp original tabell
                 cursor.execute("DROP TABLE feedback")
                 
-                # Opprett ny tabell med oppdatert skjema
+                # Opprett ny tabell med riktig skjema
                 cursor.execute("""
                     CREATE TABLE feedback (
                         id INTEGER PRIMARY KEY,
                         type TEXT,
+                        customer_id TEXT,
                         datetime TEXT,
                         comment TEXT,
-                        customer_id TEXT,
                         status TEXT,
                         status_changed_by TEXT,
                         status_changed_at TEXT,
@@ -95,29 +95,35 @@ def migrate_feedback_table():
                     )
                 """)
                 
-                # Kopier data tilbake med standardverdi for type
+                # Kopier data tilbake, konverter innsender til customer_id
                 cursor.execute("""
                     INSERT INTO feedback (
-                        id, type, datetime, comment, customer_id,
+                        id, type, customer_id, datetime, comment,
                         status, status_changed_by, status_changed_at,
-                        hidden, is_alert, display_on_weather, 
+                        hidden, is_alert, display_on_weather,
                         expiry_date, target_group
                     )
                     SELECT 
-                        id, 'feedback', datetime, comment, customer_id,
+                        id, type, innsender, datetime, comment,
                         status, status_changed_by, status_changed_at,
                         hidden, is_alert, display_on_weather,
                         expiry_date, target_group
                     FROM feedback_backup
                 """)
                 
-                # Fjern backup-tabellen
-                cursor.execute("DROP TABLE feedback_backup")
+                # Opprett alle nødvendige indekser
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_customer_id ON feedback(customer_id)")
                 
+                # Fjern backup og commit
+                cursor.execute("DROP TABLE feedback_backup")
                 conn.commit()
-                logger.info("Successfully migrated feedback table with type column")
+                
+                logger.info("Successfully migrated feedback table")
             else:
-                logger.info("Feedback table already has type column")
+                logger.info("Feedback table already has customer_id column")
                 
             return True
             
