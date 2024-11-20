@@ -212,6 +212,9 @@ def initialize_app() -> bool:
 
 def initialize_session_state():
     """Initialiserer session state variabler"""
+    # Tving reinitialisering
+    st.session_state.app_initialized = False
+    
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     if "customer_id" not in st.session_state:  
@@ -220,8 +223,6 @@ def initialize_session_state():
         st.session_state.is_admin = False
     if "last_activity" not in st.session_state:
         st.session_state.last_activity = time()  
-    if "app_initialized" not in st.session_state:
-        st.session_state.app_initialized = False
     if "tz" not in st.session_state:
         st.session_state.tz = ZoneInfo("Europe/Oslo")
 
