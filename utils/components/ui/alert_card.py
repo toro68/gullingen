@@ -9,7 +9,14 @@ from zoneinfo import ZoneInfo  # Lagt til import av ZoneInfo
 import pytz
 import streamlit as st
 
-from utils.core.config import TZ
+from utils.core.config import (
+    TZ,
+    DATE_FORMATS,
+    get_date_format,
+    get_current_time,
+    get_default_date_range,
+    DATE_VALIDATION
+)
 from utils.core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -98,19 +105,20 @@ def get_alert_icon(alert_type: str) -> str:
 
 
 def convert_to_local_time(dt) -> datetime:
-    """Konverterer en datetime til lokal tid ved bruk av ZoneInfo"""
+    """Konverterer en datetime til lokal tid"""
     if dt is None:
         return None
 
-    # Hvis datetime er en string, konverter til datetime
     if isinstance(dt, str):
-        dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except ValueError:
+            logger.error(f"Kunne ikke parse dato: {dt}")
+            return None
 
-    # Hvis datetime ikke har tidssone, anta UTC
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=ZoneInfo("UTC"))
 
-    # Konverter til Oslo tidssone ved bruk av TZ fra constants
     return dt.astimezone(TZ)
 
 

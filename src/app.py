@@ -197,10 +197,10 @@ def initialize_app() -> bool:
             return False
             
         # Til slutt verifiser skjemaer
-        logger.info("Verifying database schemas")
-        if not verify_database_schemas():
-            logger.error("Failed to verify database schemas")
-            return False
+        if not hasattr(st.session_state, 'schemas_verified'):
+            logger.info("Verifying database schemas")
+            verify_database_schemas()
+            st.session_state.schemas_verified = True
             
         logger.info("=== App initialization completed successfully ===")
         return True
