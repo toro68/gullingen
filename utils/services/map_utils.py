@@ -15,7 +15,9 @@ from utils.core.config import (
     get_date_format,
     get_current_time,
     get_default_date_range,
-    DATE_VALIDATION
+    DATE_VALIDATION,
+    safe_to_datetime,
+    format_date
 )
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import get_marker_properties
@@ -24,6 +26,10 @@ from utils.services.utils import is_active_booking
 # Set up logging
 logger = get_logger(__name__)
 
+# Fargekonstanter for kartmarkører
+GREEN = "#03b01f"  # Årsabonnement
+RED = "#db0000"    # Ukentlig bestilling
+GRAY = "#C0C0C0"   # Ingen bestilling
 
 def vis_dagens_tunkart(bestillinger, mapbox_token, title):
     logger.info(f"Starter vis_dagens_tunkart med {len(bestillinger)} bestillinger")
@@ -35,21 +41,27 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             st.error("Kunne ikke laste koordinater for hyttene")
             return
             
-        # Bruk bestillinger direkte, men sikre at vi har riktige kolonnenavn
         aktive_bestillinger = bestillinger.copy()
-        if 'ankomst' in aktive_bestillinger.columns:
-            aktive_bestillinger = aktive_bestillinger.rename(columns={
-                'ankomst': 'ankomst_dato',
-                'avreise': 'avreise_dato'
-            })
+        dagens_dato = get_current_time()  # Bruker get_current_time fra config.py
+
+        # Konverter datoer med safe_to_datetime
+        for col in ['ankomst_dato', 'avreise_dato']:
+            if col in aktive_bestillinger.columns:
+                aktive_bestillinger[col] = aktive_bestillinger[col].apply(safe_to_datetime)
+
+        # Filtrer aktive bestillinger
+        aktive_bestillinger = aktive_bestillinger[
+            (
+                (aktive_bestillinger['ankomst_dato'].dt.date <= dagens_dato.date()) &
+                (
+                    (aktive_bestillinger['avreise_dato'].isnull()) |
+                    (aktive_bestillinger['avreise_dato'].dt.date >= dagens_dato.date())
+                )
+            ) |
+            (aktive_bestillinger['abonnement_type'] == 'Årsabonnement')
+        ]
         
-        logger.info(f"Aktive bestillinger: {aktive_bestillinger.to_string()}")
-        
-        # Definerer farger
-        GREEN = "#03b01f"  # Grønn for årsabonnement
-        RED = "#db0000"    # Rød for vanlige bestillinger
-        GRAY = "#C0C0C0"   # Grå for inaktive
-        
+        # Oppdater punktformatering
         points_data = []
         for cabin_id, (lat, lon) in cabin_coordinates.items():
             if pd.isna(lat) or pd.isna(lon):
@@ -60,20 +72,20 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             point = {
                 "lat": lat,
                 "lon": lon,
-                "color": GRAY,
+                "color": "#C0C0C0",  # Default grå
                 "size": 8,
                 "text": f"Hytte: {cabin_id}<br>"
             }
             
             if not cabin_bookings.empty:
                 booking = cabin_bookings.iloc[0]
-                point["color"] = GREEN if booking["abonnement_type"] == "Årsabonnement" else RED
+                point["color"] = "#03b01f" if booking["abonnement_type"] == "Årsabonnement" else "#db0000"
                 point["size"] = 12
                 point["text"] += (
                     f"Status: Aktiv<br>"
                     f"Type: {booking['abonnement_type']}<br>"
-                    f"Ankomst: {booking['ankomst_dato'].strftime('%Y-%m-%d')}<br>"
-                    f"Avreise: {booking['avreise_dato'].strftime('%Y-%m-%d') if pd.notnull(booking['avreise_dato']) else 'Ikke satt'}"
+                    f"Ankomst: {format_date(booking['ankomst_dato'], 'display', 'date')}<br>"
+                    f"Avreise: {format_date(booking['avreise_dato'], 'display', 'date')}"
                 )
             
             points_data.append(point)
@@ -291,3 +303,62 @@ def add_stroing_to_map(m):
     except Exception as e:
         logger.error(f"Feil ved visning av strøing på kart: {str(e)}")
         return False
+
+def verify_map_configuration(bestillinger, mapbox_token):
+    """
+    Verifiserer at alle nødvendige komponenter for kartvisning er tilgjengelige.
+    
+    Args:
+        bestillinger (pd.DataFrame): DataFrame med tunbrøytingsbestillinger
+        mapbox_token (str): Mapbox access token
+    
+    Returns:
+        tuple: (bool, str) - (True hvis alt er OK, feilmelding hvis noe mangler)
+    """
+    try:
+        if bestillinger.empty:
+            return False, "Ingen bestillinger å vise på kartet"
+            
+        # Sjekk påkrevde kolonner
+        required_columns = ['customer_id', 'ankomst_dato', 'avreise_dato', 'abonnement_type']
+        missing_columns = [col for col in required_columns if col not in bestillinger.columns]
+        if missing_columns:
+            return False, f"Manglende kolonner i bestillinger: {', '.join(missing_columns)}"
+            
+        # Sjekk Mapbox token
+        if not mapbox_token:
+            return False, "Mapbox token mangler"
+            
+        # Sjekk at koordinater finnes
+        cabin_coordinates = get_cabin_coordinates()
+        if not cabin_coordinates:
+            return False, "Ingen koordinater funnet for hyttene"
+            
+        # Alt OK
+        return True, "Kartkonfigurasjonen er gyldig"
+        
+    except Exception as e:
+        return False, f"Feil ved verifisering av kartkonfigurasjon: {str(e)}"
+
+def debug_map_data(bestillinger, cabin_coordinates=None):
+    """
+    Logger detaljert informasjon om kartdata for debugging.
+    
+    Args:
+        bestillinger (pd.DataFrame): DataFrame med tunbrøytingsbestillinger
+        cabin_coordinates (dict, optional): Dictionary med hytte-koordinater
+    """
+    logger.info("=== Kart Debug Info ===")
+    
+    # Debug bestillinger
+    logger.info(f"Antall bestillinger: {len(bestillinger)}")
+    logger.info(f"Kolonner i bestillinger: {bestillinger.columns.tolist()}")
+    logger.info(f"Første rad i bestillinger:\n{bestillinger.iloc[0] if not bestillinger.empty else 'Tom DataFrame'}")
+    
+    # Debug koordinater
+    if cabin_coordinates:
+        logger.info(f"Antall hytter med koordinater: {len(cabin_coordinates)}")
+        sample_cabin = next(iter(cabin_coordinates.items())) if cabin_coordinates else None
+        logger.info(f"Eksempel på koordinater: {sample_cabin}")
+    else:
+        logger.info("Ingen hytte-koordinater tilgjengelig")
