@@ -5,7 +5,14 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
-from utils.core.config import TZ
+from utils.core.config import (
+    TZ,
+    DATE_FORMATS,
+    get_date_format,
+    get_current_time,
+    get_default_date_range,
+    DATE_VALIDATION
+)
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import execute_query, fetch_data, get_db_connection
 
@@ -20,18 +27,6 @@ def is_valid_date(date_string):
         return True
     except ValueError:
         return False
-
-def safe_to_datetime(date_string):
-    if pd.isna(date_string) or date_string in ["", "None", "1"]:
-        return None
-    try:
-        return pd.to_datetime(date_string)
-    except ValueError:
-        logger.error(f"Ugyldig datostreng: '{date_string}'")
-        return None
-
-def format_date(date_obj):
-    return "Ikke satt" if date_obj is None else date_obj.strftime("%d.%m.%Y")
 
 # Database operasjoner
 @st.cache_data(ttl=60)
