@@ -592,43 +592,33 @@ def handle_tun():
     customer_edit_component()
 
 def hent_aktive_bestillinger_for_dag(dato):
-    """Henter aktive bestillinger for en gitt dag, inkludert årsabonnement."""
-    alle_bestillinger = get_bookings()
-    logger.info(f"Henter aktive bestillinger for dato: {dato}")
-    logger.info(f"Rådata før filtrering: {alle_bestillinger.to_string()}")
-    
     try:
-        # Konverter dato til datetime64[ns] for konsistent sammenligning
+        alle_bestillinger = get_bookings()
+        logger.info(f"Henter aktive bestillinger for dato: {dato}")
+        
+        # Standardiser kolonnenavn
+        if 'ankomst' in alle_bestillinger.columns:
+            alle_bestillinger = alle_bestillinger.rename(columns={
+                'ankomst': 'ankomst_dato',
+                'avreise': 'avreise_dato'
+            })
+        
+        # Konverter dato til datetime64[ns]
         dato_dt = pd.to_datetime(dato)
         
-        # Konverter datokolonnene til datetime64[ns]
-        alle_bestillinger["ankomst_dato"] = pd.to_datetime(alle_bestillinger["ankomst_dato"])
-        alle_bestillinger["avreise_dato"] = pd.to_datetime(alle_bestillinger["avreise_dato"])
+        # Konverter datokolonnene
+        alle_bestillinger['ankomst_dato'] = pd.to_datetime(alle_bestillinger['ankomst_dato'])
+        alle_bestillinger['avreise_dato'] = pd.to_datetime(alle_bestillinger['avreise_dato'])
         
-        logger.info(f"Datoer etter konvertering:")
-        logger.info(f"ankomst_dato typer: {alle_bestillinger['ankomst_dato'].dtype}")
-        logger.info(f"avreise_dato typer: {alle_bestillinger['avreise_dato'].dtype}")
-        
-        # Filtrer bestillinger med normaliserte datoer
+        # Filtrer bestillinger
         maske = (
-            # Vanlige bestillinger som starter i dag
-            (alle_bestillinger["ankomst_dato"].dt.normalize() == dato_dt.normalize()) |
-            # Årsabonnement som er aktive
-            (
-                (alle_bestillinger["abonnement_type"] == "Årsabonnement") &
-                (alle_bestillinger["ankomst_dato"].dt.normalize() <= dato_dt.normalize()) &
-                (
-                    alle_bestillinger["avreise_dato"].isna() |
-                    (alle_bestillinger["avreise_dato"].dt.normalize() >= dato_dt.normalize())
-                )
-            )
+            (alle_bestillinger['ankomst_dato'].dt.normalize() <= dato_dt.normalize()) & 
+            ((alle_bestillinger['avreise_dato'].isna()) | 
+             (alle_bestillinger['avreise_dato'].dt.normalize() >= dato_dt.normalize())) |
+            (alle_bestillinger['abonnement_type'] == 'Årsabonnement')
         )
         
-        aktive_bestillinger = alle_bestillinger[maske].copy()
-        logger.info(f"Fant {len(aktive_bestillinger)} aktive bestillinger")
-        logger.info(f"Aktive bestillinger etter filtrering: {aktive_bestillinger.to_string()}")
-        
-        return aktive_bestillinger
+        return alle_bestillinger[maske].copy()
         
     except Exception as e:
         logger.error(f"Feil ved henting av aktive bestillinger: {str(e)}", exc_info=True)
@@ -636,22 +626,28 @@ def hent_aktive_bestillinger_for_dag(dato):
 
 
 # filtrerer bestillinger i bestill_tunbroyting
-def filter_tunbroyting_bestillinger(
-    bestillinger: pd.DataFrame, filters: Dict[str, Any]
-) -> pd.DataFrame:
+def filter_tunbroyting_bestillinger(bestillinger: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
     filtered = bestillinger.copy()
+    
+    # Standardiser kolonnenavn
+    if 'ankomst' in filtered.columns:
+        filtered = filtered.rename(columns={
+            'ankomst': 'ankomst_dato',
+            'avreise': 'avreise_dato'
+        })
+    
     current_date = datetime.now(TZ).date()
-
+    
     if filters.get("vis_type") == "today":
         filtered = filtered[
-            (filtered["abonnement_type"] == "Årsabonnement")
-            | (
-                (filtered["abonnement_type"] == "Ukentlig ved bestilling")
-                & (
-                    (filtered["ankomst"].dt.date <= current_date)
-                    & (
-                        (filtered["avreise"].isnull())
-                        | (filtered["avreise"].dt.date >= current_date)
+            (filtered["abonnement_type"] == "Årsabonnement") |
+            (
+                (filtered["abonnement_type"] == "Ukentlig ved bestilling") &
+                (
+                    (filtered["ankomst_dato"].dt.date <= current_date) &
+                    (
+                        (filtered["avreise_dato"].isnull()) |
+                        (filtered["avreise_dato"].dt.date >= current_date)
                     )
                 )
             )
@@ -663,10 +659,10 @@ def filter_tunbroyting_bestillinger(
             | (
                 (filtered["abonnement_type"] == "Ukentlig ved bestilling")
                 & (
-                    (filtered["ankomst"].dt.date <= end_date)
+                    (filtered["ankomst_dato"].dt.date <= end_date)
                     & (
-                        (filtered["avreise"].isnull())
-                        | (filtered["avreise"].dt.date >= current_date)
+                        (filtered["avreise_dato"].isnull())
+                        | (filtered["avreise_dato"].dt.date >= current_date)
                     )
                 )
             )
@@ -674,17 +670,17 @@ def filter_tunbroyting_bestillinger(
     else:
         if filters.get("start_date"):
             filtered = filtered[
-                (filtered["ankomst"].dt.date >= filters["start_date"])
+                (filtered["ankomst_dato"].dt.date >= filters["start_date"])
                 | (
-                    (filtered["ankomst"].dt.date < filters["start_date"])
+                    (filtered["ankomst_dato"].dt.date < filters["start_date"])
                     & (
-                        (filtered["avreise"].isnull())
-                        | (filtered["avreise"].dt.date >= filters["start_date"])
+                        (filtered["avreise_dato"].isnull())
+                        | (filtered["avreise_dato"].dt.date >= filters["start_date"])
                     )
                 )
             ]
         if filters.get("end_date"):
-            filtered = filtered[filtered["ankomst"].dt.date <= filters["end_date"]]
+            filtered = filtered[filtered["ankomst_dato"].dt.date <= filters["end_date"]]
 
     if filters.get("abonnement_type"):
         filtered = filtered[
@@ -694,70 +690,43 @@ def filter_tunbroyting_bestillinger(
     return filtered
 
 
-def filter_todays_bookings(bestillinger: pd.DataFrame) -> pd.DataFrame:
-    """
-    Filtrer ut dagens aktive bestillinger.
-    
-    Args:
-        bestillinger (pd.DataFrame): DataFrame med bestillinger
-        
-    Returns:
-        pd.DataFrame: Filtrerte bestillinger for dagens dato
-        
-    Raises:
-        Exception: Ved ugyldig datoformat eller andre feil
-    """
-    logger.info("Starter filtrering av dagens bestillinger")
-    logger.info(f"Input DataFrame shape: {bestillinger.shape}")
-    logger.info(f"Input DataFrame columns: {bestillinger.columns}")
-    logger.info(f"Input DataFrame dtypes:\n{bestillinger.dtypes}")
-    
-    if bestillinger.empty:
-        return bestillinger
-        
+def filter_todays_bookings(bookings_df):
     try:
-        dagens_dato = datetime.now(TZ).date()
-        logger.info(f"Filtrerer bestillinger for dato: {dagens_dato}")
+        logger.info("Starter filtrering av dagens bestillinger")
         
-        # Lag en kopi for å unngå SettingWithCopyWarning
-        result = bestillinger.copy()
+        # Standardiser kolonnenavn
+        if 'ankomst' in bookings_df.columns:
+            bookings_df = bookings_df.rename(columns={
+                'ankomst': 'ankomst_dato',
+                'avreise': 'avreise_dato'
+            })
         
-        # Konverter datoer til datetime hvis de ikke allerede er det
-        try:
-            if not pd.api.types.is_datetime64_any_dtype(result['ankomst_dato']):
-                result['ankomst_dato'] = pd.to_datetime(result['ankomst_dato'])
-            if not pd.api.types.is_datetime64_any_dtype(result['avreise_dato']):
-                result['avreise_dato'] = pd.to_datetime(result['avreise_dato'])
-        except (ValueError, TypeError) as e:
-            logger.error(f"Feil ved konvertering av datoer: {str(e)}")
-            raise Exception(f"Ugyldig datoformat i data: {str(e)}")
+        # Konverter dagens_dato til datetime64[ns] uten tidssone
+        dagens_dato = pd.Timestamp.now(TZ).normalize().tz_localize(None)
         
-        # Sjekk at datoene er i riktig format før vi fortsetter
-        if not pd.api.types.is_datetime64_any_dtype(result['ankomst_dato']):
-            raise Exception("Kunne ikke konvertere ankomst_dato til datetime format")
-        if not pd.api.types.is_datetime64_any_dtype(result['avreise_dato']):
-            raise Exception("Kunne ikke konvertere avreise_dato til datetime format")
+        # Konverter datokolonnene til datetime64[ns] og fjern tidssone
+        result = bookings_df.copy()
+        result['ankomst_dato'] = pd.to_datetime(result['ankomst_dato']).dt.tz_localize(None)
+        result['avreise_dato'] = pd.to_datetime(result['avreise_dato']).dt.tz_localize(None)
         
-        # Filtrer bestillinger
+        # Filtrer basert på dato og abonnement_type
         mask = (
-            # Dagens bestillinger
-            (result['ankomst_dato'].dt.date == dagens_dato) |
-            # Aktive bestillinger
-            ((result['ankomst_dato'].dt.date <= dagens_dato) & 
-             (result['avreise_dato'].isna() | 
-              (result['avreise_dato'].dt.date >= dagens_dato))) |
+            # Vanlige bestillinger som er aktive i dag
+            ((result['ankomst_dato'].dt.normalize() <= dagens_dato) & 
+             ((result['avreise_dato'].isna()) | 
+              (result['avreise_dato'].dt.normalize() >= dagens_dato))) |
             # Årsabonnementer
             (result['abonnement_type'] == 'Årsabonnement')
         )
         
-        filtered = result[mask].copy()
-        logger.info(f"Fant {len(filtered)} aktive bestillinger for i dag")
+        filtered_df = result[mask].copy()
+        logger.info(f"Fant {len(filtered_df)} aktive bestillinger")
         
-        return filtered
+        return filtered_df
         
     except Exception as e:
         logger.error(f"Feil ved filtrering av dagens bestillinger: {str(e)}", exc_info=True)
-        raise
+        return pd.DataFrame()
 
 
 def tunbroyting_kommende_uke(bestillinger):
@@ -939,7 +908,7 @@ def vis_tunbroyting_oversikt():
     # Vis aktive bestillinger kommende uke
     vis_tunbestillinger_for_periode()
     
-    # Vis hytter med årsabonnement
+    # Vis hytter med rsabonnement
     vis_arsabonnenter()
 
 
@@ -1203,18 +1172,21 @@ def get_bookings(start_date=None, end_date=None):
                 query += " WHERE ankomst_dato >= ?"
                 params.append(start_date)
             if end_date:
-                query += (
-                    " AND ankomst_dato <= ?"
-                    if start_date
-                    else " WHERE ankomst_dato <= ?"
-                )
+                query += " AND ankomst_dato <= ?" if start_date else " WHERE ankomst_dato <= ?"
                 params.append(end_date)
 
             logger.info(f"Executing query: {query} with params: {params}")
 
             df = pd.read_sql_query(query, conn, params=params)
-            logger.info(f"Raw query result shape: {df.shape}")
-            logger.info(f"Raw query result:\n{df.to_string()}")
+            
+            # Konverter datokolonner til datetime
+            for col in ['ankomst_dato', 'avreise_dato']:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col])
+            
+            logger.info(f"Processed DataFrame shape: {df.shape}")
+            logger.info(f"Processed DataFrame columns: {df.columns}")
+            logger.info(f"Sample data:\n{df.head().to_string()}")
 
             return df
 

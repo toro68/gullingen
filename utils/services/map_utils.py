@@ -28,15 +28,13 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             st.error("Kunne ikke laste koordinater for hyttene")
             return
             
-        current_date = pd.Timestamp(datetime.now(TZ).date())
-        
-        # Hent aktive bestillinger
-        from utils.services.tun_utils import hent_aktive_bestillinger_for_dag
-        aktive_bestillinger = hent_aktive_bestillinger_for_dag(current_date)
-        
-        if aktive_bestillinger is None or aktive_bestillinger.empty:
-            logger.info("Ingen aktive bestillinger for dagens dato")
-            aktive_bestillinger = pd.DataFrame(columns=["customer_id", "abonnement_type", "ankomst_dato", "avreise_dato"])
+        # Bruk bestillinger direkte, men sikre at vi har riktige kolonnenavn
+        aktive_bestillinger = bestillinger.copy()
+        if 'ankomst' in aktive_bestillinger.columns:
+            aktive_bestillinger = aktive_bestillinger.rename(columns={
+                'ankomst': 'ankomst_dato',
+                'avreise': 'avreise_dato'
+            })
         
         logger.info(f"Aktive bestillinger: {aktive_bestillinger.to_string()}")
         
