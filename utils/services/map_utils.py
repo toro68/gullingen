@@ -28,7 +28,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             st.error("Kunne ikke laste koordinater for hyttene")
             return
             
-        current_date = datetime.now(TZ).date()
+        current_date = pd.Timestamp(datetime.now(TZ).date())
         
         # Hent aktive bestillinger
         from utils.services.tun_utils import hent_aktive_bestillinger_for_dag
