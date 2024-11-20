@@ -179,23 +179,25 @@ def display_home_page(customer):
         )
 
 
-@st.cache_resource
 def initialize_app() -> bool:
     """Initialiserer applikasjonen"""
     try:
         logger.info("=== Starting app initialization ===")
         
-        # Initialiser databasesystem
-        if not initialize_database_system():
-            logger.error("Failed to initialize database system")
-            return False
-            
-        # Kjør databasemigrasjoner
+        # Kjør migrasjoner først
+        logger.info("Running database migrations")
         if not run_migrations():
             logger.error("Failed to run database migrations")
             return False
             
-        # Verifiser databaseskjemaer
+        # Deretter initialiser databasesystem
+        logger.info("Initializing database system")
+        if not initialize_database_system():
+            logger.error("Failed to initialize database system")
+            return False
+            
+        # Til slutt verifiser skjemaer
+        logger.info("Verifying database schemas")
         if not verify_database_schemas():
             logger.error("Failed to verify database schemas")
             return False
@@ -204,7 +206,7 @@ def initialize_app() -> bool:
         return True
         
     except Exception as e:
-        logger.error(f"Error during app initialization: {str(e)}")
+        logger.error(f"Error during app initialization: {str(e)}", exc_info=True)
         return False
 
 
