@@ -619,34 +619,52 @@ def handle_tun():
     customer_edit_component()
 
 def hent_aktive_bestillinger_for_dag(dato):
-    """Henter aktive bestillinger for en gitt dato"""
-    logger.info(f"Henter aktive bestillinger for dato: {dato}")
+    """
+    Henter aktive bestillinger for en gitt dato.
+    Bruker config.py standarder for datohåndtering.
+    """
+    logger.info(f"Henter aktive bestillinger for dato: {format_date(dato, 'display', 'date')}")
     try:
-        # Bruk get_current_time() fra config.py
-        dato_dt = pd.Timestamp(dato).tz_localize(TZ)
+        # Konverter input dato til datetime med tidssone
+        dato_dt = combine_date_with_tz(dato)
+        logger.info(f"Dato konvertert til datetime med tidssone: {format_date(dato_dt, 'display', 'datetime')}")
         
         # Hent alle bestillinger
         alle_bestillinger = get_bookings()
+        if alle_bestillinger.empty:
+            logger.info("Ingen bestillinger funnet")
+            return pd.DataFrame()
         
-        # Bruk safe_to_datetime fra config.py
+        logger.info(f"Hentet {len(alle_bestillinger)} bestillinger totalt")
+        
+        # Konverter datokolonner til datetime med tidssone
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in alle_bestillinger.columns:
                 alle_bestillinger[col] = alle_bestillinger[col].apply(safe_to_datetime)
         
+        # Normaliser datoen for sammenligning (fjern klokkeslett)
+        dato_normalized = dato_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        
         # Filtrer bestillinger
         aktive_bestillinger = alle_bestillinger[
+            # Årsabonnementer er alltid aktive
+            (alle_bestillinger['abonnement_type'] == 'Årsabonnement') |
             # Bestillinger som starter på denne datoen
-            (alle_bestillinger['ankomst_dato'].dt.date == dato_dt.date()) |
+            (alle_bestillinger['ankomst_dato'].apply(
+                lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0) if x is not None else None
+            ) == dato_normalized) |
             # Bestillinger som er aktive på denne datoen
             (
-                (alle_bestillinger['ankomst_dato'].dt.date <= dato_dt.date()) &
+                (alle_bestillinger['ankomst_dato'].apply(
+                    lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0) if x is not None else None
+                ) <= dato_normalized) &
                 (
                     (alle_bestillinger['avreise_dato'].isnull()) |
-                    (alle_bestillinger['avreise_dato'].dt.date >= dato_dt.date())
+                    (alle_bestillinger['avreise_dato'].apply(
+                        lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0) if x is not None else None
+                    ) >= dato_normalized)
                 )
-            ) |
-            # Årsabonnementer
-            (alle_bestillinger['abonnement_type'] == 'Årsabonnement')
+            )
         ]
         
         logger.info(f"Fant {len(aktive_bestillinger)} aktive bestillinger for {format_date(dato_dt, 'display', 'date')}")
@@ -655,8 +673,6 @@ def hent_aktive_bestillinger_for_dag(dato):
     except Exception as e:
         logger.error(f"Feil i hent_aktive_bestillinger_for_dag: {str(e)}", exc_info=True)
         return pd.DataFrame()
-
-
 # filtrerer bestillinger i bestill_tunbroyting
 def filter_tunbroyting_bestillinger(bestillinger: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
     filtered = bestillinger.copy()
@@ -721,32 +737,48 @@ def filter_tunbroyting_bestillinger(bestillinger: pd.DataFrame, filters: Dict[st
 
     return filtered
 
-
 def filter_todays_bookings(bookings_df):
+    """
+    Filtrerer bookinger for å finne dagens aktive bestillinger.
+    Bruker config.py standarder for datohåndtering.
+    """
     try:
         logger.info("Starter filtrering av dagens bestillinger")
         
         if bookings_df.empty:
             return pd.DataFrame()
             
-        # Konverter dagens_dato til datetime med tidssone
-        dagens_dato = pd.Timestamp(get_current_time()).tz_convert(TZ).normalize()
-        
-        # Sikre at alle datoer har samme timezone
+        # Kopier for å unngå modifikasjon av original
         result = bookings_df.copy()
+        
+        # Konverter dagens_dato til datetime med tidssone
+        dagens_dato = get_current_time().replace(hour=0, minute=0, second=0, microsecond=0)
+        logger.info(f"Dagens dato (normalisert): {format_date(dagens_dato, 'display', 'datetime')}")
+        
+        # Sikre at datokolonnene er datetime med tidssone
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in result.columns:
-                result[col] = pd.to_datetime(result[col]).dt.tz_convert(TZ)
+                result[col] = result[col].apply(safe_to_datetime)
+                
+        logger.info(f"Datasett etter konvertering:\n{result.to_string()}")
         
         # Filtrer basert på dato og abonnement_type
         mask = (
-            ((result['ankomst_dato'].dt.normalize() <= dagens_dato) & 
-             ((result['avreise_dato'].isna()) | 
-              (result['avreise_dato'].dt.normalize() >= dagens_dato))) |
-            (result['abonnement_type'] == 'Årsabonnement')
+            (result['abonnement_type'] == 'Årsabonnement') |
+            (
+                # For vanlige bestillinger, sjekk om de er aktive i dag
+                (result['ankomst_dato'].apply(lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0) if x is not None else None) <= dagens_dato) & 
+                (
+                    (result['avreise_dato'].isnull()) |
+                    (result['avreise_dato'].apply(lambda x: x.replace(hour=0, minute=0, second=0, microsecond=0) if x is not None else None) >= dagens_dato)
+                )
+            )
         )
         
-        return result[mask].copy()
+        filtered_result = result[mask].copy()
+        logger.info(f"Antall filtrerte bestillinger: {len(filtered_result)}")
+        
+        return filtered_result
         
     except Exception as e:
         logger.error(f"Feil ved filtrering av dagens bestillinger: {str(e)}", exc_info=True)
