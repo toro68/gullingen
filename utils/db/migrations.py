@@ -1,6 +1,7 @@
 import time
 from pathlib import Path
 import pandas as pd
+import streamlit as st
 
 from utils.core.logging_config import get_logger
 from utils.db.connection import get_db_connection
@@ -11,7 +12,12 @@ logger = get_logger(__name__)
 def run_migrations():
     """Kjører nødvendige databasemigrasjoner"""
     try:
-        CURRENT_VERSION = "1.5"  # Økt versjonsnummer for å trigge nye migrasjoner
+        CURRENT_VERSION = "1.6"  # Økt versjonsnummer
+        
+        # Sjekk om vi trenger å tvinge reinitialisering
+        if "db_version" not in st.session_state or st.session_state.db_version != CURRENT_VERSION:
+            st.session_state.app_initialized = False
+            st.session_state.db_version = CURRENT_VERSION
         
         # Sjekk/opprett versjonstabell først
         with get_db_connection("system") as conn:
