@@ -8,7 +8,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils.core.config import TZ
+from utils.core.config import (
+    TZ,
+    DATE_FORMATS,
+    get_date_format,
+    get_current_time,
+    get_default_date_range,
+    DATE_VALIDATION
+)
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import execute_query, fetch_data
 from utils.services.alert_utils import display_active_alerts as display_user_alerts
@@ -32,24 +39,24 @@ def format_date(date_obj):
         return "Ikke satt"
     return date_obj.strftime("%d.%m.%Y %H:%M")
 
-def get_date_range_input(default_days=7):
+def get_date_range_input(default_days=DATE_VALIDATION["default_date_range"]):
     """Felles funksjon for datovelgere"""
     try:
         logger.debug("Starting get_date_range_input")
-        today = datetime.now(TZ).date()
+        today = get_current_time().date()
         
         col1, col2 = st.columns(2)
         with col1:
             start_date = st.date_input(
                 "Fra dato", 
                 value=today - timedelta(days=default_days),
-                format="DD.MM.YYYY"
+                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
             )
         with col2:
             end_date = st.date_input(
                 "Til dato",
                 value=today,
-                format="DD.MM.YYYY",
+                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD"),
                 max_value=today
             )
             
@@ -793,7 +800,6 @@ def create_maintenance_chart(daily_stats, daily_stats_pct, daily_score, group_by
                 hovertemplate="Score: %{y:.2f}<extra></extra>"
             )
         )
-
         # Oppdater layout
         fig.update_layout(
             barmode='stack',
@@ -1214,3 +1220,4 @@ def display_daily_maintenance_rating():
     except Exception as e:
         logger.error(f"Error in display_daily_maintenance_rating: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av tilbakemeldingsskjema")
+

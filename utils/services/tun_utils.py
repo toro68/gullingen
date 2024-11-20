@@ -8,7 +8,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from utils.core.config import DATABASE_PATH, TZ
+from utils.core.config import (
+    TZ,
+    DATE_FORMATS,
+    get_date_format,
+    get_current_time,
+    get_default_date_range,
+    DATE_VALIDATION,
+    DATABASE_PATH
+)
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import neste_fredag
 from utils.core.validation_utils import validere_bestilling
@@ -465,13 +473,22 @@ def count_bestillinger():
 
 # viser bestillinger i handle_tun
 def vis_rediger_bestilling():
-    # Vis bestillinger for en periode
     st.header("Vis bestillinger for periode")
+    start_date, end_date = get_default_date_range()
+    
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Fra dato", value=datetime.now().date())
+        start_date = st.date_input(
+            "Fra dato", 
+            value=start_date.date(),
+            format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
+        )
     with col2:
-        end_date = st.date_input("Til dato", value=start_date + timedelta(days=7))
+        end_date = st.date_input(
+            "Til dato", 
+            value=end_date.date(),
+            format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
+        )
 
     bestillinger = hent_bestillinger_for_periode(start_date, end_date)
     if not bestillinger.empty:
