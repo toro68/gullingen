@@ -10,7 +10,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-from utils.core.config import TZ
+from utils.core.config import (
+    TZ,
+    DATE_FORMATS,
+    get_date_format,
+    get_current_time,
+    get_default_date_range,
+    DATE_VALIDATION
+)
 from utils.core.logging_config import get_logger
 from utils.core.validation_utils import validate_customer_id  
 from utils.db.db_utils import get_db_connection
@@ -455,41 +462,48 @@ def admin_stroing_page():
 
 # Database initialization and maintenance
 def verify_stroing_data():
+    """Verifiser integritet av strøingsdata"""
     try:
         with get_db_connection("stroing") as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM stroing_bestillinger")
             
-            # Konverter resultater til DataFrame
             columns = [description[0] for description in cursor.description]
             results = cursor.fetchall()
-            df = pd.DataFrame(results, columns=columns)
             
-            if df.empty:
-                logger.info("Ingen strøingsbestillinger funnet")
+            if not results:
+                logger.info("Ingen strøingsbestillinger å verifisere")
                 return True
                 
-            # Valider datoformater
-            df['bestillings_dato'] = pd.to_datetime(df['bestillings_dato'], errors='coerce')
-            df['onske_dato'] = pd.to_datetime(df['onske_dato'], errors='coerce')
+            df = pd.DataFrame(results, columns=columns)
+            validation_errors = []
             
-            # Sjekk for ugyldige datoer
-            invalid_dates = df[df['bestillings_dato'].isna() | df['onske_dato'].isna()]
-            if not invalid_dates.empty:
-                logger.error(f"Fant {len(invalid_dates)} bestillinger med ugyldige datoer")
-                return False
-                
-            # Sjekk for gyldige kunde-IDer
+            # Valider datoformater
+            for col in ['bestillings_dato', 'onske_dato']:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+                invalid_dates = df[df[col].isna()]
+                if not invalid_dates.empty:
+                    validation_errors.append(
+                        f"Ugyldige datoer i {col}: {invalid_dates.index.tolist()}"
+                    )
+            
+            # Valider kunde-IDer
             invalid_customers = df[~df['customer_id'].apply(validate_customer_id)]
             if not invalid_customers.empty:
-                logger.error(f"Fant {len(invalid_customers)} bestillinger med ugyldige kunde-IDer")
+                validation_errors.append(
+                    f"Ugyldige kunde-IDer: {invalid_customers['customer_id'].tolist()}"
+                )
+            
+            if validation_errors:
+                for error in validation_errors:
+                    logger.error(error)
                 return False
                 
             logger.info("Strøingsdata verifisert uten feil")
             return True
             
     except Exception as e:
-        logger.error(f"Feil ved verifisering av strøingsdata: {str(e)}")
+        logger.error(f"Feil ved verifisering av strøingsdata: {str(e)}", exc_info=True)
         return False
 
 # Visninger
@@ -503,12 +517,14 @@ def display_stroing_bookings(customer_id: str, show_header: bool = False):
             st.info("Du har ingen aktive strøingsbestillinger")
             return
             
-        # Vis bestillinger i ekspanderende seksjoner
+        date_format = get_date_format("display", "date")
+        datetime_format = get_date_format("display", "datetime")
+        
         for _, booking in bookings.iterrows():
             with st.expander(
-                f"Bestilling for {booking['onske_dato'].strftime('%d.%m.%Y')}"
+                f"Bestilling for {booking['onske_dato'].strftime(date_format)}"
             ):
-                st.write(f"Bestilt: {booking['bestillings_dato'].strftime('%d.%m.%Y %H:%M')}")
+                st.write(f"Bestilt: {booking['bestillings_dato'].strftime(datetime_format)}")
                 if booking.get('kommentar'):
                     st.write(f"Kommentar: {booking['kommentar']}")
                 st.write(f"Status: {booking.get('status', 'Venter')}")
