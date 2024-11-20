@@ -66,7 +66,7 @@ def get_date_range_input(default_days=7):
 # crud-operasjoner
 def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden):
     try:
-        query = """INSERT INTO feedback (type, datetime, comment, innsender, status, status_changed_at, hidden) 
+        query = """INSERT INTO feedback (type, datetime, comment, customer_id, status, status_changed_at, hidden) 
                    VALUES (?, ?, ?, ?, ?, ?, ?)"""
         initial_status = "Ny"
         params = (
@@ -93,7 +93,7 @@ def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden
 def get_feedback(start_date=None, end_date=None, include_hidden=False, cabin_identifier=None):
     try:
         columns = [
-            'id', 'type', 'datetime', 'comment', 'innsender', 
+            'id', 'type', 'datetime', 'comment', 'customer_id', 
             'status', 'status_changed_by', 'status_changed_at', 'hidden',
             'is_alert', 'display_on_weather', 'expiry_date', 'target_group'
         ]
@@ -117,7 +117,7 @@ def get_feedback(start_date=None, end_date=None, include_hidden=False, cabin_ide
             query += " AND (hidden = 0 OR hidden IS NULL)"
             
         if cabin_identifier:
-            query += " AND innsender = ?"
+            query += " AND customer_id = ?"
             params.append(cabin_identifier)
             
         logger.debug(f"SQL Query: {query}")
@@ -358,7 +358,7 @@ def give_feedback():
 
     if submit_button:
         if description:
-            cabin_identifier = st.session_state.get("user_id")
+            cabin_identifier = st.session_state.get("customer_id")
 
             if cabin_identifier:
                 if avvik_tidspunkt:
@@ -393,7 +393,7 @@ def give_feedback():
     st.write("---")
 
     st.subheader("Din tidligere feedback")
-    cabin_identifier = st.session_state.get("user_id")
+    cabin_identifier = st.session_state.get("customer_id")
     if cabin_identifier:
         existing_feedback = get_feedback(
             start_date=None,
@@ -440,7 +440,7 @@ def display_recent_feedback():
                     f"<span style='color:{status_color};'>●</span> **Status:** {status}",
                     unsafe_allow_html=True,
                 )
-                st.write(f"**Rapportert av:** {row['innsender']}")
+                st.write(f"**Rapportert av:** {row['customer_id']}")
                 st.write(f"**Kommentar:** {row['comment']}")
                 if pd.notnull(row["status_changed_at"]):
                     st.write(
@@ -452,11 +452,11 @@ def display_recent_feedback():
 
 def batch_insert_feedback(feedback_list):
     query = """
-    INSERT INTO feedback (type, datetime, comment, innsender, status, hidden)
+    INSERT INTO feedback (type, datetime, comment, customer_id, status, hidden)
     VALUES (?, ?, ?, ?, ?, ?)
     """
     params = [
-        (f["type"], f["datetime"], f["comment"], f["innsender"], "Ny", 0)
+        (f["type"], f["datetime"], f["comment"], f["customer_id"], "Ny", 0)
         for f in feedback_list
     ]
 
@@ -582,7 +582,7 @@ def categorize_feedback(feedback_text):
 # Add this function to your feedback_utils.py file
 def get_feedback_by_id(feedback_id):
     query = """
-    SELECT id, type, datetime, comment, innsender, status, status_changed_by, status_changed_at, hidden
+    SELECT id, type, datetime, comment, customer_id, status, status_changed_by, status_changed_at, hidden
     FROM feedback 
     WHERE id = ?
     """
@@ -592,12 +592,12 @@ def get_feedback_by_id(feedback_id):
     return None
 
 
-def save_maintenance_reaction(user_id, reaction_type, date):
+def save_maintenance_reaction(customer_id, reaction_type, date):
     """
     Lagrer en vedlikeholdsreaksjon i feedback-tabellen.
 
     Args:
-        user_id (str): Hytteeierens ID
+        customer_id (str): Hytteeierens ID
         reaction_type (str): 'positive', 'neutral', eller 'negative'
         date (datetime): Datoen reaksjonen gjelder for
     """
@@ -619,13 +619,13 @@ def save_maintenance_reaction(user_id, reaction_type, date):
             feedback_type=feedback_type,
             datetime_str=date.isoformat(),
             comment=comment,
-            cabin_identifier=user_id,
+            cabin_identifier=customer_id,
             hidden=False,
         )
 
         if result:
             logger.info(
-                f"Vedlikeholdsreaksjon lagret for hytte {user_id}: {reaction_type}"
+                f"Vedlikeholdsreaksjon lagret for hytte {customer_id}: {reaction_type}"
             )
         return result
 
@@ -637,7 +637,7 @@ def save_maintenance_reaction(user_id, reaction_type, date):
 def get_maintenance_reactions(start_datetime, end_datetime):
     try:
         query = """
-        SELECT datetime, comment, innsender
+        SELECT datetime, comment, customer_id
         FROM feedback 
         WHERE type = 'Vintervedlikehold'
         AND datetime BETWEEN ? AND ?
@@ -660,13 +660,13 @@ def get_maintenance_reactions(start_datetime, end_datetime):
             reactions_df['datetime'] = pd.to_datetime(reactions_df['datetime'])
             
             # Hent ut hyttenummer fra reaksjonsteksten
-            reactions_df['innsender'] = reactions_df['comment'].str.extract(r'Hytte (\d+)')
+            reactions_df['customer_id'] = reactions_df['comment'].str.extract(r'Hytte (\d+)')
 
         return reactions_df
 
     except Exception as e:
         logger.error(f"Feil ved henting av vedlikeholdsreaksjoner: {str(e)}")
-        return pd.DataFrame(columns=['datetime', 'innsender', 'reaction'])
+        return pd.DataFrame(columns=['datetime', 'customer_id', 'reaction'])
 
 def display_maintenance_feedback():
     try:
@@ -705,7 +705,7 @@ def display_maintenance_feedback():
         logger.debug(f"Henter data for periode: {start_datetime} til {end_datetime}")
         
         # Definer kolonner eksplisitt
-        columns = ['datetime', 'comment', 'innsender']
+        columns = ['datetime', 'comment', 'customer_id']
         
         query = f"""
         SELECT {', '.join(columns)}
@@ -745,7 +745,7 @@ def display_maintenance_feedback():
         
     except Exception as e:
         logger.error(f"Feil ved henting av vedlikeholdsreaksjoner: {str(e)}", exc_info=True)
-        return pd.DataFrame(columns=['datetime', 'comment', 'innsender'])
+        return pd.DataFrame(columns=['datetime', 'comment', 'customer_id'])
 
 
 def create_maintenance_chart(daily_stats, daily_stats_pct, daily_score, group_by):
@@ -952,7 +952,7 @@ def handle_stroing_feedback(feedback_data: dict) -> bool:
             # Logg feedback
             log_stroing_activity(
                 "feedback_received",
-                feedback_data.get("innsender"),
+                feedback_data.get("customer_id"),
                 {"comment": feedback_data.get("comment")},
             )
 
@@ -983,8 +983,8 @@ def display_reaction_statistics(feedback_data):
             st.info("Ingen reaksjoner funnet")
             return
             
-        # Bruk innsender-kolonnen direkte som hytte_nr
-        stats = reactions.groupby('innsender').size().reset_index(name='antall')
+        # Bruk customer_id-kolonnen direkte som hytte_nr
+        stats = reactions.groupby('customer_id').size().reset_index(name='antall')
         stats.columns = ['Hytte', 'Antall reaksjoner']
         stats = stats.sort_values('Antall reaksjoner', ascending=False)
         
@@ -1065,7 +1065,7 @@ def display_feedback_overview(feedback_data):
                 f"Status: {row['status']}"
             ):
                 st.write(f"**Kommentar:** {row['comment']}")
-                st.write(f"**Innsender:** {row['innsender']}")
+                st.write(f"**Innsender:** {row['customer_id']}")
                 st.write(f"**Type:** {row['type']}")
                 
                 if pd.notnull(row['status_changed_at']):
@@ -1117,9 +1117,9 @@ def display_reaction_report(feedback_data):
         # Vis reaksjoner i expanders
         st.subheader("Detaljerte reaksjoner")
         for _, row in filtered_reactions.iterrows():
-            with st.expander(f"{row['datetime'].strftime('%Y-%m-%d %H:%M')} - Hytte {row['innsender']}"):
+            with st.expander(f"{row['datetime'].strftime('%Y-%m-%d %H:%M')} - Hytte {row['customer_id']}"):
                 st.write(f"**Kommentar:** {row['comment']}")
-                st.write(f"**Innsender:** {row['innsender']}")
+                st.write(f"**Innsender:** {row['customer_id']}")
                 
     except Exception as e:
         logger.error(f"Feil i display_reaction_report: {str(e)}", exc_info=True)
@@ -1175,7 +1175,7 @@ def display_daily_maintenance_rating():
     try:
         st.subheader("Gi din vurdering av dagens brøyting her")
         
-        if 'user_id' not in st.session_state:
+        if 'customer_id' not in st.session_state:
             st.warning("Du må være logget inn for å gi tilbakemelding")
             return
         
@@ -1198,7 +1198,7 @@ def display_daily_maintenance_rating():
             )
             
             result = save_maintenance_reaction(
-                st.session_state.user_id,
+                st.session_state.customer_id,
                 reaction_type,
                 datetime.now(TZ)
             )

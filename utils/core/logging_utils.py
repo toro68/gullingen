@@ -56,14 +56,14 @@ def log_status_change(
         return False
 
 
-def log_general_event(event_type, description, user_id=None, db_name="event_log"):
+def log_general_event(event_type, description, customer_id=None, db_name="event_log"):
     """
     Logger en generell hendelse.
 
     Args:
     event_type (str): Typen hendelse som logges.
     description (str): Beskrivelse av hendelsen.
-    user_id (str, optional): ID-en til brukeren knyttet til hendelsen, hvis relevant.
+    customer_id (str, optional): ID-en til brukeren knyttet til hendelsen, hvis relevant.
     db_name (str): Navnet på databasen (standard er 'event_log').
 
     Returns:
@@ -71,10 +71,10 @@ def log_general_event(event_type, description, user_id=None, db_name="event_log"
     """
     try:
         query = """
-        INSERT INTO event_log (event_type, description, user_id, timestamp)
+        INSERT INTO event_log (event_type, description, customer_id, timestamp)
         VALUES (?, ?, ?, ?)
         """
-        params = (event_type, description, user_id, datetime.now(TZ).isoformat())
+        params = (event_type, description, customer_id, datetime.now(TZ).isoformat())
 
         rows_affected = execute_query(db_name, query, params)
 
@@ -93,19 +93,19 @@ def log_general_event(event_type, description, user_id=None, db_name="event_log"
 
 
 def log_feedback_event(
-    feedback_id: int, event_type: str, description: str, user_id: str = None
+    feedback_id: int, event_type: str, description: str, customer_id: str = None
 ) -> bool:
     """Logger feedback-relaterte hendelser"""
     try:
         query = """
-        INSERT INTO feedback_log (feedback_id, event_type, description, user_id, timestamp)
+        INSERT INTO feedback_log (feedback_id, event_type, description, customer_id, timestamp)
         VALUES (?, ?, ?, ?, ?)
         """
         params = (
             feedback_id,
             event_type,
             description,
-            user_id,
+            customer_id,
             datetime.now(TZ).isoformat(),
         )
 

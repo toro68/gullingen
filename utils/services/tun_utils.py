@@ -28,44 +28,31 @@ logger = get_logger(__name__)
 
 # CREATE - hovedfunksjon i app.py
 def bestill_tunbroyting():
-    logger.info("Starting bestill_tunbroyting()")
     try:
         st.title("Bestill Tunbrøyting")
-        # Informasjonstekst
-        st.info(
-            """
-        Tunbrøyting i Fjellbergsskardet - Vintersesongen 2024/2025
-
-        Årsabonnement:
-        - Tunet ditt brøytes automatisk fredager, når brøytefirma vurderer at det trengs.  
-        - Hvis du ønsker brøyting på andre dager, må du legge inn bestilling. 
-        - Traktor kjører aldri opp for å rydde bare 1 hyttetun, det ryddes samtidig med veinettet.
-        Bestill derfor i god tid, og legg inn f.eks perioden lørdag-torsdag 
-        for å være sikker på brøytet tun på en torsdag. 
-        - Hvis du ønsker brøyting hver gang veinettet brøytes, legg inn bestilling fra 1. november til 1. mai.
         
-        Ukentlig ved bestilling: 
-        - Brøyting kun fredager. Bestilling kreves. 
-        - Det faktureres minimum 5 brøytinger (minstepris).
+        # Sjekk både customer_id og authenticated i sesjonen
+        if not st.session_state.get("authenticated"):
+            logger.error("Bruker er ikke autentisert")
+            st.error("Du må være logget inn for å bestille tunbrøyting")
+            return
+            
+        # Hent customer_id fra authenticated_user hvis den finnes
+        customer_id = st.session_state.get("authenticated_user", {}).get("customer_id")
+        if not customer_id:
+            logger.error("Ingen customer_id funnet i authenticated_user")
+            st.error("Du må være logget inn for å bestille tunbrøyting")
+            return
+            
+        customer = get_customer_by_id(customer_id)
         
-        Gjelder alle:
-        - Brøytefirma kan utføre vedlikeholdsbrøyting for å unngå gjengroing hvis de ser behov for det.
-        """
-        )
-
-        # Log user info
-        logger.info(f"User ID from session: {st.session_state.user_id}")
-
-        customer = get_customer_by_id(st.session_state.user_id)
-        logger.info(f"Retrieved customer data: {customer}")
-
         if customer is None:
-            logger.error("Customer data is None")
+            logger.error(f"Kunne ikke hente kundedata for ID: {customer_id}")
             st.error("Kunne ikke hente brukerinformasjon. Vennligst logg inn på nytt.")
+            st.button("Logg inn på nytt", on_click=lambda: st.session_state.clear())
             return
 
-        user_id = customer["customer_id"]
-        logger.info(f"Using user_id: {user_id}")
+        logger.info(f"Using customer_id: {customer_id}")
         user_subscription = customer.get("subscription") or customer.get("icon")
 
         if user_subscription not in ["star_white", "star_red"]:
@@ -121,7 +108,7 @@ def bestill_tunbroyting():
                 )
             else:
                 resultat = lagre_bestilling(
-                    user_id,
+                    customer_id,
                     ankomst_dato.isoformat(),
                     None,  # ankomst_tid settes til None
                     avreise_dato.isoformat() if avreise_dato else None,
@@ -142,7 +129,7 @@ def bestill_tunbroyting():
 
         # Logging for bestillinger
         logger.info("Attempting to fetch user bookings")
-        bruker_bestillinger = hent_bruker_bestillinger(user_id)
+        bruker_bestillinger = hent_bruker_bestillinger(customer_id)
         logger.info(
             f"Retrieved bookings data shape: {bruker_bestillinger.shape if not bruker_bestillinger.empty else 'Empty DataFrame'}"
         )
@@ -187,7 +174,7 @@ def bestill_tunbroyting():
 
 # CREATE - lagre i bestill_tunbroyting
 def lagre_bestilling(
-    user_id: str,
+    customer_id: str,
     ankomst_dato: str,
     ankomst_tid: str,
     avreise_dato: str,
@@ -201,33 +188,33 @@ def lagre_bestilling(
             cursor.execute(
                 """
                 SELECT COUNT(*) FROM tunbroyting_bestillinger 
-                WHERE bruker = ? AND ankomst_dato = ?
+                WHERE customer_id = ? AND ankomst_dato = ?
             """,
-                (user_id, ankomst_dato),
+                (customer_id, ankomst_dato),
             )
 
             if cursor.fetchone()[0] > 0:
                 logger.warning(
-                    f"Bruker {user_id} har allerede bestilling på {ankomst_dato}"
+                    f"Bruker {customer_id} har allerede bestilling på {ankomst_dato}"
                 )
                 return False
 
             # Valider input - fjernet ankomst_tid fra valideringen
-            if not all([user_id, ankomst_dato, abonnement_type]):
+            if not all([customer_id, ankomst_dato, abonnement_type]):
                 logger.error("Manglende påkrevde felter i bestilling")
                 return False
 
             # SQL-spørring med eksplisitte kolonnenavn
             query = """
             INSERT INTO tunbroyting_bestillinger 
-            (bruker, ankomst_dato, ankomst_tid, avreise_dato, avreise_tid, abonnement_type)
+            (customer_id, ankomst_dato, ankomst_tid, avreise_dato, avreise_tid, abonnement_type)
             VALUES (?, ?, ?, ?, ?, ?)
             """
 
             cursor.execute(
                 query,
                 (
-                    str(user_id),
+                    str(customer_id),
                     str(ankomst_dato),
                     None,  # ankomst_tid
                     str(avreise_dato) if avreise_dato else None,
@@ -245,18 +232,18 @@ def lagre_bestilling(
 
 
 # READ
-def hent_bruker_bestillinger(user_id):
+def hent_bruker_bestillinger(customer_id):
     """Henter brukerens bestillinger"""
     try:
         with get_db_connection("tunbroyting") as conn:
             query = """
             SELECT DISTINCT * FROM tunbroyting_bestillinger 
-            WHERE bruker = ? 
+            WHERE customer_id = ? 
             ORDER BY ankomst_dato DESC, ankomst_tid DESC
             """
-            df = pd.read_sql_query(query, conn, params=(user_id,))
+            df = pd.read_sql_query(query, conn, params=(customer_id,))
 
-        logger.info(f"Hentet {len(df)} unike bestillinger for bruker {user_id}")
+        logger.info(f"Hentet {len(df)} unike bestillinger for bruker {customer_id}")
         return df
 
     except Exception as e:
@@ -271,7 +258,7 @@ def hent_bestillinger_for_periode(start_date, end_date):
 
         with get_db_connection("tunbroyting") as conn:
             query = """
-            SELECT id, bruker, ankomst_dato, ankomst_tid, 
+            SELECT id, customer_id, ankomst_dato, ankomst_tid, 
                    avreise_dato, avreise_tid, abonnement_type
             FROM tunbroyting_bestillinger 
             WHERE 
@@ -327,7 +314,7 @@ def hent_statistikk_data(bestillinger: pd.DataFrame) -> Dict[str, Any]:
     return {
         "bestillinger": bestillinger,
         "total_bestillinger": len(bestillinger),
-        "unike_brukere": bestillinger["bruker"].nunique(),
+        "unike_brukere": bestillinger["customer_id"].nunique(),
         "abonnement_counts": bestillinger["abonnement_type"].value_counts().to_dict(),
         "rode_counts": (
             bestillinger["rode"].value_counts().to_dict()
@@ -341,7 +328,7 @@ def hent_aktive_bestillinger():
     today = datetime.now(TZ).date()
     with get_db_connection("tunbroyting") as conn:
         query = """
-        SELECT id, bruker, ankomst_dato, avreise_dato, abonnement_type
+        SELECT id, customer_id, ankomst_dato, avreise_dato, abonnement_type
         FROM tunbroyting_bestillinger 
         WHERE date(ankomst_dato) >= ? OR (date(ankomst_dato) <= ? AND date(avreise_dato) >= ?)
         OR (abonnement_type = 'Årsabonnement')
@@ -404,11 +391,11 @@ def get_max_bestilling_id():
 def oppdater_bestilling(bestilling_id: int, nye_data: Dict[str, Any]) -> bool:
     try:
         query = """UPDATE tunbroyting_bestillinger
-                   SET bruker = ?, ankomst_dato = ?, ankomst_tid = ?, 
+                   SET customer_id = ?, ankomst_dato = ?, ankomst_tid = ?, 
                        avreise_dato = ?, avreise_tid = ?, abonnement_type = ?
                    WHERE id = ?"""
         params = (
-            nye_data["bruker"],
+            nye_data["customer_id"],
             nye_data["ankomst_dato"].isoformat(),
             nye_data["ankomst_tid"].isoformat(),
             nye_data["avreise_dato"].isoformat() if nye_data["avreise_dato"] else None,
@@ -509,8 +496,8 @@ def vis_rediger_bestilling():
         st.success(f"Bestilling funnet med ID {bestilling_id}")
         with st.form("rediger_bestilling_form"):
             nye_data = {}
-            nye_data["bruker"] = st.text_input(
-                "Bruker", value=eksisterende_data["bruker"]
+            nye_data["customer_id"] = st.text_input(
+                "Bruker", value=eksisterende_data["customer_id"]
             )
 
             # Håndter ankomst_dato
@@ -608,43 +595,36 @@ def hent_aktive_bestillinger_for_dag(dato):
     """Henter aktive bestillinger for en gitt dag, inkludert årsabonnement."""
     alle_bestillinger = get_bookings()
     logger.info(f"Henter aktive bestillinger for dato: {dato}")
+    logger.info(f"Rådata før filtrering: {alle_bestillinger.to_string()}")
     
     try:
         # Konverter datokolonnene til datetime
         alle_bestillinger["ankomst_dato"] = pd.to_datetime(alle_bestillinger["ankomst_dato"])
         alle_bestillinger["avreise_dato"] = pd.to_datetime(alle_bestillinger["avreise_dato"])
         
-        aktive_bestillinger = alle_bestillinger[
-            # Vanlige bestillinger som er aktive i dag
-            (
-                (alle_bestillinger["abonnement_type"] != "Årsabonnement")
-                & (
-                    (alle_bestillinger["ankomst_dato"].dt.date == dato)
-                    | (
-                        (alle_bestillinger["ankomst_dato"].dt.date <= dato)
-                        & (alle_bestillinger["avreise_dato"].dt.date >= dato)
-                    )
-                )
-            )
-            |
+        logger.info(f"Datoer etter konvertering:")
+        logger.info(f"ankomst_dato typer: {alle_bestillinger['ankomst_dato'].dtype}")
+        logger.info(f"avreise_dato typer: {alle_bestillinger['avreise_dato'].dtype}")
+        
+        # Filtrer bestillinger
+        maske = (
+            # Vanlige bestillinger som starter i dag
+            ((alle_bestillinger["ankomst_dato"].dt.date == dato)) |
             # Årsabonnement som er aktive
             (
-                (alle_bestillinger["abonnement_type"] == "Årsabonnement")
-                & (
-                    (alle_bestillinger["ankomst_dato"].isnull() & alle_bestillinger["avreise_dato"].isnull())
-                    |
-                    (
-                        (alle_bestillinger["ankomst_dato"].dt.date <= dato)
-                        & (
-                            alle_bestillinger["avreise_dato"].isnull()
-                            | (alle_bestillinger["avreise_dato"].dt.date >= dato)
-                        )
-                    )
+                (alle_bestillinger["abonnement_type"] == "Årsabonnement") &
+                (alle_bestillinger["ankomst_dato"].dt.date <= dato) &
+                (
+                    alle_bestillinger["avreise_dato"].isna() |
+                    (alle_bestillinger["avreise_dato"].dt.date >= dato)
                 )
             )
-        ].copy()
+        )
         
+        aktive_bestillinger = alle_bestillinger[maske].copy()
         logger.info(f"Fant {len(aktive_bestillinger)} aktive bestillinger")
+        logger.info(f"Aktive bestillinger etter filtrering: {aktive_bestillinger.to_string()}")
+        
         return aktive_bestillinger
         
     except Exception as e:
@@ -713,50 +693,68 @@ def filter_tunbroyting_bestillinger(
 
 def filter_todays_bookings(bestillinger: pd.DataFrame) -> pd.DataFrame:
     """
-    Filtrerer bestillinger for å vise dagens aktive bestillinger.
-    Ekskluderer årsabonnenter som ikke har aktiv bestilling.
-    """
-    if bestillinger.empty:
-        logger.info("No bookings found to filter")
-        return bestillinger
-
-    try:
-        current_date = datetime.now(TZ).date()
-        logger.info(f"Filtering bookings for date: {current_date}")
-
-        # Lag en ny kopi av DataFrame for å unngå advarsler
-        result = bestillinger.copy()
-
-        # Sjekk at nødvendige kolonner eksisterer
-        required_columns = ["abonnement_type", "ankomst_dato", "avreise_dato"]
-        if not all(col in result.columns for col in required_columns):
-            logger.error(f"Missing required columns. Available columns: {result.columns}")
-            return pd.DataFrame()
-
-        # Konverter datoer til date objekter for konsistent sammenligning
-        result["ankomst_dato"] = pd.to_datetime(result["ankomst_dato"]).dt.date
-        result["avreise_dato"] = pd.to_datetime(result["avreise_dato"]).dt.date
-
-        # Filtrer bestillinger basert på type og dato
-        aktive_bestillinger = result.apply(
-            lambda row: (
-                # Kun ukentlige bestillinger
-                (row["abonnement_type"] == "Ukentlig ved bestilling" and
-                 row["ankomst_dato"] <= current_date and
-                 (pd.isna(row["avreise_dato"]) or current_date <= row["avreise_dato"]))
-            ),
-            axis=1
-        )
-
-        # Filtrer dataframe
-        result = result[aktive_bestillinger].copy()
+    Filtrer ut dagens aktive bestillinger.
+    
+    Args:
+        bestillinger (pd.DataFrame): DataFrame med bestillinger
         
-        logger.info(f"Found {len(result)} active bookings for today")
-        return result
-
+    Returns:
+        pd.DataFrame: Filtrerte bestillinger for dagens dato
+        
+    Raises:
+        Exception: Ved ugyldig datoformat eller andre feil
+    """
+    logger.info("Starter filtrering av dagens bestillinger")
+    logger.info(f"Input DataFrame shape: {bestillinger.shape}")
+    logger.info(f"Input DataFrame columns: {bestillinger.columns}")
+    logger.info(f"Input DataFrame dtypes:\n{bestillinger.dtypes}")
+    
+    if bestillinger.empty:
+        return bestillinger
+        
+    try:
+        dagens_dato = datetime.now(TZ).date()
+        logger.info(f"Filtrerer bestillinger for dato: {dagens_dato}")
+        
+        # Lag en kopi for å unngå SettingWithCopyWarning
+        result = bestillinger.copy()
+        
+        # Konverter datoer til datetime hvis de ikke allerede er det
+        try:
+            if not pd.api.types.is_datetime64_any_dtype(result['ankomst_dato']):
+                result['ankomst_dato'] = pd.to_datetime(result['ankomst_dato'])
+            if not pd.api.types.is_datetime64_any_dtype(result['avreise_dato']):
+                result['avreise_dato'] = pd.to_datetime(result['avreise_dato'])
+        except (ValueError, TypeError) as e:
+            logger.error(f"Feil ved konvertering av datoer: {str(e)}")
+            raise Exception(f"Ugyldig datoformat i data: {str(e)}")
+        
+        # Sjekk at datoene er i riktig format før vi fortsetter
+        if not pd.api.types.is_datetime64_any_dtype(result['ankomst_dato']):
+            raise Exception("Kunne ikke konvertere ankomst_dato til datetime format")
+        if not pd.api.types.is_datetime64_any_dtype(result['avreise_dato']):
+            raise Exception("Kunne ikke konvertere avreise_dato til datetime format")
+        
+        # Filtrer bestillinger
+        mask = (
+            # Dagens bestillinger
+            (result['ankomst_dato'].dt.date == dagens_dato) |
+            # Aktive bestillinger
+            ((result['ankomst_dato'].dt.date <= dagens_dato) & 
+             (result['avreise_dato'].isna() | 
+              (result['avreise_dato'].dt.date >= dagens_dato))) |
+            # Årsabonnementer
+            (result['abonnement_type'] == 'Årsabonnement')
+        )
+        
+        filtered = result[mask].copy()
+        logger.info(f"Fant {len(filtered)} aktive bestillinger for i dag")
+        
+        return filtered
+        
     except Exception as e:
-        logger.error(f"Error filtering today's bookings: {str(e)}", exc_info=True)
-        return pd.DataFrame()
+        logger.error(f"Feil ved filtrering av dagens bestillinger: {str(e)}", exc_info=True)
+        raise
 
 
 def tunbroyting_kommende_uke(bestillinger):
@@ -811,10 +809,10 @@ def vis_tunbestillinger_for_periode():
 
         if not bestillinger.empty:
             # Legg til 'rode' informasjon til bestillingene
-            bestillinger["rode"] = bestillinger["bruker"].apply(get_rode)
+            bestillinger["rode"] = bestillinger["customer_id"].apply(get_rode)
 
-            # Endre kolonnenavn fra 'bruker' til 'Hytte'
-            bestillinger = bestillinger.rename(columns={"bruker": "Hytte"})
+            # Endre kolonnenavn fra 'customer_id' til 'Hytte'
+            bestillinger = bestillinger.rename(columns={"customer_id": "Hytte"})
 
             # Sorter bestillinger etter rode og deretter hytte
             bestillinger_sortert = bestillinger.sort_values(["rode", "Hytte"])
@@ -860,10 +858,10 @@ def vis_dagens_bestillinger():
             visnings_df = pd.DataFrame()
             
             # Legg til 'rode' informasjon
-            visnings_df["rode"] = dagens_bestillinger["bruker"].apply(get_rode)
+            visnings_df["rode"] = dagens_bestillinger["customer_id"].apply(get_rode)
             
             # Kopier og rename kolonner
-            visnings_df["hytte"] = dagens_bestillinger["bruker"]
+            visnings_df["hytte"] = dagens_bestillinger["customer_id"]
             visnings_df["abonnement_type"] = dagens_bestillinger["abonnement_type"]
             
             # Formater dato og tid
@@ -979,7 +977,7 @@ def vis_aktive_bestillinger():
     # Sorter bestillinger
     sort_column = st.selectbox(
         "Sorter etter",
-        options=["ankomst_dato", "bruker", "abonnement_type"],
+        options=["ankomst_dato", "customer_id", "abonnement_type"],
         key="active_sort_column",
     )
     sort_order = st.radio(
@@ -1029,7 +1027,7 @@ def vis_aktive_bestillinger():
         merged_data = pd.merge(
             filtered_bestillinger,
             customer_db,
-            left_on="bruker",
+            left_on="customer_id",
             right_on="Id",
             how="left",
         )
@@ -1065,14 +1063,14 @@ def vis_aktive_bestillinger():
 
 
 # Viser bestillinger for en bruker i Bestill tunbrøyting
-def display_bookings(user_id):
+def display_bookings(customer_id):
     """Viser brukerens tunbrøytingsbestillinger"""
     try:
         bruker_bestillinger = get_bookings()
         if not bruker_bestillinger.empty:
             # Filtrer på bruker_id
             bruker_bestillinger = bruker_bestillinger[
-                bruker_bestillinger["bruker"].astype(str) == str(user_id)
+                bruker_bestillinger["customer_id"].astype(str) == str(customer_id)
             ].sort_values("ankomst", ascending=False)
 
             for _, bestilling in bruker_bestillinger.iterrows():
@@ -1192,7 +1190,7 @@ def get_bookings(start_date=None, end_date=None):
 
         with get_db_connection("tunbroyting") as conn:
             query = """
-            SELECT DISTINCT id, bruker, ankomst_dato, ankomst_tid, 
+            SELECT DISTINCT id, customer_id, ankomst_dato, ankomst_tid, 
                    avreise_dato, avreise_tid, abonnement_type
             FROM tunbroyting_bestillinger
             """

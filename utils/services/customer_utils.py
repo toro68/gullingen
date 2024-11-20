@@ -289,7 +289,7 @@ def vis_arsabonnenter():
         # Hent bestillingsdata fra tunbroyting-databasen
         with get_db_connection("tunbroyting") as conn_tun:
             query_bookings = """
-                SELECT bruker, ankomst_dato, avreise_dato, abonnement_type
+                SELECT customer_id, ankomst_dato, avreise_dato, abonnement_type
                 FROM tunbroyting_bestillinger
                 WHERE abonnement_type = 'Årsabonnement'
             """
@@ -319,7 +319,7 @@ def vis_arsabonnenter():
             # Sjekk aktiv status mot bestillinger
             visning_df["Status"] = "Ikke aktiv"  # Standard status
             for idx, row in visning_df.iterrows():
-                hytte_bestillinger = df_bookings[df_bookings['bruker'] == row['Hytte']]
+                hytte_bestillinger = df_bookings[df_bookings['customer_id'] == row['Hytte']]
                 if not hytte_bestillinger.empty and hytte_bestillinger['er_aktiv'].any():
                     visning_df.at[idx, "Status"] = "Aktiv"
             
@@ -346,6 +346,10 @@ def vis_arsabonnenter():
 def get_customer_by_id(customer_id):
     """Henter kundeinformasjon fra databasen"""
     try:
+        if not customer_id:
+            logger.error("Ingen customer_id oppgitt")
+            return None
+            
         with get_db_connection("customer") as conn:
             query = """
                 SELECT 
@@ -363,20 +367,21 @@ def get_customer_by_id(customer_id):
             result = cursor.fetchone()
             
             if result:
-                # Legg til logging for å se hva som returneres
-                logger.info(f"Found customer data: {result}")
+                logger.info(f"Fant kundedata: {result}")
                 return {
                     "customer_id": result[0],
                     "lat": result[1],
                     "lon": result[2],
                     "subscription": result[3],
-                    "type": result[4],  # Sjekk at dette feltet er riktig
+                    "type": result[4],
                     "created_at": result[5]
                 }
+            
+            logger.warning(f"Ingen kunde funnet med ID: {customer_id}")
             return None
             
     except Exception as e:
-        logger.error(f"Error getting customer by id: {str(e)}")
+        logger.error(f"Feil ved henting av kunde med ID {customer_id}: {str(e)}")
         return None
 
 def handle_customers():

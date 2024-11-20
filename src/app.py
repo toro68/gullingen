@@ -51,7 +51,14 @@ from utils.db.db_utils import (
     close_all_connections,
     get_db_connection,
     initialize_database_system,
-    verify_database_schemas,
+    verify_database_schemas
+)
+from utils.db.migrations import (
+    run_migrations,
+    migrate_feedback_table,
+    migrate_tunbroyting_table,
+    migrate_login_history_table,
+    migrate_stroing_table
 )
 from utils.services.admin_utils import (  # admin_utils er i services, ikke core
     admin_alert,
@@ -173,26 +180,31 @@ def display_home_page(customer):
 
 
 @st.cache_resource
-def initialize_app():
+def initialize_app() -> bool:
+    """Initialiserer applikasjonen"""
     try:
-        logger.info("=== INITIALIZE_APP START ===")
+        logger.info("=== Starting app initialization ===")
         
-        # Lukk eventuelle åpne tilkoblinger
-        db_utils.close_all_connections()
-        
-        # Initialiser databasestruktur
-        if not db_utils.initialize_database_system():
-            raise Exception("Failed to initialize database system")
+        # Initialiser databasesystem
+        if not initialize_database_system():
+            logger.error("Failed to initialize database system")
+            return False
             
-        # Import kundedata
-        if not import_customers_from_csv():
-            raise Exception("Failed to import customer data")
+        # Kjør databasemigrasjoner
+        if not run_migrations():
+            logger.error("Failed to run database migrations")
+            return False
             
-        logger.info("=== INITIALIZE_APP COMPLETE ===")
+        # Verifiser databaseskjemaer
+        if not verify_database_schemas():
+            logger.error("Failed to verify database schemas")
+            return False
+            
+        logger.info("=== App initialization completed successfully ===")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to initialize app: {str(e)}")
+        logger.error(f"Error during app initialization: {str(e)}")
         return False
 
 
@@ -200,12 +212,12 @@ def initialize_session_state():
     """Initialiserer session state variabler"""
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
-    if "user_id" not in st.session_state:
-        st.session_state.user_id = None
+    if "customer_id" not in st.session_state:  
+        st.session_state.customer_id = None
     if "is_admin" not in st.session_state:
         st.session_state.is_admin = False
     if "last_activity" not in st.session_state:
-        st.session_state.last_activity = time()  # Endret fra timestamp() til time()
+        st.session_state.last_activity = time()  
     if "app_initialized" not in st.session_state:
         st.session_state.app_initialized = False
     if "tz" not in st.session_state:
@@ -247,9 +259,9 @@ def main():
             login_page()
         else:
             logger.info(
-                f"User authenticated, getting customer data for ID: {st.session_state.user_id}"
+                f"User authenticated, getting customer data for ID: {st.session_state.customer_id}"
             )
-            customer = get_customer_by_id(st.session_state.user_id)
+            customer = get_customer_by_id(st.session_state.customer_id)
             logger.info(f"Retrieved customer data: {customer}")
 
             if customer is None:

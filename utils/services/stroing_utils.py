@@ -12,9 +12,10 @@ import streamlit as st
 
 from utils.core.config import TZ
 from utils.core.logging_config import get_logger
-from utils.core.validation_utils import validate_user_id
+from utils.core.validation_utils import validate_customer_id  
 from utils.db.db_utils import get_db_connection
 from utils.services.customer_utils import get_rode
+from utils.core.auth_utils import get_current_user_id
 logger = get_logger(__name__)
 
 # Helper functions
@@ -28,7 +29,7 @@ def update_stroing_table_structure():
                 """
                 CREATE TABLE stroing_bestillinger_new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bruker TEXT NOT NULL,
+                    customer_id TEXT NOT NULL,
                     bestillings_dato TEXT NOT NULL,
                     onske_dato TEXT NOT NULL,
                     kommentar TEXT,
@@ -40,8 +41,8 @@ def update_stroing_table_structure():
             # Kopier data fra den gamle tabellen til den nye
             cursor.execute(
                 """
-                INSERT INTO stroing_bestillinger_new (id, bruker, bestillings_dato, onske_dato)
-                SELECT id, bruker, bestillings_dato, onske_dato FROM stroing_bestillinger
+                INSERT INTO stroing_bestillinger_new (id, customer_id, bestillings_dato, onske_dato)
+                SELECT id, customer_id, bestillings_dato, onske_dato FROM stroing_bestillinger
             """
             )
 
@@ -63,11 +64,11 @@ def update_stroing_table_structure():
 
 
 # Create
-def lagre_stroing_bestilling(user_id: str, onske_dato: str, kommentar: str = None) -> bool:
+def lagre_stroing_bestilling(customer_id: str, onske_dato: str, kommentar: str = None) -> bool:
     try:
         # Valider bruker-ID
-        if not validate_user_id(user_id):
-            logger.error(f"Ugyldig bruker-ID: {user_id}")
+        if not validate_customer_id(customer_id):
+            logger.error(f"Ugyldig kunde-ID: {customer_id}")
             return False
 
         # Valider ønsket dato
@@ -87,13 +88,13 @@ def lagre_stroing_bestilling(user_id: str, onske_dato: str, kommentar: str = Non
             c.execute(
                 """
                 SELECT COUNT(*) FROM stroing_bestillinger 
-                WHERE bruker = ? AND date(onske_dato) = date(?)
+                WHERE customer_id = ? AND date(onske_dato) = date(?)
                 """,
-                (user_id, onske_dato)
+                (customer_id, onske_dato)
             )
             
             if c.fetchone()[0] > 0:
-                logger.warning(f"Bruker {user_id} har allerede strøingsbestilling på {onske_dato}")
+                logger.warning(f"Bruker {customer_id} har allerede strøingsbestilling på {onske_dato}")
                 return False
 
             bestillings_dato = datetime.now(TZ).isoformat()
@@ -101,15 +102,15 @@ def lagre_stroing_bestilling(user_id: str, onske_dato: str, kommentar: str = Non
             c.execute(
                 """
                 INSERT INTO stroing_bestillinger 
-                (bruker, bestillings_dato, onske_dato, kommentar, status)
-                VALUES (?, ?, ?, ?, ?)
+                (customer_id, bestillings_dato, onske_dato, kommentar)
+                VALUES (?, ?, ?, ?)
                 """,
-                (user_id, bestillings_dato, onske_dato, kommentar, "Pending"),
+                (customer_id, bestillings_dato, onske_dato, kommentar),
             )
 
             conn.commit()
 
-        logger.info(f"Ny strøingsbestilling lagret for bruker: {user_id}")
+        logger.info(f"Ny strøingsbestilling lagret for bruker: {customer_id}")
         return True
 
     except sqlite3.Error as e:
@@ -121,65 +122,68 @@ def lagre_stroing_bestilling(user_id: str, onske_dato: str, kommentar: str = Non
 
 
 def bestill_stroing():
-    if "title" not in st.session_state:
-        st.session_state["title"] = "Bestill Strøing"
-    st.title(st.session_state["title"])
+    try:
+        st.title("Bestill Strøing")
+        
+        customer_id = get_current_user_id()
+        if not customer_id:
+            logger.error("Ingen customer_id funnet i sesjonen")
+            st.error("Du må være logget inn for å bestille strøing")
+            return
+            
+        # Informasjonstekst
+        st.info(
+            """
+        Strøing av stikkveier i Fjellbergsskardet Hyttegrend - Sesong 2024/2025
 
-    # Informasjonstekst
-    st.info(
+        - Vi strør veiene når brøytekontakten vurderer det som nødvendig og effektivt ut fra værforholdene. 
+        - Hovedveien (Gullingvegen-Tjernet) blir alltid prioritert. Resten strøs på bestilling.
+        - Ønsker du strøing av stikkveien din, kan du bestille dette her. 
+        - Priser: Du betaler 500 kroner for sesongen, pluss 150 kroner for hver gang det strøs. 
+        
+        Tips ved glatte forhold:
+        - Bruk piggdekk/kjetting
+        - Ha med litt strøsand, spade og tau i bilen. 
+        - Bruk strøsandkassene. Må stroppes etter bruk!
+        - Brodder til beina
         """
-    Strøing av stikkveier i Fjellbergsskardet Hyttegrend - Sesong 2024/2025
-
-    - Vi strør veiene når brøytekontakten vurderer det som nødvendig og effektivt ut fra værforholdene. 
-    - Hovedveien (Gullingvegen-Tjernet) blir alltid prioritert. Resten strøs på bestilling.
-    - Ønsker du strøing av stikkveien din, kan du bestille dette her. 
-    - Priser: Du betaler 500 kroner for sesongen, pluss 150 kroner for hver gang det strøs. 
-    
-    Tips ved glatte forhold:
-    - Bruk piggdekk/kjetting
-    - Ha med litt strøsand, spade og tau i bilen. 
-    - Bruk strøsandkassene. Må stroppes etter bruk!
-    - Brodder til beina
-    """
-    )
-
-    # Generer liste med dagens dato og de neste 4 dagene
-    today = datetime.now(TZ).date()
-    available_dates = [today + timedelta(days=i) for i in range(5)]
-
-    onske_dato = st.selectbox(
-        "Velg dato for strøing:",
-        available_dates,
-        format_func=lambda x: x.strftime("%d.%m.%Y (%A)"),  # Viser ukedag i parentes
-    )
-
-    if onske_dato == today:
-        st.warning("Det tas forbehold om godkjenning fra brøytekontakten.")
-    elif onske_dato.weekday() >= 5:  # Lørdag eller søndag
-        st.warning("Det tas forbehold om godkjenning fra brøytekontakten.")
-
-    if st.button("Bestill Strøing"):
-        result = lagre_stroing_bestilling(
-            st.session_state.user_id, onske_dato.isoformat()
         )
-        if result:
-            st.success("Bestilling av strøing er registrert!")
-            logger.info(
-                f"Strøing order successfully registered for user {st.session_state.user_id}"
-            )
-        else:
-            st.error(
-                f"Du har allerede en bestilling for {onske_dato.strftime('%d.%m.%Y')}. "
-                "Du kan ikke bestille strøing flere ganger på samme dato."
-            )
-            logger.error(
-                f"Failed to register strøing order for user {st.session_state.user_id}"
-            )
 
-        st.info("Merk: Du vil bli fakturert kun hvis strøing utføres.")
+        # Generer liste med dagens dato og de neste 4 dagene
+        today = datetime.now(TZ).date()
+        available_dates = [today + timedelta(days=i) for i in range(5)]
 
-    # Vis tidligere bestillinger én gang, med overskrift
-    display_stroing_bookings(st.session_state.user_id, show_header=True)
+        onske_dato = st.selectbox(
+            "Velg dato for strøing:",
+            available_dates,
+            format_func=lambda x: x.strftime("%d.%m.%Y (%A)"),  # Viser ukedag i parentes
+        )
+
+        if onske_dato == today:
+            st.warning("Det tas forbehold om godkjenning fra brøytekontakten.")
+        elif onske_dato.weekday() >= 5:  # Lørdag eller søndag
+            st.warning("Det tas forbehold om godkjenning fra brøytekontakten.")
+
+        if st.button("Bestill Strøing"):
+            if lagre_stroing_bestilling(customer_id, onske_dato.isoformat()):
+                st.success("Bestilling av strøing er registrert!")
+                logger.info(f"Strøing order successfully registered for user {customer_id}")
+                st.rerun()
+            else:
+                st.error(
+                    f"Du har allerede en bestilling for {onske_dato.strftime('%d.%m.%Y')}. "
+                    "Du kan ikke bestille strøing flere ganger på samme dato."
+                )
+                logger.error(f"Failed to register strøing order for user {customer_id}")
+
+            st.info("Merk: Du vil bli fakturert kun hvis strøing utføres.")
+
+        # Vis tidligere bestillinger
+        display_stroing_bookings(customer_id, show_header=True)
+            
+    except Exception as e:
+        logger.error(f"Feil i bestill_stroing: {str(e)}")
+        st.error("Det oppstod en feil. Vennligst prøv igjen senere.")
 
 
 # Read
@@ -233,7 +237,7 @@ def hent_bruker_stroing_bestillinger(user_id):
         with get_db_connection("stroing") as conn:
             query = """
             SELECT * FROM stroing_bestillinger 
-            WHERE bruker = ? 
+            WHERE customer_id = ? 
             ORDER BY bestillings_dato DESC
             """
             df = pd.read_sql_query(query, conn, params=(user_id,))
@@ -266,47 +270,11 @@ def hent_stroing_bestilling(bestilling_id: int) -> Optional[Dict[str, Any]]:
         )
         return None
 
-
-# def hent_utforte_stroingsbestillinger() -> pd.DataFrame:
-#     try:
-#         with get_db_connection('stroing') as conn:
-#             query = """
-#             SELECT * FROM stroing_bestillinger
-#             WHERE utfort_dato IS NOT NULL
-#             ORDER BY utfort_dato DESC
-#             """
-#             df = pd.read_sql_query(query, conn)
-
-#         for col in ['bestillings_dato', 'onske_dato', 'utfort_dato']:
-#             df[col] = pd.to_datetime(df[col])
-
-#         return df
-#     except Exception as e:
-#         logger.error(f"Feil ved henting av utførte strøingsbestillinger: {str(e)}")
-#         return pd.DataFrame()
-
-
 def count_stroing_bestillinger():
     with get_db_connection("stroing") as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM stroing_bestillinger")
         return cursor.fetchone()[0]
-
-
-# Delete
-# def slett_stroingsbestilling(bestilling_id):
-#     try:
-#         query = "DELETE FROM stroing_bestillinger WHERE id = ?"
-#         with get_db_connection('stroing') as conn:
-#             cursor = conn.cursor()
-#             cursor.execute(query, (bestilling_id,))
-#             conn.commit()
-#         logger.info(f"Strøingsbestilling med ID {bestilling_id} ble slettet.")
-#         return True
-#     except Exception as e:
-#         logger.error(f"Feil ved sletting av strøingsbestilling {bestilling_id}: {str(e)}")
-#         return False
-
 
 def admin_stroing_page():
     try:
@@ -343,7 +311,7 @@ def admin_stroing_page():
             
             if not aktive_bestillinger.empty:
                 # Legg til rode informasjon
-                aktive_bestillinger['rode'] = aktive_bestillinger['bruker'].apply(get_rode)
+                aktive_bestillinger['rode'] = aktive_bestillinger['customer_id'].apply(get_rode)
                 
                 # Formater visningsdata
                 visning_df = aktive_bestillinger.copy()
@@ -355,8 +323,8 @@ def admin_stroing_page():
                 })
                 
                 # Velg og sorter kolonner
-                visning_df = visning_df[['Dato', 'Ukedag', 'rode', 'bruker']]
-                visning_df = visning_df.rename(columns={'bruker': 'Hytte'})
+                visning_df = visning_df[['Dato', 'Ukedag', 'rode', 'customer_id']]
+                visning_df = visning_df.rename(columns={'customer_id': 'Hytte'})
                 visning_df = visning_df.sort_values(['Dato', 'rode', 'Hytte'])
                 
                 # Vis dataframe
@@ -473,7 +441,7 @@ def admin_stroing_page():
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "bruker": "Bruker",
+                    "customer_id": "Bruker",
                     "bestillings_dato": "Bestilt",
                     "onske_dato": "Ønsket dato",
                     "kommentar": "Kommentar",
@@ -482,55 +450,72 @@ def admin_stroing_page():
             )
 
     except Exception as e:
-        logger.error(f"Feil i admin_stroing_page: {str(e)}", exc_info=True)
-        st.error("Det oppstod en feil ved håndtering av strøingsbestillinger")
-
+        logger.error(f"Feil i admin_stroing_page: {str(e)}")
+        st.error("Det oppstod en feil ved lasting av strøingsoversikten")
 
 # Database initialization and maintenance
 def verify_stroing_data():
-    with get_db_connection("stroing") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM stroing_bestillinger")
-        data = cursor.fetchall()
-        logger.info(f"Current entries in stroing_bestillinger: {len(data)}")
-        for row in data:
-            logger.info(f"Row: {row}")
-
+    try:
+        with get_db_connection("stroing") as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM stroing_bestillinger")
+            
+            # Konverter resultater til DataFrame
+            columns = [description[0] for description in cursor.description]
+            results = cursor.fetchall()
+            df = pd.DataFrame(results, columns=columns)
+            
+            if df.empty:
+                logger.info("Ingen strøingsbestillinger funnet")
+                return True
+                
+            # Valider datoformater
+            df['bestillings_dato'] = pd.to_datetime(df['bestillings_dato'], errors='coerce')
+            df['onske_dato'] = pd.to_datetime(df['onske_dato'], errors='coerce')
+            
+            # Sjekk for ugyldige datoer
+            invalid_dates = df[df['bestillings_dato'].isna() | df['onske_dato'].isna()]
+            if not invalid_dates.empty:
+                logger.error(f"Fant {len(invalid_dates)} bestillinger med ugyldige datoer")
+                return False
+                
+            # Sjekk for gyldige kunde-IDer
+            invalid_customers = df[~df['customer_id'].apply(validate_customer_id)]
+            if not invalid_customers.empty:
+                logger.error(f"Fant {len(invalid_customers)} bestillinger med ugyldige kunde-IDer")
+                return False
+                
+            logger.info("Strøingsdata verifisert uten feil")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Feil ved verifisering av strøingsdata: {str(e)}")
+        return False
 
 # Visninger
-def display_stroing_bookings(user_id, show_header=False, show_stats=False):
-    """
-    Viser strøingsbestillinger for en bruker
-    
-    Args:
-        user_id: Bruker-ID
-        show_header: Om overskrift skal vises
-        show_stats: Om statistikk skal vises
-    """
-    if show_header:
-        st.subheader("Dine tidligere strøing-bestillinger")
-
-    previous_bookings = hent_bruker_stroing_bestillinger(user_id)
-
-    if previous_bookings.empty:
-        st.info("Du har ingen tidligere strøing-bestillinger.")
-        return
-
-    # Vis bestillinger
-    for _, booking in previous_bookings.iterrows():
-        with st.expander(f"Bestilling - Ønsket dato: {booking['onske_dato'].strftime('%Y-%m-%d')}"):
-            st.write(f"Bestilt: {booking['bestillings_dato'].strftime('%Y-%m-%d %H:%M')}")
-            st.write(f"Ønsket dato: {booking['onske_dato'].date()}")
-            if pd.notnull(booking.get('kommentar')):
-                st.write(f"Kommentar: {booking['kommentar']}")
-            if pd.notnull(booking.get('status')):
-                st.write(f"Status: {booking['status']}")
-
-    # Vis statistikk hvis ønsket
-    if show_stats:
-        st.subheader("Statistikk")
-        total = len(previous_bookings)
-        st.info(f"Du har totalt {total} strøingsbestilling{'er' if total != 1 else ''}")
+def display_stroing_bookings(customer_id: str, show_header: bool = False):
+    try:
+        if show_header:
+            st.header("Dine strøingsbestillinger")
+            
+        bookings = hent_bruker_stroing_bestillinger(customer_id)
+        if bookings.empty:
+            st.info("Du har ingen aktive strøingsbestillinger")
+            return
+            
+        # Vis bestillinger i ekspanderende seksjoner
+        for _, booking in bookings.iterrows():
+            with st.expander(
+                f"Bestilling for {booking['onske_dato'].strftime('%d.%m.%Y')}"
+            ):
+                st.write(f"Bestilt: {booking['bestillings_dato'].strftime('%d.%m.%Y %H:%M')}")
+                if booking.get('kommentar'):
+                    st.write(f"Kommentar: {booking['kommentar']}")
+                st.write(f"Status: {booking.get('status', 'Venter')}")
+                
+    except Exception as e:
+        logger.error(f"Feil ved visning av strøingsbestillinger: {str(e)}")
+        st.error("Kunne ikke vise dine bestillinger. Vennligst prøv igjen senere.")
 
 def validate_stroing_data(data: pd.DataFrame) -> pd.DataFrame:
     """Validerer og renser strøingsdata"""
@@ -545,8 +530,8 @@ def validate_stroing_data(data: pd.DataFrame) -> pd.DataFrame:
         # Fjern ugyldige datoer
         df = df.dropna(subset=["bestillings_dato", "onske_dato"])
 
-        # Valider bruker-IDer
-        df = df[df["bruker"].apply(lambda x: validate_user_id(str(x)))]
+        # Valider kunde-IDer
+        df = df[df["customer_id"].apply(lambda x: validate_customer_id(str(x)))]
 
         return df
 
@@ -575,32 +560,33 @@ def initialize_stroing_database():
         with get_db_connection("stroing") as conn:
             cursor = conn.cursor()
 
-            # Opprett versjonstabell
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    version TEXT PRIMARY KEY,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """
-            )
-
             # Opprett hovedtabell med oppdatert skjema
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS stroing_bestillinger (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    bruker TEXT,
-                    bestillings_dato TEXT,
-                    onske_dato TEXT,
+                    customer_id TEXT NOT NULL,
+                    bestillings_dato TEXT NOT NULL,
+                    onske_dato TEXT NOT NULL,
                     kommentar TEXT,
                     status TEXT
                 )
             """
             )
+            
+            # Opprett indeks
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_stroing_customer_id 
+                ON stroing_bestillinger(customer_id)
+            """)
+
+            conn.commit()
+            logger.info("Stroing database initialized successfully")
+            return True
 
     except Exception as e:
         logger.error(f"Feil ved initialisering av strøing-databasen: {str(e)}")
+        return False
 
 def lag_stroing_graf(df):
     """Lager graf over strøingsbestillinger"""

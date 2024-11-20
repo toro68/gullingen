@@ -17,7 +17,7 @@ from utils.core.config import (
     TZ,
 )
 from utils.core.logging_config import get_logger
-from utils.core.validation_utils import sanitize_input, validate_cabin_id, validate_user_id
+from utils.core.validation_utils import sanitize_input, validate_cabin_id, validate_customer_id
 from utils.db.db_utils import get_db_connection
 from utils.services.customer_utils import get_customer_by_id
 from utils.services.utils import get_passwords
@@ -25,7 +25,7 @@ from utils.services.utils import get_passwords
 logger = get_logger(__name__)
 
 
-def check_rate_limit(user_id: str) -> bool:
+def check_rate_limit(customer_id: str) -> bool:
     try:
         with get_db_connection(
             "login_history"
@@ -35,9 +35,9 @@ def check_rate_limit(user_id: str) -> bool:
             cursor.execute(
                 """
                 SELECT COUNT(*) FROM login_history 
-                WHERE user_id = ? AND success = 0 AND login_time > ?
+                WHERE customer_id = ? AND success = 0 AND login_time > ?
             """,
-                (user_id, cutoff_time),
+                (customer_id, cutoff_time),
             )
             return cursor.fetchone()[0] < MAX_ATTEMPTS
     except Exception as e:
@@ -45,51 +45,59 @@ def check_rate_limit(user_id: str) -> bool:
         return True
 
 
-def authenticate_user(user_id: str, password: str) -> Tuple[bool, str]:
+def verify_password(customer_id: str, password: str) -> bool:
+    """Verifiserer passord for en kunde"""
     try:
-        logger.info(f"=== STARTING AUTHENTICATION FOR USER {user_id} ===")
+        passwords = get_passwords()  # Bruker get_passwords fra utils.services.utils
+        if not passwords or customer_id not in passwords:
+            logger.warning(f"No password found for customer {customer_id}")
+            return False
+            
+        return passwords[customer_id] == password
         
-        # Valider input
-        if not validate_user_id(user_id):
-            logger.warning(f"Invalid user ID format: {user_id}")
-            return False, "Ugyldig hyttenummer"
-            
-        # Hent passord fra secrets
-        passwords = get_passwords()
-        correct_password = passwords.get(user_id)
-        
-        if not correct_password:
-            logger.warning(f"No password found for user {user_id}")
-            return False, "Bruker ikke funnet"
-            
-        # Sjekk passord
-        if password == correct_password:
-            logger.info(f"Password verified for user {user_id}")
-            
-            try:
-                # Logg vellykket innlogging
-                with get_db_connection("login_history") as login_conn:
-                    login_cursor = login_conn.cursor()
-                    login_cursor.execute(
-                        """
-                        INSERT INTO login_history (user_id, login_time, success) 
-                        VALUES (?, datetime('now'), 1)
-                        """,
-                        (user_id,),
-                    )
-                    login_conn.commit()
-                    logger.info(f"Successfully logged login for user {user_id}")
-            except Exception as e:
-                logger.error(f"Failed to record login: {str(e)}", exc_info=True)
-                
-            return True, None
-        else:
-            logger.warning(f"Invalid password attempt for user {user_id}")
-            return False, "Feil passord"
-
     except Exception as e:
-        logger.error(f"Authentication error: {str(e)}", exc_info=True)
-        return False, f"Systemfeil: {str(e)}"
+        logger.error(f"Error verifying password: {str(e)}")
+        return False
+
+
+def authenticate_user(customer_id: str, password: str) -> Tuple[bool, Optional[str]]:
+    """Autentiserer en bruker"""
+    try:
+        logger.info(f"=== STARTING AUTHENTICATION FOR USER {customer_id} ===")
+        
+        # Verifiser passord
+        if not verify_password(customer_id, password):
+            logger.warning(f"Invalid password for user {customer_id}")
+            log_login_attempt(customer_id, False)
+            return False, "Feil hyttenummer eller passord"
+            
+        logger.info(f"Password verified for user {customer_id}")
+        
+        # Hent kundedata
+        customer = get_customer_by_id(customer_id)
+        if not customer:
+            logger.error(f"Kunne ikke hente kundedata for {customer_id}")
+            return False, "Kunne ikke hente brukerdata"
+        
+        # Logg vellykket innlogging
+        log_login_attempt(customer_id, True)
+        
+        # Oppdater sesjonsinformasjon
+        st.session_state.authenticated = True
+        st.session_state.customer_id = customer_id
+        st.session_state.authenticated_user = {
+            "customer_id": customer_id,
+            "type": customer.get("type", "Customer")
+        }
+        st.session_state.last_activity = time.time()
+        
+        logger.info(f"Bruker {customer_id} autentisert og sesjon oppdatert")
+        logger.info(f"Session state etter autentisering: {dict(st.session_state)}")
+        return True, None
+        
+    except Exception as e:
+        logger.error(f"Autentiseringsfeil: {str(e)}")
+        return False, "En feil oppstod under innlogging"
 
 
 def check_session_timeout() -> bool:
@@ -111,34 +119,29 @@ def check_session_timeout() -> bool:
 def login_page():
     """Viser innloggingssiden"""
     st.title("Fjellbergsskardet Hyttegrend")
-
+    
     with st.form("login_form"):
-        id = st.text_input("Hyttenummer", key="login_id")
+        user_id = st.text_input("Hyttenummer", key="login_id")
         password = st.text_input("Passord", type="password", key="login_password")
         submitted = st.form_submit_button("Logg inn")
-
+        
         if submitted:
-            with st.spinner("Logger inn..."):
-                success, error_msg = authenticate_user(id, password)
+            success, error_msg = authenticate_user(user_id, password)
+            
+            if success:
+                # Sjekk admin status
+                customer = get_customer_by_id(user_id)
+                if customer and customer.get("type") == "Superadmin":
+                    st.session_state.is_admin = True
 
-                if success:
-                    st.session_state.authenticated = True
-                    st.session_state.user_id = sanitize_input(id, input_type="cabin_id")
-                    st.session_state.last_activity = time.time()
-
-                    # Sjekk admin status
-                    customer = get_customer_by_id(st.session_state.user_id)
-                    if customer and customer.get("role") == "admin":
-                        st.session_state.is_admin = True
-
-                    st.success("Innlogging vellykket!")
-                    time.sleep(0.5)
-                    st.rerun()
-                else:
-                    st.error(error_msg or "Feil hyttenummer eller passord")
+                st.success("Innlogging vellykket!")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error(error_msg or "Feil ved innlogging")
 
 
-def log_login_attempt(user_id: str, success: bool):
+def log_login_attempt(customer_id: str, success: bool):
     """Logger innloggingsforsøk"""
     try:
         with get_db_connection("login_history") as conn:
@@ -150,10 +153,10 @@ def log_login_attempt(user_id: str, success: bool):
             )
             cursor.execute(
                 """
-                INSERT INTO login_history (user_id, login_time, success)
+                INSERT INTO login_history (customer_id, login_time, success)
                 VALUES (?, ?, ?)
             """,
-                (user_id, current_time, 1 if success else 0),
+                (customer_id, current_time, 1 if success else 0),
             )
             conn.commit()
             return True
@@ -162,16 +165,30 @@ def log_login_attempt(user_id: str, success: bool):
         return False
 
 
-def can_manage_feedback(user_id: str) -> bool:
+def can_manage_feedback(customer_id: str) -> bool:
     """Sjekker om bruker har tilgang til å administrere feedback"""
     try:
         with get_db_connection("customer") as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT type FROM customer WHERE customer_id = ?", (user_id,)
+                "SELECT type FROM customer WHERE customer_id = ?", (customer_id,)
             )
             result = cursor.fetchone()
             return result and result[0] in ["Admin", "Superadmin"]
     except Exception as e:
         logger.error(f"Feil ved sjekk av feedback-tilgang: {str(e)}")
         return False
+
+
+def verify_session_state():
+    """Logger nåværende sesjonstilstand for debugging"""
+    logger.info("=== Current Session State ===")
+    logger.info(f"authenticated: {st.session_state.get('authenticated')}")
+    logger.info(f"authenticated_user: {st.session_state.get('authenticated_user')}")
+    logger.info(f"customer_id: {st.session_state.get('customer_id')}")
+    logger.info("===========================")
+
+
+def get_current_user_id() -> Optional[str]:
+    """Henter gjeldende bruker-ID fra sesjonen"""
+    return st.session_state.get("customer_id")

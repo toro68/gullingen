@@ -76,11 +76,11 @@ def validate_cabin_id(cabin_id: str) -> bool:
     return False
 
 
-def validate_user_id(user_id: str) -> bool:
+def validate_customer_id(customer_id: str) -> bool:
     """
     Validerer bruker-ID (samme som cabin_id for nå)
     """
-    return validate_cabin_id(user_id)
+    return validate_cabin_id(customer_id)
 
 
 def validate_user_input(input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -231,7 +231,7 @@ def validate_data(data):
 def validate_feedback(feedback_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
     """Validerer feedback data"""
     try:
-        required_fields = ["type", "comment", "innsender"]
+        required_fields = ["type", "comment", "customer_id"]
 
         # Sjekk påkrevde felt
         for field in required_fields:
@@ -247,11 +247,11 @@ def validate_feedback(feedback_data: Dict[str, Any]) -> Tuple[bool, Optional[str
         if len(feedback_data["comment"]) > 1000:
             return False, "Kommentar er for lang (maks 1000 tegn)"
 
-        # Valider innsender
-        if not validate_cabin_id(feedback_data["innsender"]):
+        # Valider customer_id
+        if not validate_cabin_id(feedback_data["customer_id"]):
             return (
                 False,
-                f"Ugyldig hyttenummer for innsender: {feedback_data['innsender']}",
+                f"Ugyldig hyttenummer for customer_id: {feedback_data['customer_id']}",
             )
 
         return True, None
@@ -259,3 +259,10 @@ def validate_feedback(feedback_data: Dict[str, Any]) -> Tuple[bool, Optional[str
     except Exception as e:
         logger.error(f"Feil i feedback validering: {str(e)}")
         return False, f"Systemfeil: {str(e)}"
+
+
+def validate_user_id(user_id: str) -> bool:
+    """
+    Validerer bruker-ID (alias for validate_customer_id)
+    """
+    return validate_customer_id(user_id)

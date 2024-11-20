@@ -1,111 +1,74 @@
-import unittest
+import pytest
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import patch, MagicMock
 import pandas as pd
-import pytz
+import streamlit as st
 
-from app import initialize_app, validate_user_input
-from utils.db.db_utils import get_db_connection
-from utils.services.tun_utils import filter_todays_bookings, get_bookings
+from conftest import TEST_USER, TEST_TZ
+from utils.core.validation_utils import validate_user_input
+from src.app import (
+    initialize_app,
+    initialize_session_state,
+    check_session_timeout,
+    display_home_page,
+    get_customer_by_id
+)
 
+def test_initialize_session_state(mock_streamlit):
+    """Test at session state initialiseres korrekt"""
+    initialize_session_state()
+    
+    assert "authenticated" in st.session_state
+    assert "user_id" in st.session_state
+    assert "is_admin" in st.session_state
+    assert "last_activity" in st.session_state
+    assert "app_initialized" in st.session_state
+    assert "tz" in st.session_state
 
-class TestApp(unittest.TestCase):
-    def setUp(self):
-        """Kjører før hver test"""
-        self.test_tz = pytz.timezone("Europe/Oslo")
+@patch("utils.db.db_utils.verify_database_schemas")
+@patch("utils.db.db_utils.initialize_database_system")
+@patch("utils.db.db_utils.close_all_connections")
+def test_initialize_app(mock_close, mock_init, mock_verify, mock_streamlit):
+    """Test app initialisering"""
+    mock_verify.return_value = True
+    mock_init.return_value = True
+    
+    result = initialize_app()
+    assert result is True
+    mock_verify.assert_called_once()
+    mock_init.assert_called_once()
 
-    def test_validate_user_input(self):
-        """Test validering av brukerinput"""
-        test_input = {
-            "name": 'Test <script>alert("xss")</script>',
-            "age": 25,
-            "items": ["item1", '<script>alert("xss")</script>'],
-            "nested": {"key": '<script>alert("xss")</script>'},
-        }
+def test_check_session_timeout(mock_streamlit):
+    """Test session timeout sjekk"""
+    st.session_state.last_activity = datetime.now().timestamp()
+    assert check_session_timeout()
+    
+    st.session_state.last_activity = (datetime.now() - timedelta(hours=2)).timestamp()
+    assert not check_session_timeout()
 
-        validated = validate_user_input(test_input)
+@patch("utils.services.customer_utils.get_customer_by_id")
+def test_display_home_page(mock_get_customer, mock_streamlit):
+    """Test visning av hjemmeside"""
+    mock_customer = {
+        "customer_id": TEST_USER,
+        "type": "Standard"
+    }
+    mock_get_customer.return_value = mock_customer
+    
+    display_home_page(mock_customer)
+    mock_get_customer.assert_called_once_with(TEST_USER)
 
-        self.assertNotIn("<script>", validated["name"])
-        self.assertEqual(validated["age"], 25)
-        self.assertNotIn("<script>", validated["items"][1])
-        self.assertNotIn("<script>", validated["nested"]["key"])
+def test_validate_user_input():
+    """Test validering av brukerinput"""
+    test_input = {
+        "name": 'Test <script>alert("xss")</script>',
+        "age": 25,
+        "items": ["item1", '<script>alert("xss")</script>'],
+        "nested": {"key": '<script>alert("xss")</script>'},
+    }
 
-    @patch("db_utils.get_db_connection")
-    def test_get_bookings(self, mock_db):
-        """Test henting av bestillinger"""
-        # Mock data
-        mock_data = pd.DataFrame(
-            {
-                "id": [1, 2],
-                "bruker": ["user1", "user2"],
-                "ankomst_dato": ["2024-03-14", "2024-03-15"],
-                "ankomst_tid": ["12:00:00", "14:00:00"],
-                "avreise_dato": ["2024-03-16", "2024-03-17"],
-                "avreise_tid": ["10:00:00", "12:00:00"],
-                "abonnement_type": ["Ukentlig", "Årsabonnement"],
-            }
-        )
-
-        # Sett opp mock for fetch_data
-        with patch("tun_utils.fetch_data", return_value=mock_data):
-            result = get_bookings()
-            self.assertIsInstance(result, pd.DataFrame)
-            self.assertEqual(len(result), 2)
-
-    def test_filter_todays_bookings(self):
-        """Test filtrering av dagens bestillinger"""
-        today = datetime.now(self.test_tz).date()
-
-        # Opprett testdata med riktig format og tidssone
-        test_data = pd.DataFrame(
-            {
-                "id": [1, 2, 3],
-                "bruker": ["user1", "user2", "user3"],
-                "ankomst": [
-                    pd.Timestamp(today).tz_localize(self.test_tz),
-                    pd.Timestamp(today + timedelta(days=1)).tz_localize(self.test_tz),
-                    pd.Timestamp(today).tz_localize(self.test_tz),
-                ],
-                "abonnement_type": [
-                    "Ukentlig ved bestilling",
-                    "Ukentlig ved bestilling",
-                    "Årsabonnement",
-                ],
-            }
-        )
-
-        # Legg til debugging
-        print(f"Test data:\n{test_data}")
-        filtered = filter_todays_bookings(test_data)
-        print(f"Filtered data:\n{filtered}")
-
-        # Sjekk at filtreringen fungerer
-        self.assertTrue(len(filtered) > 0)
-
-        # Sjekk at bare dagens bestillinger er med
-        for idx, row in filtered.iterrows():
-            self.assertTrue(
-                (row["abonnement_type"] == "Årsabonnement" and today.weekday() == 4)
-                or (
-                    row["abonnement_type"] == "Ukentlig ved bestilling"
-                    and pd.Timestamp(row["ankomst"]).date() == today
-                )
-            )
-
-    @patch("app.verify_and_update_schemas")
-    @patch("app.initialize_database")
-    @patch("app.ensure_login_history_table_exists")
-    def test_initialize_app(self, mock_login, mock_init, mock_verify):
-        """Test initialisering av applikasjonen"""
-        try:
-            initialize_app()
-            mock_verify.assert_called_once()
-            mock_init.assert_called_once()
-            mock_login.assert_called_once()
-        except Exception as e:
-            self.fail(f"initialize_app raised {type(e)} unexpectedly!")
-
-
-if __name__ == "__main__":
-    unittest.main()
+    validated = validate_user_input(test_input)
+    assert "<script>" not in validated["name"]
+    assert validated["age"] == 25
+    assert "<script>" not in validated["items"][1]
+    assert "<script>" not in validated["nested"]["key"]

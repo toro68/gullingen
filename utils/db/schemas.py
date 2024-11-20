@@ -11,9 +11,9 @@ def get_database_schemas():
             CREATE TABLE IF NOT EXISTS feedback (
                 id INTEGER PRIMARY KEY,
                 type TEXT,
+                customer_id TEXT,
                 datetime TEXT,
                 comment TEXT,
-                innsender TEXT,
                 status TEXT,
                 status_changed_by TEXT,
                 status_changed_at TEXT,
@@ -27,7 +27,7 @@ def get_database_schemas():
         "login_history": """
             CREATE TABLE IF NOT EXISTS login_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
+                customer_id TEXT NOT NULL,
                 login_time TEXT NOT NULL,
                 success INTEGER NOT NULL DEFAULT 0
             )
@@ -35,9 +35,9 @@ def get_database_schemas():
         "stroing": """
             CREATE TABLE IF NOT EXISTS stroing_bestillinger (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                bruker TEXT,
-                bestillings_dato TEXT,
-                onske_dato TEXT,
+                customer_id TEXT NOT NULL,
+                bestillings_dato TEXT NOT NULL,
+                onske_dato TEXT NOT NULL,
                 kommentar TEXT,
                 status TEXT
             )
@@ -45,7 +45,7 @@ def get_database_schemas():
         "tunbroyting": """
             CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
                 id INTEGER PRIMARY KEY,
-                bruker TEXT,
+                customer_id TEXT,
                 ankomst_dato DATE,
                 ankomst_tid TIME,
                 avreise_dato DATE,

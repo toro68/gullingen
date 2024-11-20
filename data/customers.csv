@@ -1,4 +1,4 @@
-"Id","Latitude","Longitude","Subscription","Type"
+"customer_id","Latitude","Longitude","Subscription","Type"
 "142","59.38784","6.43636","star_white","Customer"
 "145","59.38838","6.43878","star_white","Customer"
 "149","59.38873","6.4379","star_white","Customer"

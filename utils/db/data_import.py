@@ -40,7 +40,7 @@ def import_customers_from_csv() -> bool:
         # Les CSV-filen
         try:
             df = pd.read_csv(csv_path, dtype={
-                'Id': str,
+                'customer_id': str,
                 'Latitude': str,
                 'Longitude': str,
                 'Subscription': str,
@@ -48,7 +48,7 @@ def import_customers_from_csv() -> bool:
             }, encoding='utf-8')
         except UnicodeDecodeError:
             df = pd.read_csv(csv_path, dtype={
-                'Id': str,
+                'customer_id': str,
                 'Latitude': str,
                 'Longitude': str,
                 'Subscription': str,
@@ -65,7 +65,7 @@ def import_customers_from_csv() -> bool:
                     (customer_id, lat, lon, subscription, type)
                     VALUES (?, ?, ?, ?, ?)
                 """, (
-                    str(row['Id']),
+                    str(row['customer_id']),
                     row['Latitude'],
                     row['Longitude'],
                     str(row['Subscription']),

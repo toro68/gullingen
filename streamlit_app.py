@@ -63,7 +63,7 @@ try:
     if not st.session_state.get("authenticated", False):
         login_page()
     else:
-        customer = get_customer_by_id(st.session_state.user_id)
+        customer = get_customer_by_id(st.session_state.customer_id)
         if customer is None:
             st.error("Kunne ikke finne brukerinformasjon")
             st.session_state.authenticated = False

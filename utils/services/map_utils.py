@@ -36,7 +36,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
         
         if aktive_bestillinger is None or aktive_bestillinger.empty:
             logger.info("Ingen aktive bestillinger for dagens dato")
-            aktive_bestillinger = pd.DataFrame(columns=["bruker", "abonnement_type", "ankomst_dato", "avreise_dato"])
+            aktive_bestillinger = pd.DataFrame(columns=["customer_id", "abonnement_type", "ankomst_dato", "avreise_dato"])
         
         logger.info(f"Aktive bestillinger: {aktive_bestillinger.to_string()}")
         
@@ -50,7 +50,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             if pd.isna(lat) or pd.isna(lon):
                 continue
                 
-            cabin_bookings = aktive_bestillinger[aktive_bestillinger["bruker"].astype(str) == str(cabin_id)]
+            cabin_bookings = aktive_bestillinger[aktive_bestillinger["customer_id"].astype(str) == str(cabin_id)]
             
             point = {
                 "lat": lat,
@@ -78,8 +78,68 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             st.error("Kunne ikke generere kartvisning")
             return
             
-        # Opprett kartvisning her...
+        # Opprett kartdata for Plotly
+        map_data = []
         
+        # Grupper punkter etter type
+        yearly_points = {"lat": [], "lon": [], "text": [], "name": "Årsabonnement"}
+        weekly_points = {"lat": [], "lon": [], "text": [], "name": "Ukentlig bestilling"}
+        inactive_points = {"lat": [], "lon": [], "text": [], "name": "Ingen bestilling"}
+        
+        for point in points_data:
+            if point["color"] == GREEN:
+                yearly_points["lat"].append(point["lat"])
+                yearly_points["lon"].append(point["lon"])
+                yearly_points["text"].append(point["text"])
+            elif point["color"] == RED:
+                weekly_points["lat"].append(point["lat"])
+                weekly_points["lon"].append(point["lon"])
+                weekly_points["text"].append(point["text"])
+            else:
+                inactive_points["lat"].append(point["lat"])
+                inactive_points["lon"].append(point["lon"])
+                inactive_points["text"].append(point["text"])
+        
+        # Legg til scatter traces for hver type
+        if yearly_points["lat"]:
+            map_data.append({
+                "type": "scattermapbox",
+                "lat": yearly_points["lat"],
+                "lon": yearly_points["lon"],
+                "text": yearly_points["text"],
+                "name": yearly_points["name"],
+                "mode": "markers",
+                "marker": {"size": 12, "color": GREEN},
+                "hoverinfo": "text"
+            })
+            
+        if weekly_points["lat"]:
+            map_data.append({
+                "type": "scattermapbox",
+                "lat": weekly_points["lat"],
+                "lon": weekly_points["lon"],
+                "text": weekly_points["text"],
+                "name": weekly_points["name"],
+                "mode": "markers",
+                "marker": {"size": 12, "color": RED},
+                "hoverinfo": "text"
+            })
+            
+        if inactive_points["lat"]:
+            map_data.append({
+                "type": "scattermapbox",
+                "lat": inactive_points["lat"],
+                "lon": inactive_points["lon"],
+                "text": inactive_points["text"],
+                "name": inactive_points["name"],
+                "mode": "markers",
+                "marker": {"size": 8, "color": GRAY},
+                "hoverinfo": "text"
+            })
+        
+        # Opprett og returner kartet
+        return create_map(map_data, mapbox_token, title)
+
     except Exception as e:
         logger.error(f"Feil i vis_dagens_tunkart: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved generering av tunkart")
@@ -160,29 +220,31 @@ def vis_stroingskart_kommende(bestillinger, mapbox_token, title):
         return None
 
 
-def create_map(data, mapbox_token, tittel):
+def create_map(data, mapbox_token, title):
+    """Opprett basiskart med Gullingen som senterpunkt og legende i øvre venstre hjørne"""
     fig = go.Figure(data=data)
-
-    all_lats = [point for trace in data for point in trace["lat"]]
-    all_lons = [point for trace in data for point in trace["lon"]]
-
-    center_lat = sum(all_lats) / len(all_lats) if all_lats else 59.39111
-    center_lon = sum(all_lons) / len(all_lons) if all_lons else 6.42755
-
+    
     fig.update_layout(
-        title=tittel,
-        mapbox_style="streets",
+        title=title,
         mapbox=dict(
             accesstoken=mapbox_token,
-            center=dict(lat=center_lat, lon=center_lon),
-            zoom=14,
+            style='streets',
+            center=dict(lat=59.39210, lon=6.43016),  # Gullingen koordinater
+            zoom=13.8
         ),
         showlegend=True,
-        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-        height=700,
-        margin={"r": 0, "t": 30, "l": 0, "b": 0},
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01,
+            bgcolor="rgba(255, 255, 255, 0.8)",  # Hvit bakgrunn med litt gjennomsiktighet
+            bordercolor="rgba(0, 0, 0, 0.3)",    # Svart ramme med litt gjennomsiktighet
+            borderwidth=1
+        ),
+        margin=dict(l=0, r=0, t=30, b=0)
     )
-
+    
     return fig
 
 
@@ -192,7 +254,7 @@ def display_live_plowmap():
     st.info(
         """
     Gjil Maskin, som holder til på Hauge ved Jøsenfjorden, brøyter i Fjellbergsskardet.  
-    Du kan følge brøytingen live på kartet vårt! GPS-sporing aktiveres når traktoren starter å kjøre.
+    Du kan følge brøytingen live p kartet vårt! GPS-sporing aktiveres når traktoren starter å kjøre.
 
     Vær oppmerksom på:
     - Det er ca. 10 minutters forsinkelse på GPS-signalet.

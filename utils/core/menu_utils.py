@@ -87,7 +87,7 @@ def create_menu(customer_id, user_type):
 
         if st.button("🚪 Logg ut"):
             st.session_state.authenticated = False
-            st.session_state.user_id = None
+            st.session_state.customer_id = None
             st.rerun()
 
     return selected, admin_choice

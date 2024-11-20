@@ -8,9 +8,10 @@ from typing import Any, Callable, Optional
 
 from utils.core.config import DATABASE_PATH
 from utils.core.logging_config import get_logger, setup_logging
+from utils.db.connection import get_db_connection
 from utils.db.schemas import get_database_schemas
 from utils.db.data_import import import_customers_from_csv
-from utils.db.connection import get_db_connection
+from utils.db.migrations import run_migrations
 
 # Sett opp logging
 logger = get_logger(__name__)
@@ -48,7 +49,6 @@ def create_tables():
             logger.info(f"Database path: {DATABASE_PATH}")
             
             try:
-                # Riktig bruk av context manager
                 with get_db_connection(db_name) as conn:
                     cursor = conn.cursor()
                     
@@ -59,8 +59,8 @@ def create_tables():
                     # Opprett indekser hvis nødvendig
                     if db_name == "login_history":
                         cursor.execute("""
-                            CREATE INDEX IF NOT EXISTS idx_login_history_user_id 
-                            ON login_history(user_id)
+                            CREATE INDEX IF NOT EXISTS idx_login_history_customer_id 
+                            ON login_history(customer_id)
                         """)
                         cursor.execute("""
                             CREATE INDEX IF NOT EXISTS idx_login_history_login_time 
@@ -86,9 +86,19 @@ def initialize_database_system() -> bool:
     try:
         logger.info("Starting complete database system initialization")
         
-        # Opprett tabeller
+        # Opprett tabeller først
         if not create_tables():
             logger.error("Failed to create tables")
+            return False
+            
+        # Deretter kjør migrasjoner
+        if not run_migrations():
+            logger.error("Failed to run migrations")
+            return False
+            
+        # Til slutt verifiser skjemaene
+        if not verify_database_schemas():
+            logger.error("Failed to verify schemas")
             return False
         
         logger.info("Database system initialization completed successfully")
@@ -162,84 +172,37 @@ def create_indexes(db_name: str) -> bool:
         if db_name == "feedback":
             with get_db_connection(db_name) as conn:
                 cursor = conn.cursor()
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_customer_id ON feedback(customer_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)")
                 conn.commit()
                 logger.info(f"Successfully created indexes for {db_name} database")
                 return True
 
-        # Bestem riktig tabellnavn
-        table_name = "login_history" if db_name == "login_history" else f"{db_name}_bestillinger"
+        # For stroing og tunbroyting
+        if db_name in ["stroing", "tunbroyting"]:
+            with get_db_connection(db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{db_name}_customer_id ON {db_name}_bestillinger(customer_id)")
+                cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{db_name}_dato ON {db_name}_bestillinger(bestillings_dato)")
+                conn.commit()
+                logger.info(f"Successfully created indexes for {db_name} database")
+                return True
 
-        # For andre tabeller, sjekk om tabellen eksisterer
-        if not verify_table_exists(db_name, table_name):
-            logger.warning(f"Table {table_name} does not exist yet")
-            return True
+        # For login_history
+        if db_name == "login_history":
+            with get_db_connection(db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_customer_id ON login_history(customer_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_time ON login_history(login_time)")
+                conn.commit()
+                logger.info(f"Successfully created indexes for {db_name} database")
+                return True
 
-        with get_db_connection(db_name) as conn:
-            cursor = conn.cursor()
+        return True
 
-            # Sjekk kolonnestruktur før indeksering
-            cursor.execute(f"PRAGMA table_info({table_name})")
-            columns = {row[1] for row in cursor.fetchall()}
-
-            if db_name == "stroing":
-                if "cabin_id" in columns:
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_stroing_cabin ON stroing_bestillinger(cabin_id)"
-                    )
-                if "status" in columns:
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_stroing_status ON stroing_bestillinger(status)"
-                    )
-                if "ankomst_dato" in columns:
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_stroing_ankomst ON stroing_bestillinger(ankomst_dato)"
-                    )
-                if "avreise_dato" in columns:
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_stroing_avreise ON stroing_bestillinger(avreise_dato)"
-                    )
-
-            elif db_name == "tunbroyting":
-                if all(
-                    col in columns
-                    for col in [
-                        "cabin_id",
-                        "ankomst_dato",
-                        "avreise_dato",
-                        "abonnement_type",
-                    ]
-                ):
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_tunbroyting_bruker ON tunbroyting_bestillinger(bruker)"
-                    )
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst_dato ON tunbroyting_bestillinger(ankomst_dato)"
-                    )
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_tunbroyting_avreise_dato ON tunbroyting_bestillinger(avreise_dato)"
-                    )
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_tunbroyting_abonnement ON tunbroyting_bestillinger(abonnement_type)"
-                    )
-
-            elif db_name == "login_history":
-                if all(col in columns for col in ["user_id", "login_time"]):
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_login_user_id ON login_history(user_id)"
-                    )
-                    cursor.execute(
-                        "CREATE INDEX IF NOT EXISTS idx_login_time ON login_history(login_time)"
-                    )
-
-            conn.commit()
-            logger.info(f"Successfully created indexes for {db_name} database")
-            return True
-
-    except sqlite3.Error as e:
-        logger.error(f"Could not create index for {db_name}: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error creating indexes for {db_name}: {str(e)}")
         return False
 
 
@@ -340,16 +303,18 @@ def close_all_connections():
         return False
 
 
-def verify_stroing_database_state() -> bool:
+def verify_stroing_database() -> bool:
+    """Verifiser stroing database"""
     try:
         with get_db_connection("stroing") as conn:
             cursor = conn.cursor()
+            
             cursor.execute("PRAGMA table_info(stroing_bestillinger)")
             columns = {row[1] for row in cursor.fetchall()}
-
+            
             required_columns = {
                 "id",
-                "bruker",
+                "customer_id",
                 "bestillings_dato",
                 "onske_dato",
                 "kommentar",

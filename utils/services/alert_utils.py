@@ -45,7 +45,7 @@ def get_alerts(alert_type='active', only_today=False):
     """
     try:
         base_query = """
-            SELECT id, type, datetime, comment, innsender, status, 
+            SELECT id, type, datetime, comment, customer_id, status, 
                    status_changed_by, status_changed_at, hidden, 
                    is_alert, display_on_weather, expiry_date, target_group
             FROM feedback
@@ -74,7 +74,7 @@ def get_alerts(alert_type='active', only_today=False):
             """
             
         result = fetch_data("feedback", query)
-        columns = ['id', 'type', 'datetime', 'comment', 'innsender', 'status', 
+        columns = ['id', 'type', 'datetime', 'comment', 'customer_id', 'status', 
                   'status_changed_by', 'status_changed_at', 'hidden', 
                   'is_alert', 'display_on_weather', 'expiry_date', 'target_group']
         return pd.DataFrame(result, columns=columns)
@@ -87,7 +87,7 @@ def save_alert(alert_type: str, message: str, expiry_date: str,
                target_group: List[str], created_by: str) -> Optional[int]:
     try:
         query = """
-        INSERT INTO feedback (type, comment, datetime, innsender, status, 
+        INSERT INTO feedback (type, comment, datetime, customer_id, status, 
                             is_alert, display_on_weather, expiry_date, target_group)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
@@ -228,7 +228,7 @@ def create_new_alert():
                 message,
                 expiry_date.isoformat(),
                 target_group,
-                st.session_state.user_id,
+                st.session_state.customer_id,
             )
             if new_alert_id:
                 st.success(f"Varsel opprettet og lagret med ID: {new_alert_id}")
@@ -321,7 +321,7 @@ def display_alert_details(alert):
         # Vis standard informasjon
         st.write(f"**Type:** {alert['type']}")
         st.write(f"**Melding:** {alert['comment']}")
-        st.write(f"**Opprettet av:** {alert['innsender']}")
+        st.write(f"**Opprettet av:** {alert['customer_id']}")
         st.write(f"**Opprettet:** {pd.to_datetime(alert['datetime']).strftime('%d.%m.%Y %H:%M')}")
         
         # Sjekk om vi er i redigeringsmodus for dette varselet
@@ -483,7 +483,7 @@ def update_alert(alert_id: int, status: str, expiry_date: str, display_on_weathe
         execute_query(
             "feedback",
             query,
-            (status, expiry_date, int(display_on_weather), target_group, st.session_state.user_id, alert_id)
+            (status, expiry_date, int(display_on_weather), target_group, st.session_state.customer_id, alert_id)
         )
         logger.info(f"Alert {alert_id} updated successfully")
         get_alerts.clear()
