@@ -15,7 +15,10 @@ from utils.core.config import (
     get_current_time,
     get_default_date_range,
     DATE_VALIDATION,
-    DATABASE_PATH
+    DATABASE_PATH,
+    safe_to_datetime,
+    format_date,
+    combine_date_with_tz
 )
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import neste_fredag
@@ -69,7 +72,7 @@ def bestill_tunbroyting():
             )
             return
 
-        naa = datetime.now(TZ)
+        naa = get_current_time()
         tomorrow = naa.date() + timedelta(days=1)
 
         abonnement_type = (
@@ -105,9 +108,10 @@ def bestill_tunbroyting():
                     format="DD.MM.YYYY",
                 )
 
-        bestillingsfrist = datetime.combine(
-            ankomst_dato - timedelta(days=1), time(12, 0)
-        ).replace(tzinfo=TZ)
+        bestillingsfrist = combine_date_with_tz(
+            ankomst_dato - timedelta(days=1), 
+            time(12, 0)
+        )
 
         if st.button("Bestill Tunbrøyting"):
             if naa >= bestillingsfrist:
@@ -519,35 +523,41 @@ def vis_rediger_bestilling():
 
             # Håndter ankomst_dato
             ankomst_dato = (
-                pd.to_datetime(eksisterende_data["ankomst_dato"]).date()
+                safe_to_datetime(eksisterende_data["ankomst_dato"]).date()
                 if pd.notnull(eksisterende_data["ankomst_dato"])
-                else datetime.now().date()
+                else get_current_time().date()
             )
-            nye_data["ankomst_dato"] = st.date_input("Ankomstdato", value=ankomst_dato)
+            nye_data["ankomst_dato"] = st.date_input(
+                "Ankomstdato", 
+                value=ankomst_dato,
+                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
+            )
 
             # Håndter ankomst_tid
             ankomst_tid = (
                 eksisterende_data["ankomst_tid"]
                 if pd.notnull(eksisterende_data["ankomst_tid"])
-                else datetime.now().time()
+                else get_current_time().time()
             )
             nye_data["ankomst_tid"] = st.time_input("Ankomsttid", value=ankomst_tid)
 
             # Håndter avreise_dato
             avreise_dato = (
-                pd.to_datetime(eksisterende_data["avreise_dato"]).date()
+                safe_to_datetime(eksisterende_data["avreise_dato"]).date()
                 if pd.notnull(eksisterende_data["avreise_dato"])
                 else None
             )
             nye_data["avreise_dato"] = st.date_input(
-                "Avreisetato", value=avreise_dato or ankomst_dato
+                "Avreisetato", 
+                value=avreise_dato or ankomst_dato,
+                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
             )
 
             # Håndter avreise_tid
             avreise_tid = (
                 eksisterende_data["avreise_tid"]
                 if pd.notnull(eksisterende_data["avreise_tid"])
-                else datetime.now().time()
+                else get_current_time().time()
             )
             nye_data["avreise_tid"] = st.time_input("Avreisetid", value=avreise_tid)
 
@@ -621,11 +631,11 @@ def hent_aktive_bestillinger_for_dag(dato):
             })
         
         # Konverter dato til datetime64[ns]
-        dato_dt = pd.to_datetime(dato)
+        dato_dt = safe_to_datetime(dato)
         
         # Konverter datokolonnene
-        alle_bestillinger['ankomst_dato'] = pd.to_datetime(alle_bestillinger['ankomst_dato'])
-        alle_bestillinger['avreise_dato'] = pd.to_datetime(alle_bestillinger['avreise_dato'])
+        alle_bestillinger['ankomst_dato'] = alle_bestillinger['ankomst_dato'].apply(safe_to_datetime)
+        alle_bestillinger['avreise_dato'] = alle_bestillinger['avreise_dato'].apply(safe_to_datetime)
         
         # Filtrer bestillinger
         maske = (
@@ -747,22 +757,22 @@ def filter_todays_bookings(bookings_df):
 
 
 def tunbroyting_kommende_uke(bestillinger):
-    current_date = datetime.now(TZ).date()
+    current_date = get_current_time().date()
     end_date = current_date + timedelta(days=7)
 
     return bestillinger[
         # Bestillinger som starter innenfor neste uke
         (
-            (bestillinger["ankomst"].dt.date >= current_date)
-            & (bestillinger["ankomst"].dt.date <= end_date)
+            (bestillinger["ankomst_dato"].dt.date >= current_date)
+            & (bestillinger["ankomst_dato"].dt.date <= end_date)
         )
         |
         # Bestillinger som allerede er aktive og fortsetter inn i neste uke
         (
-            (bestillinger["ankomst"].dt.date < current_date)
+            (bestillinger["ankomst_dato"].dt.date < current_date)
             & (
-                (bestillinger["avreise"].isnull())
-                | (bestillinger["avreise"].dt.date >= current_date)
+                (bestillinger["avreise_dato"].isnull())
+                | (bestillinger["avreise_dato"].dt.date >= current_date)
             )
         )
         |
@@ -835,7 +845,7 @@ def vis_tunbestillinger_for_periode():
 # liste for tunkart-siden
 def vis_dagens_bestillinger():
     """Viser dagens aktive bestillinger i en tabell"""
-    dagens_dato = datetime.now(TZ).date()
+    dagens_dato = get_current_time().date()
     logger.info(f"Viser bestillinger for dato: {dagens_dato}")
     
     try:
@@ -854,9 +864,12 @@ def vis_dagens_bestillinger():
             visnings_df["abonnement_type"] = dagens_bestillinger["abonnement_type"]
             
             # Formater dato og tid
-            visnings_df["ankomst"] = dagens_bestillinger["ankomst_dato"].dt.strftime("%Y-%m-%d %H:%M")
+            # Formater dato og tid
+            visnings_df["ankomst"] = dagens_bestillinger["ankomst_dato"].apply(
+                lambda x: format_date(x, "display", "datetime")
+            )
             visnings_df["avreise"] = dagens_bestillinger["avreise_dato"].apply(
-                lambda x: x.strftime("%Y-%m-%d %H:%M") if pd.notnull(x) else "Ikke satt"
+                lambda x: format_date(x, "display", "datetime") if pd.notnull(x) else "Ikke satt"
             )
             
             # Vis DataFrame
@@ -1083,7 +1096,6 @@ def display_bookings(customer_id):
 
 
 def vis_hyttegrend_aktivitet():
-    """Viser oversikt over tunbrøytingsaktivitet for neste 7 dager."""
     try:
         st.subheader("Aktive tunbestillinger i hyttegrenda")
         st.info(
@@ -1094,20 +1106,15 @@ def vis_hyttegrend_aktivitet():
         alle_bestillinger = get_bookings()
         logger.info(f"Hentet bestillinger: {alle_bestillinger.to_string()}")
         
-        if alle_bestillinger is None:
-            logger.error("Kunne ikke hente bestillinger fra databasen")
-            st.error("Det oppstod en feil ved henting av bestillinger. Vennligst prøv igjen senere.")
-            return
-            
         if alle_bestillinger.empty:
             st.info("Ingen bestillinger funnet for perioden.")
             return
 
         # Konverter ankomst_dato til datetime og fjern timezone
-        alle_bestillinger['ankomst_dato'] = pd.to_datetime(alle_bestillinger['ankomst_dato']).dt.tz_localize(None)
-        logger.info(f"Konverterte datoer: {alle_bestillinger['ankomst_dato'].to_string()}")
-            
-        dagens_dato = pd.Timestamp.now(TZ).normalize().tz_localize(None)
+        alle_bestillinger['ankomst_dato'] = alle_bestillinger['ankomst_dato'].apply(safe_to_datetime)
+        
+        # Definer datoperiode én gang
+        dagens_dato = pd.Timestamp(get_current_time()).normalize()
         sluttdato = dagens_dato + pd.Timedelta(days=7)
         dato_range = pd.date_range(dagens_dato, sluttdato)
         logger.info(f"Datoperiode: {dato_range}")
@@ -1199,7 +1206,7 @@ def get_bookings(start_date=None, end_date=None):
             # Konverter datokolonner til datetime
             for col in ['ankomst_dato', 'avreise_dato']:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col])
+                    df[col] = df[col].apply(safe_to_datetime)
             
             logger.info(f"Processed DataFrame shape: {df.shape}")
             logger.info(f"Processed DataFrame columns: {df.columns}")

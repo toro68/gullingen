@@ -15,13 +15,20 @@ if os.path.exists("/mount/gullingen"):
 
 # Now we can import utils
 from utils.core.logging_config import get_logger, setup_logging
-from utils.core.menu_utils import create_menu
-from utils.services.customer_utils import handle_customers
-
 # Set up logging
 setup_logging()
 logger = get_logger(__name__)
 
+from utils.core.config import TZ, get_current_time
+from utils.core.menu_utils import create_menu
+from utils.services.customer_utils import handle_customers
+
+# Initialiser tidssone i session state
+if 'TZ' not in st.session_state:
+    st.session_state.TZ = TZ
+    current_time = get_current_time()
+    logger.info(f"Initialiserer tidssone til {TZ}. Nåværende tid: {current_time}")
+    
 try:
     from src.app import (
         initialize_app,

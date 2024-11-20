@@ -678,61 +678,19 @@ def display_maintenance_feedback():
     try:
         logger.debug("Starting display_maintenance_feedback")
         
-        # Datovelgere
-        today = datetime.now(TZ).date()
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input(
-                "Fra dato", 
-                value=today - timedelta(days=7),
-                format="DD.MM.YYYY"
-            )
-        with col2:
-            end_date = st.date_input(
-                "Til dato",
-                value=today,
-                format="DD.MM.YYYY",
-                max_value=today
-            )
-            
-        if start_date > end_date:
-            logger.warning(f"Ugyldig datoperiode: {start_date} > {end_date}")
-            st.error("Fra-dato kan ikke være senere enn til-dato")
+        # Bruk felles datovelger-funksjon
+        start_date, end_date = get_date_range_input(default_days=7)
+        if start_date is None or end_date is None:
             return
 
-        # Hent og behandle data
-        start_datetime = datetime.combine(start_date, datetime.min.time()).replace(
-            tzinfo=TZ
-        )
-        end_datetime = datetime.combine(end_date, datetime.max.time()).replace(
-            tzinfo=TZ
-        )
+        # Konverter til datetime med tidssone
+        start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=TZ)
+        end_datetime = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=TZ)
         
         logger.debug(f"Henter data for periode: {start_datetime} til {end_datetime}")
         
-        # Definer kolonner eksplisitt
-        columns = ['datetime', 'comment', 'customer_id']
-        
-        query = f"""
-        SELECT {', '.join(columns)}
-        FROM feedback 
-        WHERE type = 'Vintervedlikehold'
-        AND datetime BETWEEN ? AND ?
-        AND (
-            comment LIKE '%😊%' OR 
-            comment LIKE '%😐%' OR 
-            comment LIKE '%😡%'
-        )
-        ORDER BY datetime DESC
-        """
-        
-        logger.debug(f"Executing query: {query}")
-        logger.debug(f"Query params: [{start_datetime}, {end_datetime}]")
-        
-        reactions_df = pd.DataFrame(
-            fetch_data("feedback", query, [start_datetime, end_datetime]),
-            columns=columns
-        )
+        # Bruk eksisterende funksjon for å hente reaksjoner
+        reactions_df = get_maintenance_reactions(start_datetime, end_datetime)
         
         logger.debug(f"Retrieved {len(reactions_df)} rows")
         logger.debug(f"DataFrame columns: {reactions_df.columns.tolist()}")

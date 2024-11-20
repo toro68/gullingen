@@ -192,3 +192,9 @@ def format_date(date_obj: Optional[datetime], format_type: str = "display", form
         date_format = DATE_FORMATS["display"]["datetime"]
     
     return date_obj.strftime(date_format)
+
+def combine_date_with_tz(date_obj, time_obj=None):
+    """Kombinerer dato og tid med tidssone"""
+    if time_obj is None:
+        time_obj = datetime.min.time()
+    return datetime.combine(date_obj, time_obj).replace(tzinfo=TZ)
