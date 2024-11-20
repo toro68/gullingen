@@ -132,3 +132,4 @@ logs/*.log.*
 # Backup-filer
 *.bak
 *.backup
+.DS_Store
