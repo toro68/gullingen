@@ -1,7 +1,7 @@
+# logging_config.py
 import logging
 import os
 from logging.handlers import RotatingFileHandler
-
 
 def setup_logging():
     # Opprett logs-mappen hvis den ikke eksisterer
@@ -37,8 +37,7 @@ def setup_logging():
     # Legg til handlers
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
-
-
-def get_logger(name):
-    logger = logging.getLogger(name)
-    return logger
+    
+def get_logger(name: str) -> logging.Logger:
+    """Returnerer en logger instans"""
+    return logging.getLogger(name)

@@ -9,7 +9,14 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-from utils.core.config import TZ
+from utils.core.config import (
+    TZ,
+    DATE_FORMATS,
+    get_date_format,
+    get_current_time,
+    get_default_date_range,
+    DATE_VALIDATION
+)
 from utils.core.logging_config import get_logger
 from utils.db.connection import get_db_connection
 
@@ -17,12 +24,13 @@ logger = get_logger(__name__)
 
 
 def validate_date(date_string: str) -> bool:
-    """Validerer datoformat (YYYY-MM-DD)"""
+    """Validerer datoformat"""
     try:
         if not date_string:
             return False
-        datetime.strptime(date_string, "%Y-%m-%d")
-        return True
+        dt = datetime.strptime(date_string, get_date_format("database", "date"))
+        year = dt.year
+        return DATE_VALIDATION["min_year"] <= year <= DATE_VALIDATION["max_year"]
     except ValueError:
         return False
 

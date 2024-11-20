@@ -1,15 +1,69 @@
 # config.py
-import logging
+
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Dict, Optional
 from zoneinfo import ZoneInfo
+import pandas as pd
+import logging
 
-from utils.core.logging_config import get_logger, setup_logging
+# Få logger instans direkte
+logger = logging.getLogger(__name__)
 
-# Sett opp logging først
-setup_logging()
-logger = get_logger(__name__)
+# Tidssone konfigurasjon
+TZ = ZoneInfo("Europe/Oslo")
+
+# Dato- og tidsformater
+DATE_FORMATS = {
+    "display": {
+        "date": "%d.%m.%Y",
+        "time": "%H:%M",
+        "datetime": "%d.%m.%Y %H:%M",
+        "datetime_seconds": "%d.%m.%Y %H:%M:%S",
+        "short_date": "%d.%m",
+        "iso": "%Y-%m-%d",
+        "iso_time": "%H:%M:%S",
+        "iso_datetime": "%Y-%m-%dT%H:%M:%S"
+    },
+    "database": {
+        "date": "%Y-%m-%d",
+        "time": "%H:%M:%S",
+        "datetime": "%Y-%m-%d %H:%M:%S",
+        "timestamp": "%Y-%m-%dT%H:%M:%S%z"
+    },
+    "api": {
+        "date": "%Y-%m-%d",
+        "datetime": "%Y-%m-%dT%H:%M:%S",
+        "timestamp": "%Y-%m-%dT%H:%M:%SZ"
+    }
+}
+
+# Dato validering og standardverdier
+DATE_VALIDATION = {
+    "min_year": 2020,
+    "max_year": datetime.now(TZ).year + 1,
+    "default_time": "12:00",
+    "default_date_range": 7,  # dager
+    "max_future_booking": 365  # maks antall dager frem i tid for bestilling
+}
+
+# Dato parsing og formatering funksjoner
+def get_date_format(format_type: str, format_name: str) -> str:
+    """Henter datoformat basert på type og navn"""
+    return DATE_FORMATS.get(format_type, {}).get(format_name)
+
+def get_current_time() -> datetime:
+    """Returnerer nåværende tid i riktig tidssone"""
+    return datetime.now(TZ)
+
+def get_default_date_range() -> tuple[datetime, datetime]:
+    """Returnerer standard datoperiode"""
+    now = get_current_time()
+    return (
+        now,
+        now + timedelta(days=DATE_VALIDATION["default_date_range"])
+    )
 
 # Finn riktig prosjektmappe basert på kjørende script
 current_dir = Path(__file__).parent.parent.parent
@@ -28,9 +82,6 @@ DATABASE_PATH.mkdir(parents=True, exist_ok=True)
 
 # Logging konfigurasjon
 logger.info(f"Database path set to: {DATABASE_PATH}")
-
-# Tidssone
-TZ = ZoneInfo("Europe/Oslo")
 
 # Værdata konfigurasjon
 STATION_ID = "SN46220"
@@ -114,3 +165,30 @@ DB_CONFIG = {
         "schema": {"tables": ["tunbroyting_bestillinger"]},
     },
 }
+
+def safe_to_datetime(date_string: Optional[str]) -> Optional[datetime]:
+    """
+    Konverterer en streng til datetime med riktig tidssone
+    """
+    if date_string in [None, "", "None", "1"] or pd.isna(date_string):
+        return None
+    try:
+        dt = pd.to_datetime(date_string)
+        return dt.tz_localize(TZ) if dt.tzinfo is None else dt.astimezone(TZ)
+    except ValueError:
+        logger.error(f"Ugyldig datostreng: '{date_string}'")
+        return None
+
+def format_date(date_obj: Optional[datetime], format_type: str = "display", format_name: str = "datetime") -> str:
+    """
+    Formaterer en datetime til streng med standard format
+    """
+    if date_obj is None:
+        return "Ikke satt"
+    
+    date_format = get_date_format(format_type, format_name)
+    if not date_format:
+        logger.warning(f"Ukjent datoformat: {format_type}/{format_name}")
+        date_format = DATE_FORMATS["display"]["datetime"]
+    
+    return date_obj.strftime(date_format)
