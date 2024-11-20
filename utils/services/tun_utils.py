@@ -598,7 +598,10 @@ def hent_aktive_bestillinger_for_dag(dato):
     logger.info(f"Rådata før filtrering: {alle_bestillinger.to_string()}")
     
     try:
-        # Konverter datokolonnene til datetime
+        # Konverter dato til datetime64[ns] for konsistent sammenligning
+        dato_dt = pd.to_datetime(dato)
+        
+        # Konverter datokolonnene til datetime64[ns]
         alle_bestillinger["ankomst_dato"] = pd.to_datetime(alle_bestillinger["ankomst_dato"])
         alle_bestillinger["avreise_dato"] = pd.to_datetime(alle_bestillinger["avreise_dato"])
         
@@ -606,17 +609,17 @@ def hent_aktive_bestillinger_for_dag(dato):
         logger.info(f"ankomst_dato typer: {alle_bestillinger['ankomst_dato'].dtype}")
         logger.info(f"avreise_dato typer: {alle_bestillinger['avreise_dato'].dtype}")
         
-        # Filtrer bestillinger
+        # Filtrer bestillinger med normaliserte datoer
         maske = (
             # Vanlige bestillinger som starter i dag
-            ((alle_bestillinger["ankomst_dato"].dt.date == dato)) |
+            (alle_bestillinger["ankomst_dato"].dt.normalize() == dato_dt.normalize()) |
             # Årsabonnement som er aktive
             (
                 (alle_bestillinger["abonnement_type"] == "Årsabonnement") &
-                (alle_bestillinger["ankomst_dato"].dt.date <= dato) &
+                (alle_bestillinger["ankomst_dato"].dt.normalize() <= dato_dt.normalize()) &
                 (
                     alle_bestillinger["avreise_dato"].isna() |
-                    (alle_bestillinger["avreise_dato"].dt.date >= dato)
+                    (alle_bestillinger["avreise_dato"].dt.normalize() >= dato_dt.normalize())
                 )
             )
         )

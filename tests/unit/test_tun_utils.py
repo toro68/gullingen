@@ -274,3 +274,53 @@ def test_filter_todays_bookings_with_arsabonnement():
     # Konverter datoer til riktig format (DATE)
     test_data['ankomst_dato'] = pd.to_datetime(test_data['ankomst_dato']).dt.date
     test_data['avreise_dato'] = pd.to_datetime(test_data['avreise_dato']).dt.date
+
+def test_hent_aktive_bestillinger_for_dag_datotype_konvertering(mocker):
+    """Test datotype-konvertering i hent_aktive_bestillinger_for_dag."""
+    dagens_dato = datetime.now(TZ).date()
+    
+    # Opprett testdata med blandede datotyper
+    test_data = pd.DataFrame({
+        'id': [1, 2, 3],
+        'customer_id': ['22', '23', '24'],
+        'ankomst_dato': [
+            dagens_dato.strftime('%Y-%m-%d'),          # dagens bestilling
+            (dagens_dato - timedelta(days=1)),         # gårsdagens årsabonnement
+            (dagens_dato + timedelta(days=1))          # morgendagens bestilling
+        ],
+        'avreise_dato': [
+            None,
+            None,
+            (dagens_dato + timedelta(days=2))
+        ],
+        'abonnement_type': [
+            'Ukentlig ved bestilling',
+            'Årsabonnement',
+            'Ukentlig ved bestilling'
+        ]
+    })
+    
+    # Mock get_bookings
+    mocker.patch('utils.services.tun_utils.get_bookings', return_value=test_data)
+    
+    # Kjør funksjonen
+    resultat = hent_aktive_bestillinger_for_dag(dagens_dato)
+    
+    # Verifiser at datokonvertering fungerte
+    assert all(isinstance(d, pd.Timestamp) for d in resultat['ankomst_dato'])
+    assert all(isinstance(d, (pd.Timestamp, type(pd.NaT))) for d in resultat['avreise_dato'])
+    
+    # Verifiser at filtreringen fungerte
+    assert len(resultat) == 2, "Skal få dagens bestilling og årsabonnementet"
+    
+    # Sjekk spesifikke bestillinger
+    bestillinger = resultat.to_dict('records')
+    assert any(b['abonnement_type'] == 'Ukentlig ved bestilling' and 
+              b['ankomst_dato'].date() == dagens_dato 
+              for b in bestillinger), "Dagens bestilling mangler"
+    assert any(b['abonnement_type'] == 'Årsabonnement' 
+              for b in bestillinger), "Årsabonnementet mangler"
+    
+    # Sjekk at morgendagens bestilling ikke er med
+    assert not any(b['ankomst_dato'].date() > dagens_dato 
+                  for b in bestillinger), "Morgendagens bestilling skulle ikke vært med"
