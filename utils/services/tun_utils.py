@@ -619,33 +619,37 @@ def handle_tun():
     customer_edit_component()
 
 def hent_aktive_bestillinger_for_dag(dato):
+    """Henter aktive bestillinger for en gitt dato"""
+    logger.info(f"Henter aktive bestillinger for dato: {dato}")
     try:
-        alle_bestillinger = get_bookings()
-        logger.info(f"Henter aktive bestillinger for dato: {dato}")
-        
-        # Standardiser kolonnenavn
-        if 'ankomst' in alle_bestillinger.columns:
-            alle_bestillinger = alle_bestillinger.rename(columns={
-                'ankomst': 'ankomst_dato',
-                'avreise': 'avreise_dato'
-            })
-        
         # Konverter dato til datetime64[ns]
-        dato_dt = safe_to_datetime(dato)
+        dato_dt = pd.Timestamp(dato)
         
-        # Konverter datokolonnene
-        alle_bestillinger['ankomst_dato'] = alle_bestillinger['ankomst_dato'].apply(safe_to_datetime)
-        alle_bestillinger['avreise_dato'] = alle_bestillinger['avreise_dato'].apply(safe_to_datetime)
+        # Hent alle bestillinger
+        alle_bestillinger = get_bookings()
+        
+        # Konverter datokolonnene til datetime
+        alle_bestillinger['ankomst_dato'] = pd.to_datetime(alle_bestillinger['ankomst_dato'])
+        alle_bestillinger['avreise_dato'] = pd.to_datetime(alle_bestillinger['avreise_dato'])
         
         # Filtrer bestillinger
-        maske = (
-            (alle_bestillinger['ankomst_dato'].dt.normalize() <= dato_dt.normalize()) & 
-            ((alle_bestillinger['avreise_dato'].isna()) | 
-             (alle_bestillinger['avreise_dato'].dt.normalize() >= dato_dt.normalize())) |
+        aktive_bestillinger = alle_bestillinger[
+            # Bestillinger som starter på denne datoen
+            (alle_bestillinger['ankomst_dato'].dt.normalize() == dato_dt.normalize()) |
+            # Bestillinger som er aktive på denne datoen
+            (
+                (alle_bestillinger['ankomst_dato'].dt.normalize() <= dato_dt.normalize()) &
+                (
+                    (alle_bestillinger['avreise_dato'].isnull()) |
+                    (alle_bestillinger['avreise_dato'].dt.normalize() >= dato_dt.normalize())
+                )
+            ) |
+            # Årsabonnementer
             (alle_bestillinger['abonnement_type'] == 'Årsabonnement')
-        )
+        ]
         
-        return alle_bestillinger[maske].copy()
+        logger.info(f"Dagens aktive bestillinger: {aktive_bestillinger.to_string()}")
+        return aktive_bestillinger
         
     except Exception as e:
         logger.error(f"Feil ved henting av aktive bestillinger: {str(e)}", exc_info=True)
