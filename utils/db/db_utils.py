@@ -6,7 +6,15 @@ from contextlib import contextmanager
 from functools import wraps
 from typing import Any, Callable, Optional
 
-from utils.core.config import DATABASE_PATH
+from utils.core.config import (
+    TZ,
+    DATE_FORMATS,
+    get_date_format,
+    get_current_time,
+    get_default_date_range,
+    DATE_VALIDATION,
+    DATABASE_PATH
+)
 from utils.core.logging_config import get_logger, setup_logging
 from utils.db.connection import get_db_connection
 from utils.db.schemas import get_database_schemas
@@ -249,37 +257,47 @@ def verify_database_schemas() -> bool:
     try:
         logger.info("=== VERIFYING DATABASE SCHEMAS ===")
         schemas = get_database_schemas()
+        verification_results = {}
 
-        for db_name, expected_schema in schemas.items():
-            with get_db_connection(db_name) as conn:
-                cursor = conn.cursor()
-                table_name = (
-                    "customer"
-                    if db_name == "customer"
-                    else (
-                        "login_history"
-                        if db_name == "login_history"
-                        else (
-                            "feedback"
-                            if db_name == "feedback"
-                            else f"{db_name}_bestillinger"
-                        )
+        for db_name, schema in schemas.items():
+            try:
+                with get_db_connection(db_name) as conn:
+                    cursor = conn.cursor()
+                    table_name = (
+                        f"{db_name}_bestillinger" 
+                        if db_name in ["stroing", "tunbroyting"] 
+                        else db_name
                     )
-                )
+                    
+                    # Sjekk om tabellen eksisterer
+                    cursor.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", 
+                        (table_name,)
+                    )
+                    
+                    if not cursor.fetchone():
+                        verification_results[db_name] = False
+                        logger.error(f"Table {table_name} does not exist in {db_name} database")
+                        continue
 
-                cursor.execute(
-                    f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}'"
-                )
-                result = cursor.fetchone()
-                if not result:
-                    logger.error(f"Table {table_name} not found in {db_name}.db")
-                    return False
+                    # Verifiser kolonner
+                    cursor.execute(f"PRAGMA table_info({table_name})")
+                    existing_columns = {row[1] for row in cursor.fetchall()}
+                    
+                    verification_results[db_name] = True
+                    logger.info(f"Schema verified for {db_name}: {table_name}")
+                    
+            except Exception as e:
+                verification_results[db_name] = False
+                logger.error(f"Error verifying {db_name} database: {str(e)}")
+                
+        success = all(verification_results.values())
+        if not success:
+            logger.error("Failed to verify schemas")
+        return success
 
-                logger.info(f"Schema verified for {db_name}: {table_name}")
-
-        return True
     except Exception as e:
-        logger.error(f"Schema verification failed: {str(e)}")
+        logger.error(f"Error in database schema verification: {str(e)}")
         return False
 
 
