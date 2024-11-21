@@ -19,7 +19,7 @@ from utils.core.config import (
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import get_db_connection
 from utils.services.alert_utils import get_alerts, handle_alerts_ui
-
+from utils.services.feedback_utils import get_feedback
 
 # Lazy imports
 def get_login_data():

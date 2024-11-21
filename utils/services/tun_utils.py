@@ -41,7 +41,28 @@ logger = get_logger(__name__)
 def bestill_tunbroyting():
     try:
         st.title("Bestill Tunbrøyting")
+        # Informasjonstekst
+        st.info(
+            """
+        Tunbrøyting i Fjellbergsskardet - Vintersesongen 2024/2025
+
+        Årsabonnement:
+        - Tunet ditt brøytes automatisk fredager, når brøytefirma vurderer at det trengs.  
+        - Hvis du ønsker brøyting på andre dager, må du legge inn bestilling. 
+        - Traktor kjører aldri opp for å rydde bare 1 hyttetun, det ryddes samtidig med veinettet.
+        Bestill derfor i god tid, og legg inn f.eks perioden lørdag-torsdag 
+        for å være sikker på brøytet tun på en torsdag. 
+        - Hvis du ønsker brøyting hver gang veinettet brøytes, legg inn bestilling fra 1. november til 1. mai.
         
+        Ukentlig ved bestilling: 
+        - Brøyting kun fredager. Bestilling kreves. 
+        - Det faktureres minimum 5 brøytinger (minstepris).
+        
+        Gjelder alle:
+        - Brøytefirma kan utføre vedlikeholdsbrøyting for å unngå gjengroing hvis de ser behov for det.
+        """
+        )
+    
         # Sjekk både customer_id og authenticated i sesjonen
         if not st.session_state.get("authenticated"):
             logger.error("Bruker er ikke autentisert")
@@ -363,16 +384,15 @@ def hent_bestilling(bestilling_id):
             logger.warning("Ingen bestilling funnet med ID %s", bestilling_id)
             return None
 
-        bestilling = df.iloc[0]
+        bestilling = df.iloc[0].copy()
 
-        # Konverter dato- og tidskolonner
+        # Konverter dato-kolonner med safe_to_datetime
         for col in ["ankomst_dato", "avreise_dato"]:
-            bestilling[col] = pd.to_datetime(bestilling[col], errors="coerce")
+            bestilling[col] = safe_to_datetime(bestilling[col])
 
-        for col in ["ankomst_tid", "avreise_tid"]:
-            bestilling[col] = pd.to_datetime(
-                bestilling[col], format="%H:%M:%S", errors="coerce"
-            ).time()
+        # Fjern tid-konvertering siden disse er satt til None
+        bestilling["ankomst_tid"] = None
+        bestilling["avreise_tid"] = None
 
         logger.info("Hentet bestilling med ID %s", bestilling_id)
         return bestilling
@@ -382,7 +402,7 @@ def hent_bestilling(bestilling_id):
             "Feil ved henting av bestilling %s: %s",
             bestilling_id,
             str(e),
-            exc_info=True,
+            exc_info=True
         )
         return None
 
@@ -403,32 +423,28 @@ def get_max_bestilling_id():
 def oppdater_bestilling(bestilling_id: int, nye_data: Dict[str, Any]) -> bool:
     try:
         query = """UPDATE tunbroyting_bestillinger
-                   SET customer_id = ?, ankomst_dato = ?, ankomst_tid = ?, 
-                       avreise_dato = ?, avreise_tid = ?, abonnement_type = ?
+                   SET customer_id = ?, ankomst_dato = ?, avreise_dato = ?, abonnement_type = ?
                    WHERE id = ?"""
         params = (
             nye_data["customer_id"],
-            nye_data["ankomst_dato"].isoformat(),
-            nye_data["ankomst_tid"].isoformat(),
+            nye_data["ankomst_dato"].isoformat() if nye_data["ankomst_dato"] else None,
             nye_data["avreise_dato"].isoformat() if nye_data["avreise_dato"] else None,
-            nye_data["avreise_tid"].isoformat() if nye_data["avreise_tid"] else None,
             nye_data["abonnement_type"],
             bestilling_id,
         )
+        
         with get_db_connection("tunbroyting") as conn:
             c = conn.cursor()
             c.execute(query, params)
             conn.commit()
+            
         logger.info("Bestilling %s oppdatert", bestilling_id)
         return True
-    except sqlite3.Error as e:
-        logger.error(
-            "Database error ved oppdatering av bestilling %s: %s", bestilling_id, str(e)
-        )
-        return False
+        
     except Exception as e:
         logger.error(
-            "Uventet feil ved oppdatering av bestilling %s: %s", bestilling_id, str(e)
+            "Feil ved oppdatering av bestilling %s: %s", bestilling_id, str(e),
+            exc_info=True
         )
         return False
 
@@ -533,14 +549,6 @@ def vis_rediger_bestilling():
                 format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
             )
 
-            # Håndter ankomst_tid
-            ankomst_tid = (
-                eksisterende_data["ankomst_tid"]
-                if pd.notnull(eksisterende_data["ankomst_tid"])
-                else get_current_time().time()
-            )
-            nye_data["ankomst_tid"] = st.time_input("Ankomsttid", value=ankomst_tid)
-
             # Håndter avreise_dato
             avreise_dato = (
                 safe_to_datetime(eksisterende_data["avreise_dato"]).date()
@@ -552,14 +560,6 @@ def vis_rediger_bestilling():
                 value=avreise_dato or ankomst_dato,
                 format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
             )
-
-            # Håndter avreise_tid
-            avreise_tid = (
-                eksisterende_data["avreise_tid"]
-                if pd.notnull(eksisterende_data["avreise_tid"])
-                else get_current_time().time()
-            )
-            nye_data["avreise_tid"] = st.time_input("Avreisetid", value=avreise_tid)
 
             # Håndter abonnement_type
             nye_data["abonnement_type"] = st.selectbox(
@@ -573,15 +573,18 @@ def vis_rediger_bestilling():
             submitted = st.form_submit_button("Oppdater bestilling")
 
             if submitted:
-                if validere_bestilling(nye_data):
-                    if oppdater_bestilling(bestilling_id, nye_data):
-                        st.success(f"Bestilling {bestilling_id} er oppdatert!")
-                    else:
-                        st.error(
-                            "Det oppstod en feil under oppdatering av bestillingen."
-                        )
+                # Konverter datoer til datetime med tidssone
+                nye_data["ankomst_dato"] = combine_date_with_tz(nye_data["ankomst_dato"])
+                nye_data["avreise_dato"] = combine_date_with_tz(nye_data["avreise_dato"]) if nye_data["avreise_dato"] else None
+                
+                # Fjernet tid-relaterte felter siden de ikke brukes
+                nye_data["ankomst_tid"] = None
+                nye_data["avreise_tid"] = None
+
+                if oppdater_bestilling(bestilling_id, nye_data):
+                    st.success(f"Bestilling {bestilling_id} er oppdatert!")
                 else:
-                    st.error("Ugyldig input. Vennligst sjekk datoene og prøv igjen.")
+                    st.error("Det oppstod en feil under oppdatering av bestillingen.")
     else:
         st.warning(f"Ingen aktiv bestilling funnet med ID {bestilling_id}")
 
@@ -597,7 +600,7 @@ def handle_tun():
 
     # Legg til en ekspanderende seksjon for statistikk og visualiseringer
     with st.expander("Vis statistikk og visualiseringer", expanded=False):
-        vis_tunbroyting_statistikk(get_bookings)
+        vis_tunbroyting_statistikk()
 
     # Rediger bestilling
     vis_rediger_bestilling()
@@ -812,65 +815,150 @@ def tunbroyting_kommende_uke(bestillinger):
 
 
 # Visninger for tunbrøyting
-def vis_tunbroyting_statistikk():
-    # Hent bestillinger som DataFrame
-    bestillinger_df = get_bookings()  # Endre fra bestillinger = get_bookings()
+def vis_tunbroyting_statistikk(bookings_func=None):
+    """
+    Viser statistikk for tunbrøytingsbestillinger.
     
-    if bestillinger_df.empty:
-        st.info("Ingen bestillinger funnet")
-        return
-    
-    # ... resten av funksjonen ...
+    Args:
+        bookings_func (callable, optional): Funksjon for å hente bestillinger
+    """
+    try:
+        # Hent bestillinger
+        bestillinger = bookings_func() if bookings_func else get_bookings()
+        
+        if bestillinger.empty:
+            st.info("Ingen bestillinger å vise statistikk for.")
+            return
+            
+        # Konverter datokolonner til datetime
+        for col in ['ankomst_dato', 'avreise_dato']:
+            if col in bestillinger.columns:
+                bestillinger[col] = bestillinger[col].apply(safe_to_datetime)
+        
+        # Vis grunnleggende statistikk
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Totalt antall bestillinger", len(bestillinger))
+        with col2:
+            st.metric("Unike hytter", bestillinger['customer_id'].nunique())
+        with col3:
+            st.metric(
+                "Årsabonnementer", 
+                len(bestillinger[bestillinger['abonnement_type'] == 'Årsabonnement'])
+            )
+        
+        # Vis fordeling av bestillingstyper
+        st.subheader("Fordeling av bestillingstyper")
+        type_counts = bestillinger['abonnement_type'].value_counts()
+        st.bar_chart(type_counts)
+        
+        # Vis bestillinger over tid
+        st.subheader("Bestillinger over tid")
+        timeline_data = bestillinger.copy()
+        timeline_data['måned'] = timeline_data['ankomst_dato'].dt.to_period('M')
+        monthly_counts = timeline_data.groupby('måned').size()
+        st.line_chart(monthly_counts)
+        
+    except Exception as e:
+        logger.error(f"Feil i vis_tunbroyting_statistikk: {str(e)}", exc_info=True)
+        st.error("Kunne ikke vise statistikk for tunbrøyting")
 
+
+# tun_utils.py
+# Kategori: View Functions
 
 def vis_tunbestillinger_for_periode():
+    """Viser tunbrøytingsbestillinger for valgt periode med formatert visning"""
     st.subheader("Tunbrøyting i valgt periode")
-
+    
+    # Hent standardperiode fra config
+    default_start, default_end = get_default_date_range()
+    
     # Datovelgere
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Fra dato", value=datetime.now(TZ).date())
+        start_date = st.date_input(
+            "Fra dato", 
+            value=default_start.date(),
+            min_value=datetime.now(TZ).date() - timedelta(days=DATE_VALIDATION["default_date_range"]),
+            max_value=datetime.now(TZ).date() + timedelta(days=DATE_VALIDATION["max_future_booking"]),
+            format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
+        )
     with col2:
-        end_date = st.date_input("Til dato", value=start_date + timedelta(days=7))
-
+        end_date = st.date_input(
+            "Til dato", 
+            value=default_end.date(),
+            min_value=start_date,
+            max_value=start_date + timedelta(days=DATE_VALIDATION["max_future_booking"]),
+            format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
+        )
+        
     if start_date <= end_date:
-        bestillinger = hent_bestillinger_for_periode(start_date, end_date)
-
+        # Konverter datoer til datetime med tidssone
+        periode_start = combine_date_with_tz(start_date)
+        periode_slutt = combine_date_with_tz(end_date)
+        
+        bestillinger = hent_bestillinger_for_periode(periode_start, periode_slutt)
+        
         if not bestillinger.empty:
-            # Legg til 'rode' informasjon til bestillingene
-            bestillinger["rode"] = bestillinger["customer_id"].apply(get_rode)
-
-            # Endre kolonnenavn fra 'customer_id' til 'Hytte'
-            bestillinger = bestillinger.rename(columns={"customer_id": "Hytte"})
-
-            # Sorter bestillinger etter rode og deretter hytte
-            bestillinger_sortert = bestillinger.sort_values(["rode", "Hytte"])
-
-            st.subheader(f"Bestillinger for perioden {start_date} til {end_date}")
-
-            # Velg kolonner som skal vises
-            kolonner_a_vise = ["rode", "Hytte"]
-            for kolonne in [
-                "ankomst",
-                "avreise",
-                "ankomst_dato",
-                "avreise_dato",
-                "abonnement_type",
-            ]:
-                if kolonne in bestillinger_sortert.columns:
-                    kolonner_a_vise.append(kolonne)
-
-            st.dataframe(bestillinger_sortert[kolonner_a_vise])
-
-            # Legg til mulighet for å laste ned bestillinger som CSV
-            csv = bestillinger_sortert.to_csv(index=False)
-            st.download_button(
-                label="Last ned som CSV",
-                data=csv,
-                file_name=f"tunbroyting_bestillinger_{start_date}_{end_date}.csv",
-                mime="text/csv",
-            )
-
+            try:
+                # Konverter datokolonner til riktig format
+                for col in ['ankomst_dato', 'avreise_dato']:
+                    if col in bestillinger.columns:
+                        bestillinger[col] = bestillinger[col].apply(safe_to_datetime)
+                
+                # Lag visnings-DataFrame
+                visnings_df = pd.DataFrame({
+                    "rode": bestillinger["customer_id"].apply(get_rode),
+                    "Hytte": bestillinger["customer_id"],
+                    "Type": bestillinger["abonnement_type"],
+                    "Ankomst": bestillinger["ankomst_dato"].apply(
+                        lambda x: format_date(x, "display", "date")
+                    ),
+                    "Avreise": bestillinger["avreise_dato"].apply(
+                        lambda x: format_date(x, "display", "date") if pd.notnull(x) else "Ikke satt"
+                    )
+                })
+                
+                # Sorter og vis
+                visnings_df = visnings_df.sort_values(["rode", "Hytte"])
+                
+                # Vis statistikk
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Antall bestillinger", len(visnings_df))
+                with col2:
+                    st.metric("Antall unike hytter", visnings_df["Hytte"].nunique())
+                
+                # Vis dataframe
+                st.dataframe(
+                    visnings_df,
+                    column_config={
+                        "rode": st.column_config.NumberColumn("Rode", format="%d"),
+                        "Hytte": "Hytte",
+                        "Type": "Type",
+                        "Ankomst": "Ankomst",
+                        "Avreise": "Avreise"
+                    },
+                    hide_index=True
+                )
+                
+                # Last ned som CSV
+                periode_str = f"{format_date(periode_start, 'api', 'date')}_{format_date(periode_slutt, 'api', 'date')}"
+                csv = visnings_df.to_csv(index=False)
+                st.download_button(
+                    label="Last ned som CSV",
+                    data=csv,
+                    file_name=f"tunbroyting_bestillinger_{periode_str}.csv",
+                    mime="text/csv",
+                    help="Last ned bestillingene som CSV-fil"
+                )
+                
+            except Exception as e:
+                logger.error(f"Feil ved visning av bestillinger: {str(e)}", exc_info=True)
+                st.error("Kunne ikke vise bestillingene. Vennligst prøv igjen senere.")
+        else:
+            st.info("Ingen bestillinger funnet for valgt periode")
 
 # liste for tunkart-siden
 def vis_dagens_bestillinger():
@@ -1306,11 +1394,10 @@ def get_bookings(start_date=None, end_date=None):
 
             df = pd.read_sql_query(query, conn, params=params)
             
-            # Konverter datokolonner til datetime med riktig timezone
+            # Konverter datoer med tidssone
             for col in ['ankomst_dato', 'avreise_dato']:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col])
-                    df[col] = df[col].dt.tz_localize(TZ)
+                    df[col] = pd.to_datetime(df[col]).dt.tz_localize(TZ)
             
             logger.info(f"Processed DataFrame shape: {df.shape}")
             logger.info(f"Processed DataFrame columns: {df.columns}")

@@ -68,28 +68,54 @@ def setup_customer_data() -> bool:
         return False
 
 def insert_customer(
-    customer_id: str, lat: float, lon: float, subscription: str, type: str
+    customer_id: str, 
+    lat: float, 
+    lon: float, 
+    subscription: str, 
+    type: str
 ) -> bool:
     """Legger til eller oppdaterer en kunde i databasen"""
     try:
-        conn = get_db_connection("customer")
-        cursor = conn.cursor()
+        # Valider input
+        if not all([customer_id, subscription, type]):
+            logger.error("Manglende påkrevde felter")
+            return False
 
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO customer 
-            (customer_id, lat, lon, subscription, type)
-            VALUES (?, ?, ?, ?, ?)
-        """,
-            (customer_id, lat, lon, subscription, type),
-        )
+        with get_db_connection("customer") as conn:
+            cursor = conn.cursor()
+            
+            # Sjekk om kunden eksisterer
+            cursor.execute(
+                "SELECT created_at FROM customer WHERE customer_id = ?", 
+                (customer_id,)
+            )
+            existing = cursor.fetchone()
+            
+            if existing:
+                # Oppdater eksisterende kunde
+                query = """
+                UPDATE customer 
+                SET lat = ?, lon = ?, subscription = ?, type = ?
+                WHERE customer_id = ?
+                """
+                params = (lat, lon, subscription, type, customer_id)
+            else:
+                # Sett inn ny kunde
+                query = """
+                INSERT INTO customer 
+                (customer_id, lat, lon, subscription, type, created_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """
+                params = (customer_id, lat, lon, subscription, type)
 
-        conn.commit()
-        conn.close()
-        return True
+            cursor.execute(query, params)
+            conn.commit()
+            
+            logger.info(f"{'Oppdaterte' if existing else 'La til'} kunde {customer_id}")
+            return True
 
     except Exception as e:
-        logger.error(f"Error inserting customer: {str(e)}")
+        logger.error(f"Feil ved {'oppdatering' if existing else 'innsetting'} av kunde: {str(e)}")
         return False
 
 
@@ -205,53 +231,71 @@ def get_bookings(start_date=None, end_date=None):
 
 
 def customer_edit_component(customer_id: str = None):
+    """Komponent for redigering av kundeinformasjon"""
     try:
         st.subheader("Rediger kundeinformasjon")
 
-        customer = None
-        if customer_id:
-            customer = get_customer_by_id(customer_id)
+        if not customer_id:
+            logger.warning("Ingen kunde-ID oppgitt")
+            st.error("Kunde-ID er påkrevd")
+            return
 
-        if customer:
-            with st.form("customer_edit_form"):
-                id = st.text_input("Hytte/Kunde ID", value=customer["customer_id"])
-                lat = st.number_input(
-                    "Breddegrad",
-                    value=float(customer["lat"]) if customer.get("lat") else 0.0,
-                    format="%.6f",
-                )
-                lon = st.number_input(
-                    "Lengdegrad",
-                    value=float(customer["lon"]) if customer.get("lon") else 0.0,
-                    format="%.6f",
-                )
-                icon = st.selectbox(
-                    "Abonnement",
-                    options=["star_red", "star_white", "dot_white", "admin", "none"],
-                    index=0 if customer.get("icon") == "star_red" else 1,
-                )
-                role = st.selectbox(
-                    "Type",
-                    options=["Customer", "Admin", "Other"],
-                    index=(
-                        0
-                        if not customer
-                        else ["Customer", "Admin", "Other"].index(
-                            customer.get("role", "Customer")
-                        )
-                    ),
-                )
-
-                if st.form_submit_button("Lagre"):
-                    if insert_customer(id, lat, lon, icon, role):
-                        st.success("Kunde oppdatert")
-                    else:
-                        st.error("Feil ved oppdatering av kunde")
-        else:
+        customer = get_customer_by_id(customer_id)
+        if not customer:
+            logger.error(f"Ingen kunde funnet med ID: {customer_id}")
             st.error(f"Ingen kunde funnet med ID: {customer_id}")
+            return
+
+        with st.form("customer_edit_form"):
+            # Input-felt med validering
+            id = st.text_input(
+                "Hytte/Kunde ID", 
+                value=customer["customer_id"],
+                disabled=True  # Ikke tillat endring av ID
+            )
+            
+            lat = st.number_input(
+                "Breddegrad",
+                value=float(customer["lat"]) if customer.get("lat") else 0.0,
+                format="%.6f",
+                min_value=-90.0,
+                max_value=90.0
+            )
+            
+            lon = st.number_input(
+                "Lengdegrad",
+                value=float(customer["lon"]) if customer.get("lon") else 0.0,
+                format="%.6f",
+                min_value=-180.0,
+                max_value=180.0
+            )
+            
+            subscription = st.selectbox(
+                "Abonnement",
+                options=["star_red", "star_white", "dot_white", "admin", "none"],
+                index=["star_red", "star_white", "dot_white", "admin", "none"].index(
+                    customer.get("subscription", "none")
+                )
+            )
+            
+            type = st.selectbox(
+                "Type",
+                options=["Customer", "Admin", "Superadmin"],
+                index=["Customer", "Admin", "Superadmin"].index(
+                    customer.get("type", "Customer")
+                )
+            )
+
+            if st.form_submit_button("Lagre"):
+                if insert_customer(id, lat, lon, subscription, type):
+                    st.success("Kunde oppdatert")
+                    # Bruk den nye rerun() metoden istedenfor experimental_rerun()
+                    st.rerun()
+                else:
+                    st.error("Feil ved oppdatering av kunde")
 
     except Exception as e:
-        logger.error(f"Error in customer_edit_component: {str(e)}")
+        logger.error(f"Feil i customer_edit_component: {str(e)}", exc_info=True)
         st.error("En feil oppstod ved redigering av kunde")
 
 
