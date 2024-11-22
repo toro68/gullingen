@@ -1073,6 +1073,14 @@ def vis_tunbroyting_oversikt():
         current_time = get_current_time()
         dagens_bestillinger = filter_todays_bookings(bestillinger)
         
+        # Legg til kartvisning her
+        st.subheader(f"Tunbrøytingskart for {format_date(current_time, 'display', 'date')}")
+        vis_dagens_tunkart(
+            dagens_bestillinger,
+            mapbox_token=mapbox_token,
+            title=f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
+        )
+        
         if not dagens_bestillinger.empty:
             st.subheader(f"Kart over tunbrøytinger {format_date(current_time, 'display', 'date')}")
             

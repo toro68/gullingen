@@ -35,32 +35,43 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
         # Opprett kartet
         fig = go.Figure()
         
-        # Legg til markører hvis det finnes bestillinger
         if not bestillinger.empty:
-            cabin_coordinates = get_cabin_coordinates()
-            for _, booking in bestillinger.iterrows():
-                customer_id = booking['customer_id']
-                if customer_id in cabin_coordinates:
-                    lat, lon = cabin_coordinates[customer_id]
-                    popup_text = get_booking_popup_text(booking)
-                    
-                    # Bestem markørfarge
-                    color = GREEN if booking['abonnement_type'] == 'Årsabonnement' else RED
-                    
-                    fig.add_trace(go.Scattermapbox(
-                        lat=[lat],
-                        lon=[lon],
-                        mode='markers',
-                        marker=dict(
-                            size=10,
-                            color=color,
-                            symbol='circle'
-                        ),
-                        text=popup_text,
-                        hoverinfo='text'
-                    ))
+            # Forbered data
+            bestillinger = prepare_map_data(bestillinger)
+            
+            # Valider konfigurasjon
+            is_valid, message = verify_map_configuration(bestillinger, mapbox_token)
+            if not is_valid:
+                logger.warning(f"Kartvalidering feilet: {message}")
+                st.warning(message)
+            else:
+                # Legg til markører for hver bestilling
+                cabin_coordinates = get_cabin_coordinates()
+                for _, booking in bestillinger.iterrows():
+                    customer_id = booking['customer_id']
+                    if customer_id in cabin_coordinates:
+                        lat, lon = cabin_coordinates[customer_id]
+                        popup_text = get_map_popup_text(booking)
+                        
+                        # Bestem markørfarge basert på abonnement_type
+                        color = GREEN if booking['abonnement_type'] == 'Årsabonnement' else RED
+                        
+                        fig.add_trace(go.Scattermapbox(
+                            lat=[lat],
+                            lon=[lon],
+                            mode='markers',
+                            marker=dict(
+                                size=10,
+                                color=color,
+                                symbol='circle'
+                            ),
+                            text=popup_text,
+                            hoverinfo='text'
+                        ))
+        else:
+            st.info("Ingen aktive bestillinger i dag.")
         
-        # Konfigurer kartet
+        # Konfigurer og vis kartet uansett om det er bestillinger eller ikke
         fig.update_layout(
             mapbox=dict(
                 accesstoken=mapbox_token,
@@ -70,15 +81,12 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
             ),
             margin=dict(l=0, r=0, t=30, b=0),
             title=title or "Tunbrøytingskart",
-            showlegend=False,
-            height=600  # Legg til fast høyde
+            showlegend=False
         )
         
-        # Vis kartet og meldingen
-        if bestillinger.empty:
-            st.info("Ingen aktive bestillinger i dag.")
-            
+        # Vis kartet
         st.plotly_chart(fig, use_container_width=True)
+        
         return fig
         
     except Exception as e:
