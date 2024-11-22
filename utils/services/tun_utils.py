@@ -23,7 +23,10 @@ from utils.core.config import (
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import neste_fredag
 from utils.core.validation_utils import validere_bestilling
-from utils.db.db_utils import get_db_connection
+from utils.db.db_utils import (
+    get_db_connection,
+    verify_tunbroyting_database
+)
 from utils.services.map_utils import vis_dagens_tunkart, verify_map_configuration, debug_map_data
 from utils.services.customer_utils import (
     customer_edit_component,
@@ -40,6 +43,13 @@ logger = get_logger(__name__)
 def bestill_tunbroyting():
     try:
         st.title("Bestill Tunbrøyting")
+        
+        # Verifiser database tidlig
+        if not verify_tunbroyting_database():
+            logger.error("Kunne ikke verifisere tunbrøyting database")
+            st.error("Det oppstod en feil med databasen. Vennligst prøv igjen senere.")
+            return
+            
         # Informasjonstekst
         st.info(
             """
@@ -212,6 +222,11 @@ def lagre_bestilling(
     abonnement_type: str,
 ) -> bool:
     try:
+        # Verifiser database først
+        if not verify_tunbroyting_database():
+            logger.error("Kunne ikke verifisere tunbrøyting database")
+            return False
+            
         with get_db_connection("tunbroyting") as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -940,6 +955,7 @@ def vis_tunbestillinger_for_periode():
                 with col2:
                     st.metric("Antall unike hytter", visnings_df["Hytte"].nunique())
                 
+                
                 # Vis dataframe
                 st.dataframe(
                     visnings_df,
@@ -1313,6 +1329,13 @@ def vis_hyttegrend_aktivitet():
             "💡  Siktemålet er å være ferdig med tunbrøyting på fredager innen kl 15. "
             "Store snøfall, våt snø og/eller mange bestillinger, kan medføre forsinkelser."
         )
+        
+        # Verifiser database først
+        if not verify_tunbroyting_database():
+            logger.error("Kunne ikke verifisere tunbrøyting database")
+            st.error("Kunne ikke laste aktivitetsoversikt på grunn av databasefeil")
+            return None
+            
         alle_bestillinger = get_bookings()
         if alle_bestillinger.empty:
             st.info("Ingen bestillinger funnet for perioden.")
@@ -1363,6 +1386,11 @@ def get_bookings(start_date=None, end_date=None):
     """Henter bestillinger fra databasen"""
     try:
         logger.info(f"get_bookings called with start_date={start_date}, end_date={end_date}")
+        
+        # Verifiser database først
+        if not verify_tunbroyting_database():
+            logger.error("Kunne ikke verifisere tunbrøyting database")
+            return pd.DataFrame()
 
         with get_db_connection("tunbroyting") as conn:
             query = """
@@ -1383,19 +1411,19 @@ def get_bookings(start_date=None, end_date=None):
                 query += " AND ankomst_dato <= ?" if start_date else " WHERE ankomst_dato <= ?"
                 params.append(end_date)
 
+            # Logg spørringen og parametrene
+            logger.info(f"SQL Query: {query}")
+            logger.info(f"Parameters: {params}")
+
             df = pd.read_sql_query(query, conn, params=params)
             
-            # Konverter datokolonner til datetime med tidssone
-            for col in ['ankomst_dato', 'avreise_dato']:
-                if col in df.columns:
-                    df[col] = pd.to_datetime(
-                        df[col], 
-                        format=DATE_FORMATS["database"]["date"]
-                    ).dt.tz_localize(TZ)
+            # Logg resultatet
+            logger.info(f"Query returned {len(df)} rows")
+            if not df.empty:
+                logger.info(f"First row: {df.iloc[0].to_dict()}")
             
-            logger.info(f"Raw data:\n{df.to_string()}")
             return df
 
     except Exception as e:
-        logger.error(f"Error in get_bookings: {str(e)}")
+        logger.error(f"Error in get_bookings: {str(e)}", exc_info=True)
         return pd.DataFrame()

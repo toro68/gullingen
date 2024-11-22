@@ -464,3 +464,61 @@ def verify_customer_database() -> bool:
     except Exception as e:
         logger.error(f"Customer database verification failed: {str(e)}", exc_info=True)
         return False
+
+def verify_tunbroyting_database() -> bool:
+    """Verifiser tunbroyting database"""
+    try:
+        logger.info("=== VERIFISERER TUNBRØYTING DATABASE ===")
+        
+        with get_db_connection("tunbroyting") as conn:
+            cursor = conn.cursor()
+            
+            # Sjekk om tabellen eksisterer
+            logger.info("Sjekker om tunbroyting_bestillinger tabellen eksisterer")
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='tunbroyting_bestillinger'"
+            )
+            if not cursor.fetchone():
+                logger.error("tunbroyting_bestillinger tabellen eksisterer ikke")
+                return False
+            
+            # Sjekk kolonnestruktur
+            logger.info("Verifiserer kolonnestruktur")
+            cursor.execute("PRAGMA table_info(tunbroyting_bestillinger)")
+            columns = {row[1] for row in cursor.fetchall()}
+            required_columns = {
+                "id",
+                "customer_id",
+                "ankomst_dato",
+                "avreise_dato",
+                "abonnement_type"
+            }
+            
+            missing_columns = required_columns - columns
+            if missing_columns:
+                logger.error(f"Mangler påkrevde kolonner: {missing_columns}")
+                return False
+                
+            # Sjekk data integritet
+            logger.info("Sjekker data integritet")
+            cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
+            total_rows = cursor.fetchone()[0]
+            logger.info(f"Totalt antall rader: {total_rows}")
+            
+            # Sjekk for ugyldige datoer
+            cursor.execute("""
+                SELECT COUNT(*) FROM tunbroyting_bestillinger 
+                WHERE ankomst_dato IS NULL 
+                OR ankomst_dato = '' 
+                OR ankomst_dato = 'None'
+            """)
+            invalid_dates = cursor.fetchone()[0]
+            if invalid_dates > 0:
+                logger.warning(f"Fant {invalid_dates} rader med ugyldige datoer")
+            
+            logger.info("Tunbrøyting database struktur verifisert")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Feil ved verifisering av tunbrøyting database: {str(e)}", exc_info=True)
+        return False
