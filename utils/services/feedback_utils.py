@@ -450,7 +450,9 @@ def give_feedback():
                         st.write(f"Status: {feedback['status']}")
         else:
             st.warning("Kunne ikke hente tidligere feedback. Vennligst logg inn på nytt.")
-
+    except Exception as e:
+            logger.error(f"Feil i give_feedback: {str(e)}", exc_info=True)
+            st.error("Det oppstod en feil ved visning av feedback-skjema")
 
 def display_recent_feedback():
     try:
