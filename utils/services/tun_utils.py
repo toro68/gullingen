@@ -152,10 +152,8 @@ def bestill_tunbroyting():
                 resultat = lagre_bestilling(
                     customer_id,
                     ankomst_dato.isoformat(),
-                    None,  # ankomst_tid settes til None
                     avreise_dato.isoformat() if avreise_dato else None,
-                    None,  # avreise_tid settes til None
-                    abonnement_type,
+                    abonnement_type
                 )
                 if resultat:
                     st.success("Bestilling av tunbrøyting er registrert!")
@@ -218,8 +216,8 @@ def bestill_tunbroyting():
 def lagre_bestilling(
     customer_id: str,
     ankomst_dato: str,
-    avreise_dato: str,
-    abonnement_type: str,
+    avreise_dato: str = None,
+    abonnement_type: str = "Ukentlig ved bestilling"
 ) -> bool:
     try:
         # Verifiser database først
@@ -258,7 +256,7 @@ def lagre_bestilling(
                 (
                     str(customer_id),
                     str(ankomst_dato),
-                    str(avreise_dato),
+                    str(avreise_dato) if avreise_dato else None,
                     str(abonnement_type)
                 )
             )
@@ -355,10 +353,7 @@ def hent_bestillinger_for_periode(start_date, end_date):
                     df[f"{col}_formatted"] = df[col].apply(
                         lambda x: format_date(x, "display", "date")
                     )
-            
-            # Fjern tidkolonner siden de ikke brukes
-            df = df.drop(['ankomst_tid', 'avreise_tid'], axis=1, errors='ignore')
-            
+                            
             # Lag en visningsversjon av dataframe for logging
             display_df = df.copy()
             # Bruk formaterte datokolonner for visning
