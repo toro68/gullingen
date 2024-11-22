@@ -13,6 +13,7 @@ from utils.core.config import (
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import execute_query, get_db_connection, fetch_data
 from utils.components.ui.alert_card import get_alert_icon, is_new_alert
+from utils.services.feedback_utils import update_feedback_status
 
 logger = get_logger(__name__)
 
@@ -370,17 +371,18 @@ def display_alert_details(alert):
             
             with col2:
                 if st.button("Lagre", key=f"save_{alert['id']}"):
-                    success = update_alert(
-                        alert['id'],
-                        new_status,
-                        new_expiry.isoformat(),
-                        new_display,
-                        ','.join(new_target)
+                    success = update_feedback_status(
+                        feedback_id=alert['id'],
+                        new_status=new_status,
+                        changed_by=st.session_state.customer_id,
+                        new_expiry=new_expiry.isoformat(),
+                        new_display=new_display,
+                        new_target=','.join(new_target)
                     )
                     if success:
                         st.success("Varsel oppdatert")
                         st.session_state[edit_key] = False
-                        get_alerts.clear()
+                        get_alerts.clear()  # Clear cache
                         st.rerun()
                     else:
                         st.error("Kunne ikke oppdatere varselet")

@@ -149,17 +149,44 @@ def get_feedback(start_date=None, end_date=None, include_hidden=False, customer_
         return pd.DataFrame()
 
 
-def update_feedback_status(feedback_id, new_status, changed_by):
+def update_feedback_status(feedback_id, new_status, changed_by, new_expiry=None, new_display=None, new_target=None):
+    """
+    Oppdaterer status og andre felter for en feedback/varsel.
+    
+    Args:
+        feedback_id (int): ID til feedbacken som skal oppdateres
+        new_status (str): Ny status
+        changed_by (str): Bruker-ID til den som gjorde endringen
+        new_expiry (str, optional): Ny utløpsdato i ISO format
+        new_display (bool, optional): Om varselet skal vises på værsiden
+        new_target (str, optional): Ny målgruppe (kommaseparert streng)
+    """
     try:
         query = """UPDATE feedback 
-                   SET status = ?, status_changed_by = ?, status_changed_at = ? 
-                   WHERE id = ?"""
-        changed_at = datetime.now(TZ).isoformat()
-        params = (new_status, changed_by, changed_at, feedback_id)
-        execute_query("feedback", query, params)
+                   SET status = ?, 
+                       status_changed_by = ?, 
+                       status_changed_at = ?"""
+        params = [new_status, changed_by, datetime.now(TZ).isoformat()]
+        
+        if new_expiry is not None:
+            query += ", expiry_date = ?"
+            params.append(new_expiry)
+            
+        if new_display is not None:
+            query += ", display_on_weather = ?"
+            params.append(1 if new_display else 0)
+            
+        if new_target is not None:
+            query += ", target_group = ?"
+            params.append(new_target)
+            
+        query += " WHERE id = ?"
+        params.append(feedback_id)
 
+        execute_query("feedback", query, params)
         logger.info(f"Status updated for feedback {feedback_id}: {new_status}")
         return True
+        
     except Exception as e:
         logger.error(f"Error updating feedback status: {str(e)}", exc_info=True)
         return False
