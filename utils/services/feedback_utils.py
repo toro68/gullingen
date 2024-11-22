@@ -1160,43 +1160,48 @@ def display_daily_maintenance_rating():
         st.error("Det oppstod en feil ved visning av tilbakemeldingsskjema")
 
 def display_admin_dashboard():
-    """Hovedfunksjon for admin-dashboard"""
     try:
         logger.info("=== Starting display_admin_dashboard ===")
         
         st.title("🎛️ Feedback Dashboard")
         
-        # Velg visning med tabs
-        logger.info("Creating tabs")
+        # Hent data først
+        start_date = get_current_time().date() - timedelta(days=30)  # Siste 30 dager som standard
+        end_date = get_current_time().date()
+        
+        # Hent all feedback data
+        feedback_data = get_feedback(
+            start_date=start_date,
+            end_date=end_date,
+            include_hidden=True
+        )
+        
         tab1, tab2, tab3 = st.tabs([
             "📊 Feedback Oversikt",
             "🚜 Vedlikehold",
             "📈 Statistikk"
         ])
         
-        # Tab 1: Generell Feedback
         with tab1:
-            logger.info("Displaying feedback overview tab")
-            display_feedback_dashboard()
+            display_feedback_dashboard()  # Denne funksjonen henter egen data
             
-        # Tab 2: Vedlikehold
         with tab2:
-            logger.info("Displaying maintenance tab")
             col1, col2 = st.columns([2, 1])
             with col1:
-                display_maintenance_summary()
+                # Beregn statistikk for vedlikehold
+                daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(
+                    feedback_data[feedback_data['type'] == 'Vintervedlikehold']
+                )
+                display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, 'day')
             with col2:
                 display_daily_maintenance_rating()
                 
-        # Tab 3: Statistikk
         with tab3:
-            logger.info("Displaying statistics tab")
-            display_reaction_statistics()
+            display_reaction_statistics(feedback_data)
 
     except Exception as e:
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av dashboardet")
-        # Vis mer detaljert feilmelding i development
         st.exception(e)
 
 def display_feedback_dashboard():
