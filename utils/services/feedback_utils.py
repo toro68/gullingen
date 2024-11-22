@@ -22,6 +22,7 @@ from utils.core.config import (
     DATE_FORMATS,
     get_date_format,
     get_current_time,
+    combine_date_with_tz,
     DATE_VALIDATION
 )
 from utils.core.logging_config import get_logger
