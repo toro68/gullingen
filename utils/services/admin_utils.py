@@ -30,7 +30,9 @@ def admin_alert():
     # Legg til feilsøkingsinformasjon
     if st.checkbox("Vis feilsøkingsinformasjon"):
         st.write("Rådata for dagens varsler:")
-        st.write(get_alerts(alert_type='active'))
+        st.write(get_alerts(only_today=True))
+        st.write("Rådata for alle aktive varsler:")
+        st.write(get_alerts(include_expired=False))
         st.write("SQL-spørring brukt for å hente varsler:")
         query = "SELECT * FROM feedback WHERE is_alert = 1 ORDER BY datetime DESC"
         st.code(query)
@@ -101,7 +103,7 @@ def unified_report_page(include_hidden=False):
         st.write("Debug: Hentet påloggingshistorikk")  # Debug utskrift
 
     if "Admin-varsler" in data_types:
-        admin_alerts = get_alerts(alert_type='active')
+        admin_alerts = get_alerts(only_today=False, include_expired=True)
         st.write("Debug: Hentet admin-varsler")  # Debug utskrift
         # st.subheader("Admin-varsler")
         # admin_alert()
