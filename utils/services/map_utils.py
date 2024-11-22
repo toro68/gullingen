@@ -1,5 +1,6 @@
 # map_utils.py
 # Standard library imports
+from datetime import datetime
 
 # Third-party imports
 import pandas as pd
@@ -18,6 +19,7 @@ from utils.core.validation_utils import validate_cabin_id, validate_date
 from utils.services.stroing_utils import (
     hent_stroing_bestillinger
 )
+from utils.services.tun_utils import hent_aktive_bestillinger_for_dag
 
 # Set up logging
 logger = get_logger(__name__)
@@ -27,38 +29,81 @@ GREEN = "#03b01f"  # Årsabonnement
 RED = "#db0000"    # Ukentlig bestilling
 GRAY = "#C0C0C0"   # Ingen bestilling
 
-def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
-    """Viser kart over dagens tunbrøytinger."""
+def vis_dagens_tunkart(bestillinger, mapbox_token, title):
+    logger.info(f"Starter vis_dagens_tunkart med {len(bestillinger)} bestillinger")
+    
     try:
-        logger.info(f"Starter vis_dagens_tunkart med {len(bestillinger)} bestillinger")
+        cabin_coordinates = get_cabin_coordinates()
+        if not cabin_coordinates:
+            logger.error("Ingen koordinater funnet")
+            st.error("Kunne ikke laste koordinater for hyttene")
+            return
+            
+        current_date = datetime.now(TZ).date()
+        
+        # Hent aktive bestillinger
+        aktive_bestillinger = hent_aktive_bestillinger_for_dag(current_date)
+        
+        if aktive_bestillinger is None or aktive_bestillinger.empty:
+            logger.info("Ingen aktive bestillinger for dagens dato")
+            aktive_bestillinger = pd.DataFrame(columns=["customer_id", "abonnement_type", "ankomst_dato", "avreise_dato"])
+        
+        logger.info(f"Aktive bestillinger: {aktive_bestillinger.to_string()}")
+        
+        # Definerer farger
+        GREEN = "#03b01f"  # Grønn for årsabonnement
+        RED = "#db0000"    # Rød for vanlige bestillinger
+        GRAY = "#C0C0C0"   # Grå for inaktive
+        
+        points_data = []
+        for cabin_id, (lat, lon) in cabin_coordinates.items():
+            if pd.isna(lat) or pd.isna(lon):
+                continue
+                
+            cabin_bookings = aktive_bestillinger[aktive_bestillinger["customer_id"].astype(str) == str(cabin_id)]
+            
+            point = {
+                "lat": lat,
+                "lon": lon,
+                "color": GRAY,
+                "size": 8,
+                "text": f"Hytte: {cabin_id}<br>"
+            }
+            
+            if not cabin_bookings.empty:
+                booking = cabin_bookings.iloc[0]
+                point["color"] = GREEN if booking["abonnement_type"] == "Årsabonnement" else RED
+                point["size"] = 12
+                point["text"] += (
+                    f"Status: Aktiv<br>"
+                    f"Type: {booking['abonnement_type']}<br>"
+                    f"Ankomst: {booking['ankomst_dato'].strftime('%Y-%m-%d')}<br>"
+                    f"Avreise: {booking['avreise_dato'].strftime('%Y-%m-%d') if pd.notnull(booking['avreise_dato']) else 'Ikke satt'}"
+                )
+            
+            points_data.append(point)
         
         # Opprett kartet
         fig = go.Figure()
         
         # Legg til markører hvis det finnes bestillinger
-        if not bestillinger.empty:
-            cabin_coordinates = get_cabin_coordinates()
-            for _, booking in bestillinger.iterrows():
-                customer_id = booking['customer_id']
-                if customer_id in cabin_coordinates:
-                    lat, lon = cabin_coordinates[customer_id]
-                    popup_text = get_booking_popup_text(booking)
-                    
-                    # Bestem markørfarge
-                    color = GREEN if booking['abonnement_type'] == 'Årsabonnement' else RED
-                    
-                    fig.add_trace(go.Scattermapbox(
-                        lat=[lat],
-                        lon=[lon],
-                        mode='markers',
-                        marker=dict(
-                            size=10,
-                            color=color,
-                            symbol='circle'
-                        ),
-                        text=popup_text,
-                        hoverinfo='text'
-                    ))
+        if not points_data:
+            st.info("Ingen aktive bestillinger i dag.")
+            
+        else:
+            for point in points_data:
+                fig.add_trace(go.Scattermapbox(
+                    lat=[point["lat"]],
+                    lon=[point["lon"]],
+                    mode='markers',
+                    marker=dict(
+                        size=point["size"],
+                        color=point["color"],
+                        symbol='circle'
+                    ),
+                    text=point["text"],
+                    hoverinfo='text'
+                ))
         
         # Konfigurer kartet
         fig.update_layout(
@@ -75,9 +120,6 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
         )
         
         # Vis kartet og meldingen
-        if bestillinger.empty:
-            st.info("Ingen aktive bestillinger i dag.")
-            
         st.plotly_chart(fig, use_container_width=True)
         return fig
         
