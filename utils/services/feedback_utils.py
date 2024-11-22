@@ -453,41 +453,45 @@ def give_feedback():
 
 
 def display_recent_feedback():
-    st.subheader("Nylige rapporter")
-    end_date = datetime.now(TZ)
-    start_date = end_date - timedelta(days=7)
-    recent_feedback = get_feedback(start_date.isoformat(), end_date.isoformat())
+    try:
+        st.subheader("Nylige rapporter")
+        end_date = datetime.now(TZ)
+        start_date = end_date - timedelta(days=7)
+        recent_feedback = get_feedback(start_date.isoformat(), end_date.isoformat())
 
-    if not recent_feedback.empty:
-        recent_feedback.loc[recent_feedback["status"].isnull(), "status"] = "Ny"
+        if not recent_feedback.empty:
+            recent_feedback.loc[recent_feedback["status"].isnull(), "status"] = "Ny"
+            recent_feedback = recent_feedback.sort_values("datetime", ascending=False)
 
-        recent_feedback = recent_feedback.sort_values("datetime", ascending=False)
+            st.write(f"Viser {len(recent_feedback)} rapporter fra de siste 7 dagene:")
 
-        st.write(f"Viser {len(recent_feedback)} rapporter fra de siste 7 dagene:")
-
-        for _, row in recent_feedback.iterrows():
-            icon = FEEDBACK_ICONS.get(row["type"], "❓")
-            status = row["status"]
-            status_color = STATUS_COLORS.get(status, STATUS_COLORS["default"])
-            date_str = (
-                row["datetime"].strftime("%Y-%m-%d %H:%M")
-                if pd.notnull(row["datetime"])
-                else "Ukjent dato"
-            )
-
-            with st.expander(f"{icon} {row['type']} - {date_str}"):
-                st.markdown(
-                    f"<span style='color:{status_color};'>●</span> **Status:** {status}",
-                    unsafe_allow_html=True,
+            for _, row in recent_feedback.iterrows():
+                icon = FEEDBACK_ICONS.get(row["type"], "❓")
+                status = row["status"]
+                status_color = STATUS_COLORS.get(status, STATUS_COLORS["default"])
+                date_str = (
+                    row["datetime"].strftime("%Y-%m-%d %H:%M")
+                    if pd.notnull(row["datetime"])
+                    else "Ukjent dato"
                 )
-                st.write(f"**Rapportert av:** {row['customer_id']}")
-                st.write(f"**Kommentar:** {row['comment']}")
-                if pd.notnull(row["status_changed_at"]):
-                    st.write(
-                        f"**Status oppdatert:** {row['status_changed_at'].strftime('%Y-%m-%d %H:%M')}"
+
+                with st.expander(f"{icon} {row['type']} - {date_str}"):
+                    st.markdown(
+                        f"<span style='color:{status_color};'>●</span> **Status:** {status}",
+                        unsafe_allow_html=True,
                     )
-    else:
-        st.info("Ingen rapporter i de siste 7 dagene.")
+                    st.write(f"**Rapportert av:** {row['customer_id']}")
+                    st.write(f"**Kommentar:** {row['comment']}")
+                    if pd.notnull(row["status_changed_at"]):
+                        st.write(
+                            f"**Status oppdatert:** {row['status_changed_at'].strftime('%Y-%m-%d %H:%M')}"
+                        )
+        else:
+            st.info("Ingen rapporter i de siste 7 dagene.")
+            
+    except Exception as e:
+        logger.error(f"Feil i display_recent_feedback: {str(e)}", exc_info=True)
+        st.error("Det oppstod en feil ved visning av nylige rapporter")
 
 
 def batch_insert_feedback(feedback_list):
