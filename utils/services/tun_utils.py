@@ -1042,125 +1042,47 @@ def print_dataframe_info(df, name):
 
 
 def vis_tunbroyting_oversikt():
-    """
-    Viser oversikt over tunbrøytingsbestillinger med kart og lister.
-    Bruker config.py for standardisert dato- og tidshåndtering.
-    """
+    """Viser oversikt over tunbrøytingsbestillinger med kart og lister."""
     st.title("Oversikt over tunbestillinger")
     
     try:
+        # Hent mapbox token først
+        mapbox_token = st.secrets["MAPBOX_TOKEN"]  # Legg til denne linjen
+        
         # Hent bestillinger
         bestillinger = get_bookings()
         
         if bestillinger.empty:
-            st.write("Ingen bestillinger å vise.")
+            st.info("Ingen bestillinger funnet.")
             return
-
-        # Konverter datokolonner til riktig format og tidssone
-        for col in ['ankomst_dato', 'avreise_dato']:
-            if col in bestillinger.columns:
-                bestillinger[col] = bestillinger[col].apply(safe_to_datetime)
-
-        # Hent Mapbox token
-        try:
-            mapbox_token = st.secrets["mapbox"]["access_token"]
-        except Exception as e:
-            st.error("Kunne ikke hente Mapbox token. Vennligst sjekk konfigurasjonen.")
-            logger.error(f"Mapbox token error: {str(e)}")
-            return
-
-        # --- Vis kart for dagens bestillinger ---
-        current_time = get_current_time()
+            
+        # Filtrer dagens bestillinger
         dagens_bestillinger = filter_todays_bookings(bestillinger)
         
-        if not dagens_bestillinger.empty:
-            st.subheader(f"Kart over tunbrøytinger {format_date(current_time, 'display', 'date')}")
+        # Vis kart for dagens bestillinger
+        current_time = get_current_time()
+        
+        # Debug logging
+        logger.info(f"Dagens aktive bestillinger: {dagens_bestillinger}")
+        
+        # Vis kart
+        if mapbox_token:  # Sjekk at vi har token
+            fig_today = vis_dagens_tunkart(
+                dagens_bestillinger, 
+                mapbox_token=mapbox_token,  # Pass token eksplisitt
+                title=f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
+            )
             
-            # Verifiser kartkonfigurasjon
-            is_valid, error_msg = verify_map_configuration(dagens_bestillinger, mapbox_token)
-            
-            if is_valid:
-                debug_map_data(dagens_bestillinger)  # Logger debug info
-                
-                fig_today = vis_dagens_tunkart(
-                    dagens_bestillinger, 
-                    mapbox_token, 
-                    f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
-                )
-                
-                if fig_today:
-                    st.plotly_chart(fig_today, use_container_width=True, key="fig_today")
-                else:
-                    st.warning("Kunne ikke generere kart for dagens tunbrøytinger")
+            if fig_today:
+                st.plotly_chart(fig_today, use_container_width=True)
             else:
-                st.warning(f"Kunne ikke vise kart: {error_msg}")
-        
-        # --- Vis dagens bestillinger som liste ---
-        st.subheader(f"Tunbrøytinger {format_date(current_time, 'display', 'date')}")
-        vis_dagens_bestillinger()
-        st.write("---")
-        
-        # --- Vis bestillinger for valgt periode ---
-        st.subheader("Tunbrøyting i valgt periode")
-        
-        # Bruk standardiserte datofunksjoner fra config
-        default_start, default_end = get_default_date_range()
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input(
-                "Fra dato",
-                value=default_start.date(),
-                min_value=datetime.now(TZ).date() - timedelta(days=DATE_VALIDATION["default_date_range"]),
-                max_value=datetime.now(TZ).date() + timedelta(days=DATE_VALIDATION["max_future_booking"]),
-                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
-            )
-        
-        with col2:
-            end_date = st.date_input(
-                "Til dato",
-                value=default_end.date(),
-                min_value=start_date,
-                max_value=start_date + timedelta(days=DATE_VALIDATION["max_future_booking"]),
-                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
-            )
-        
-        # Konverter datoer til datetime med tidssone
-        periode_start = combine_date_with_tz(start_date)
-        periode_slutt = combine_date_with_tz(end_date)
-        
-        periode_bestillinger = hent_bestillinger_for_periode(periode_start, periode_slutt)
-        if not periode_bestillinger.empty:
-            for col in ['ankomst_dato', 'avreise_dato']:
-                if col in periode_bestillinger.columns:
-                    periode_bestillinger[col] = periode_bestillinger[col].apply(safe_to_datetime)
-            
-            # Vis oversikt
-            st.dataframe(
-                periode_bestillinger,
-                column_config={
-                    "customer_id": "Hytte",
-                    "ankomst_dato": st.column_config.DatetimeColumn(
-                        "Ankomst",
-                        format="DD.MM.YYYY"
-                    ),
-                    "avreise_dato": st.column_config.DatetimeColumn(
-                        "Avreise",
-                        format="DD.MM.YYYY"
-                    ),
-                    "abonnement_type": "Type"
-                }
-            )
+                st.warning("Kunne ikke generere kart for dagens tunbrøytinger")
         else:
-            st.info("Ingen bestillinger funnet for valgt periode.")
-        
-        # --- Vis hytter med årsabonnement ---
-        st.write("---")
-        vis_arsabonnenter()
-
+            st.error("Mapbox token mangler - kan ikke vise kart")
+            
     except Exception as e:
         logger.error(f"Feil i vis_tunbroyting_oversikt: {str(e)}", exc_info=True)
-        st.error("Det oppstod en feil ved visning av tunbrøytingsoversikten")
+        st.error("Kunne ikke vise oversikt")
 
 def vis_aktive_bestillinger():
     st.subheader("Aktive tunbestillinger")
