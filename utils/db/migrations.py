@@ -2,6 +2,7 @@ import time
 from pathlib import Path
 import pandas as pd
 import streamlit as st
+import os
 
 from utils.core.logging_config import get_logger
 from utils.db.connection import get_db_connection
@@ -20,52 +21,73 @@ logger = get_logger(__name__)
 def run_migrations():
     """Kjører nødvendige databasemigrasjoner"""
     try:
-        CURRENT_VERSION = "1.7"  # Økt versjonsnummer
+        CURRENT_VERSION = "1.9"
+        IS_CLOUD = os.getenv('IS_STREAMLIT_CLOUD', 'false').lower() == 'true'
         
-        # Sjekk om vi trenger å tvinge reinitialisering
-        if "db_version" not in st.session_state or st.session_state.db_version != CURRENT_VERSION:
-            st.session_state.app_initialized = False
-            st.session_state.db_version = CURRENT_VERSION
+        logger.info(f"Running migrations. Environment: {'Cloud' if IS_CLOUD else 'Local'}")
         
-        # Sjekk/opprett versjonstabell først
+        # Opprett system-database og schema_version tabell først
         with get_db_connection("system") as conn:
             cursor = conn.cursor()
+            
+            # Opprett migrations_history tabell
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    version TEXT PRIMARY KEY,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CREATE TABLE IF NOT EXISTS migrations_history (
+                    id INTEGER PRIMARY KEY,
+                    version TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    success BOOLEAN NOT NULL,
+                    error_message TEXT,
+                    environment TEXT NOT NULL
                 )
             """)
             
-            # Sjekk nåværende versjon
-            cursor.execute("SELECT version FROM schema_version LIMIT 1")
-            result = cursor.fetchone()
-            
-            if result and result[0] == CURRENT_VERSION:
-                logger.info("Database already at current version")
-                return True
+            # Kjør migrasjoner i rekkefølge
+            for migration in MIGRATIONS:
+                migration_name = migration['function'].__name__
                 
-            # Kjør migrasjoner
-            migrate_feedback_table()
-            migrate_tunbroyting_table()
-            migrate_login_history_table()
-            migrate_stroing_table()
+                # Sjekk om migrasjonen allerede er kjørt
+                cursor.execute("""
+                    SELECT success FROM migrations_history 
+                    WHERE name = ? AND version = ? AND environment = ?
+                    ORDER BY executed_at DESC LIMIT 1
+                """, (migration_name, migration['version'], 'cloud' if IS_CLOUD else 'local'))
+                
+                result = cursor.fetchone()
+                
+                if result and result[0]:
+                    logger.info(f"Migration {migration_name} already executed successfully")
+                    continue
+                
+                # Kjør migrasjonen
+                try:
+                    success = migration['function']()
+                    error_msg = None
+                except Exception as e:
+                    success = False
+                    error_msg = str(e)
+                    logger.error(f"Error in migration {migration_name}: {error_msg}")
+                
+                # Logg resultatet
+                cursor.execute("""
+                    INSERT INTO migrations_history 
+                    (version, name, success, error_message, environment)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (
+                    migration['version'],
+                    migration_name,
+                    success,
+                    error_msg,
+                    'cloud' if IS_CLOUD else 'local'
+                ))
+                conn.commit()
+                
+                if not success:
+                    return False
             
-            # Oppdater versjon
-            if not result:
-                cursor.execute(
-                    "INSERT INTO schema_version (version) VALUES (?)",
-                    (CURRENT_VERSION,)
-                )
-            else:
-                cursor.execute(
-                    "UPDATE schema_version SET version = ?, updated_at = CURRENT_TIMESTAMP",
-                    (CURRENT_VERSION,)
-                )
-            conn.commit()
+            return True
             
-        return True
-        
     except Exception as e:
         logger.error(f"Error running migrations: {str(e)}", exc_info=True)
         return False
@@ -147,51 +169,60 @@ def migrate_feedback_table():
         return False
 
 def migrate_tunbroyting_table():
-    """Migrerer tunbroyting-tabellen fra bruker til customer_id"""
+    """Migrerer tunbroyting-tabellen til forenklet skjema uten tidkolonner"""
     try:
         with get_db_connection("tunbroyting") as conn:
             cursor = conn.cursor()
             
-            # Sjekk om bruker-kolonnen eksisterer
-            cursor.execute("PRAGMA table_info(tunbroyting_bestillinger)")
-            columns = [row[1] for row in cursor.fetchall()]
+            # Backup eksisterende tabell
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger_backup 
+                AS SELECT * FROM tunbroyting_bestillinger
+            """)
             
-            if 'bruker' in columns:
-                # Lag en backup av eksisterende data
-                cursor.execute("CREATE TABLE tunbroyting_backup AS SELECT * FROM tunbroyting_bestillinger")
-                
-                # Dropp original tabell
-                cursor.execute("DROP TABLE tunbroyting_bestillinger")
-                
-                # Opprett ny tabell med riktig skjema
-                cursor.execute("""
-                    CREATE TABLE tunbroyting_bestillinger (
-                        id INTEGER PRIMARY KEY,
-                        customer_id TEXT,
-                        ankomst_dato DATE,
-                        ankomst_tid TIME,
-                        avreise_dato DATE,
-                        avreise_tid TIME,
-                        abonnement_type TEXT
-                    )
-                """)
-                
-                # Kopier data tilbake, konverter bruker til customer_id
-                cursor.execute("""
-                    INSERT INTO tunbroyting_bestillinger 
-                    SELECT id, bruker, ankomst_dato, ankomst_tid, 
-                           avreise_dato, avreise_tid, abonnement_type 
-                    FROM tunbroyting_backup
-                """)
-                
-                # Fjern backup-tabellen
-                cursor.execute("DROP TABLE tunbroyting_backup")
-                
-                conn.commit()
-                logger.info("Successfully migrated tunbroyting table from bruker to customer_id")
-            else:
-                logger.info("Tunbroyting table already using customer_id")
+            # Dropp original tabell
+            cursor.execute("DROP TABLE IF EXISTS tunbroyting_bestillinger")
             
+            # Opprett ny tabell med forenklet skjema
+            cursor.execute("""
+                CREATE TABLE tunbroyting_bestillinger (
+                    id INTEGER PRIMARY KEY,
+                    customer_id TEXT NOT NULL,
+                    ankomst_dato DATE NOT NULL,
+                    avreise_dato DATE,
+                    abonnement_type TEXT NOT NULL,
+                    FOREIGN KEY (customer_id) REFERENCES customer(customer_id)
+                )
+            """)
+            
+            # Kopier data fra backup, ignorer tidkolonnene
+            cursor.execute("""
+                INSERT INTO tunbroyting_bestillinger 
+                (id, customer_id, ankomst_dato, avreise_dato, abonnement_type)
+                SELECT 
+                    id, 
+                    customer_id, 
+                    ankomst_dato,
+                    avreise_dato,
+                    abonnement_type
+                FROM tunbroyting_bestillinger_backup
+            """)
+            
+            # Opprett indekser
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tunbroyting_customer_id 
+                ON tunbroyting_bestillinger(customer_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst 
+                ON tunbroyting_bestillinger(ankomst_dato)
+            """)
+            
+            # Fjern backup
+            cursor.execute("DROP TABLE IF EXISTS tunbroyting_bestillinger_backup")
+            
+            conn.commit()
+            logger.info("Successfully migrated tunbroyting table to simplified schema")
             return True
             
     except Exception as e:
@@ -319,3 +350,80 @@ def migrate_stroing_table():
         logger.error(f"Error migrating stroing table: {str(e)}")
         return False
 
+def migrate_customer_table():
+    """Migrerer customer-tabellen med nye standardverdier"""
+    try:
+        with get_db_connection("customer") as conn:
+            cursor = conn.cursor()
+            
+            # Backup eksisterende tabell
+            cursor.execute("CREATE TABLE IF NOT EXISTS customer_backup AS SELECT * FROM customer")
+            
+            # Dropp original tabell
+            cursor.execute("DROP TABLE IF EXISTS customer")
+            
+            # Opprett ny tabell med oppdatert skjema
+            cursor.execute("""
+                CREATE TABLE customer (
+                    customer_id TEXT PRIMARY KEY,
+                    lat REAL DEFAULT NULL,
+                    lon REAL DEFAULT NULL,
+                    subscription TEXT DEFAULT 'star_red',
+                    type TEXT DEFAULT 'Customer',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Kopier data fra backup
+            cursor.execute("""
+                INSERT INTO customer (
+                    customer_id, lat, lon, subscription, type, created_at
+                )
+                SELECT 
+                    customer_id,
+                    COALESCE(lat, NULL),
+                    COALESCE(lon, NULL),
+                    COALESCE(subscription, 'star_red'),
+                    COALESCE(type, 'Customer'),
+                    COALESCE(created_at, CURRENT_TIMESTAMP)
+                FROM customer_backup
+            """)
+            
+            # Opprett indekser
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_customer_id ON customer(customer_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_subscription ON customer(subscription)")
+            
+            # Fjern backup
+            cursor.execute("DROP TABLE IF EXISTS customer_backup")
+            
+            conn.commit()
+            logger.info("Successfully migrated customer table")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Error migrating customer table: {str(e)}")
+        return False
+
+MIGRATIONS = [
+    {
+        'version': '1.8',
+        'function': migrate_customer_table,
+        'description': 'Migrerer customer-tabellen med nye standardverdier'
+    },
+    {
+        'version': '1.8',
+        'function': migrate_feedback_table,
+        'description': 'Migrerer feedback-tabellen'
+    },
+    {
+        'version': '1.9',
+        'function': migrate_tunbroyting_table,
+        'description': 'Migrerer tunbroyting-tabellen til forenklet skjema'
+    },
+    {
+        'version': '1.9',
+        'function': migrate_stroing_table,
+        'description': 'Migrerer stroing-tabellen fra bruker til customer_id'
+    }
+]

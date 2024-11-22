@@ -212,20 +212,17 @@ def bestill_tunbroyting():
 def lagre_bestilling(
     customer_id: str,
     ankomst_dato: str,
-    ankomst_tid: str,
     avreise_dato: str,
-    avreise_tid: str,
     abonnement_type: str,
 ) -> bool:
     try:
-        # Sjekk om bruker allerede har bestilling på denne datoen
         with get_db_connection("tunbroyting") as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 SELECT COUNT(*) FROM tunbroyting_bestillinger 
                 WHERE customer_id = ? AND ankomst_dato = ?
-            """,
+                """,
                 (customer_id, ankomst_dato),
             )
 
@@ -235,16 +232,14 @@ def lagre_bestilling(
                 )
                 return False
 
-            # Valider input - fjernet ankomst_tid fra valideringen
             if not all([customer_id, ankomst_dato, abonnement_type]):
                 logger.error("Manglende påkrevde felter i bestilling")
                 return False
 
-            # SQL-spørring med eksplisitte kolonnenavn
             query = """
             INSERT INTO tunbroyting_bestillinger 
-            (customer_id, ankomst_dato, ankomst_tid, avreise_dato, avreise_tid, abonnement_type)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (customer_id, ankomst_dato, avreise_dato, abonnement_type)
+            VALUES (?, ?, ?, ?)
             """
 
             cursor.execute(
@@ -252,18 +247,15 @@ def lagre_bestilling(
                 (
                     str(customer_id),
                     str(ankomst_dato),
-                    None,  # ankomst_tid
-                    str(avreise_dato) if avreise_dato else None,
-                    None,  # avreise_tid
-                    str(abonnement_type),
-                ),
+                    str(avreise_dato),
+                    str(abonnement_type)
+                )
             )
-
             conn.commit()
             return True
 
     except Exception as e:
-        logger.error(f"Uventet feil ved lagring av bestilling: {str(e)}", exc_info=True)
+        logger.error(f"Feil ved lagring av bestilling: {str(e)}")
         return False
 
 

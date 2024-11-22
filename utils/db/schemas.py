@@ -19,11 +19,11 @@ def get_database_schemas():
                 id INTEGER PRIMARY KEY,
                 type TEXT,
                 customer_id TEXT,
-                datetime TEXT,
+                datetime TIMESTAMP,
                 comment TEXT,
                 status TEXT,
                 status_changed_by TEXT,
-                status_changed_at TEXT,
+                status_changed_at TIMESTAMP,
                 hidden INTEGER DEFAULT 0,
                 is_alert INTEGER DEFAULT 0,
                 display_on_weather INTEGER DEFAULT 0,
@@ -63,13 +63,21 @@ def get_database_schemas():
         "customer": """
             CREATE TABLE IF NOT EXISTS customer (
                 customer_id TEXT PRIMARY KEY,
-                lat REAL,
-                lon REAL,
-                subscription TEXT,
+                lat REAL DEFAULT NULL,
+                lon REAL DEFAULT NULL,
+                subscription TEXT DEFAULT 'star_red',
                 type TEXT DEFAULT 'Customer',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """,
+        "system": """
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version TEXT PRIMARY KEY,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                environment TEXT
+            )
+        """
     }
     logger.debug(f"Available schemas: {list(schemas.keys())}")
     return schemas

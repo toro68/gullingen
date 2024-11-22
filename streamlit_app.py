@@ -49,12 +49,9 @@ try:
         unified_report_page,
     )
 
-    # Initialize session state
-    initialize_session_state()
-
-    # Run app initialization once
+    # La app.py håndtere all initialisering
     if not st.session_state.get("app_initialized", False):
-        logger.info("App not initialized, starting initialization")
+        logger.info("Starting app initialization")
         if not initialize_app():
             logger.error("Failed to initialize app")
             st.error("Kunne ikke starte applikasjonen. Vennligst sjekk loggene.")

@@ -52,6 +52,16 @@ def create_tables():
     try:
         schemas = get_database_schemas()
         
+        # Mapping mellom database-navn og faktiske tabellnavn
+        table_mapping = {
+            "feedback": "feedback",
+            "login_history": "login_history",
+            "stroing": "stroing_bestillinger",
+            "tunbroyting": "tunbroyting_bestillinger",
+            "customer": "customer",
+            "system": "schema_version"
+        }
+        
         for db_name, schema in schemas.items():
             logger.info(f"=== Creating tables for {db_name} database ===")
             logger.info(f"Database path: {DATABASE_PATH}")
@@ -62,21 +72,17 @@ def create_tables():
                     
                     logger.info(f"Using schema: {schema}")
                     cursor.execute(schema)
-                    logger.info(f"Successfully created table {db_name}")
                     
-                    # Opprett indekser hvis nødvendig
-                    if db_name == "login_history":
-                        cursor.execute("""
-                            CREATE INDEX IF NOT EXISTS idx_login_history_customer_id 
-                            ON login_history(customer_id)
-                        """)
-                        cursor.execute("""
-                            CREATE INDEX IF NOT EXISTS idx_login_history_login_time 
-                            ON login_history(login_time)
-                        """)
+                    table_name = table_mapping.get(db_name)
+                    if not table_name:
+                        raise ValueError(f"No table mapping found for {db_name}")
+                        
+                    logger.info(f"Successfully created table {table_name}")
+                    
+                    # Opprett indekser
+                    create_indexes(db_name)
                     
                     conn.commit()
-                    logger.info(f"Successfully created indexes for {db_name} database")
                 
             except Exception as e:
                 logger.error(f"Unexpected error with database {db_name}: {str(e)}")
@@ -166,49 +172,42 @@ def get_existing_tables(db_name: str) -> list:
 def create_indexes(db_name: str) -> bool:
     """Opprett indekser for alle databaser"""
     try:
-        # Spesialhåndtering for customer-tabellen
-        if db_name == "customer":
-            with get_db_connection(db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_customer_id ON customer(customer_id)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_customer_type ON customer(type)")
-                conn.commit()
-                logger.info(f"Successfully created indexes for {db_name} database")
-                return True
-
-        # Spesialhåndtering for feedback-tabellen
-        if db_name == "feedback":
-            with get_db_connection(db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_customer_id ON feedback(customer_id)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)")
-                conn.commit()
-                logger.info(f"Successfully created indexes for {db_name} database")
-                return True
-
-        # For stroing og tunbroyting
-        if db_name in ["stroing", "tunbroyting"]:
-            with get_db_connection(db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{db_name}_customer_id ON {db_name}_bestillinger(customer_id)")
-                cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{db_name}_dato ON {db_name}_bestillinger(bestillings_dato)")
-                conn.commit()
-                logger.info(f"Successfully created indexes for {db_name} database")
-                return True
-
-        # For login_history
-        if db_name == "login_history":
-            with get_db_connection(db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_customer_id ON login_history(customer_id)")
-                cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_time ON login_history(login_time)")
-                conn.commit()
-                logger.info(f"Successfully created indexes for {db_name} database")
-                return True
-
+        # Mapping av indekser per database
+        index_mapping = {
+            "customer": [
+                ("idx_customer_id", "customer(customer_id)"),
+                ("idx_customer_type", "customer(type)")
+            ],
+            "feedback": [
+                ("idx_feedback_customer", "feedback(customer_id)"),
+                ("idx_feedback_datetime", "feedback(datetime)")
+            ],
+            "login_history": [
+                ("idx_login_history_customer_id", "login_history(customer_id)"),
+                ("idx_login_history_login_time", "login_history(login_time)")
+            ],
+            "stroing": [
+                ("idx_stroing_customer", "stroing_bestillinger(customer_id)"),
+                ("idx_stroing_dato", "stroing_bestillinger(onske_dato)")
+            ],
+            "tunbroyting": [
+                ("idx_tunbroyting_customer", "tunbroyting_bestillinger(customer_id)"),
+                ("idx_tunbroyting_ankomst", "tunbroyting_bestillinger(ankomst_dato)")
+            ]
+        }
+        
+        if db_name not in index_mapping:
+            return True
+            
+        with get_db_connection(db_name) as conn:
+            cursor = conn.cursor()
+            for idx_name, idx_def in index_mapping[db_name]:
+                cursor.execute(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {idx_def}")
+            conn.commit()
+            
+        logger.info(f"Successfully created indexes for {db_name} database")
         return True
-
+        
     except Exception as e:
         logger.error(f"Error creating indexes for {db_name}: {str(e)}")
         return False
@@ -257,47 +256,36 @@ def verify_database_schemas() -> bool:
     try:
         logger.info("=== VERIFYING DATABASE SCHEMAS ===")
         schemas = get_database_schemas()
-        verification_results = {}
-
+        
+        # Mapping mellom database-navn og faktiske tabellnavn
+        table_mapping = {
+            "feedback": "feedback",
+            "login_history": "login_history",
+            "stroing": "stroing_bestillinger",
+            "tunbroyting": "tunbroyting_bestillinger",
+            "customer": "customer",
+            "system": "schema_version"
+        }
+        
         for db_name, schema in schemas.items():
-            try:
-                with get_db_connection(db_name) as conn:
-                    cursor = conn.cursor()
-                    table_name = (
-                        f"{db_name}_bestillinger" 
-                        if db_name in ["stroing", "tunbroyting"] 
-                        else db_name
-                    )
-                    
-                    # Sjekk om tabellen eksisterer
-                    cursor.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", 
-                        (table_name,)
-                    )
-                    
-                    if not cursor.fetchone():
-                        verification_results[db_name] = False
-                        logger.error(f"Table {table_name} does not exist in {db_name} database")
-                        continue
-
-                    # Verifiser kolonner
-                    cursor.execute(f"PRAGMA table_info({table_name})")
-                    existing_columns = {row[1] for row in cursor.fetchall()}
-                    
-                    verification_results[db_name] = True
-                    logger.info(f"Schema verified for {db_name}: {table_name}")
-                    
-            except Exception as e:
-                verification_results[db_name] = False
-                logger.error(f"Error verifying {db_name} database: {str(e)}")
+            table_name = table_mapping.get(db_name)
+            if not table_name:
+                logger.error(f"No table mapping found for database: {db_name}")
+                return False
                 
-        success = all(verification_results.values())
-        if not success:
-            logger.error("Failed to verify schemas")
-        return success
-
+            with get_db_connection(db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+                if cursor.fetchone():
+                    logger.info(f"Schema verified for {db_name}: {table_name}")
+                else:
+                    logger.error(f"Table {table_name} does not exist in {db_name} database")
+                    return False
+                    
+        return True
+        
     except Exception as e:
-        logger.error(f"Error in database schema verification: {str(e)}")
+        logger.error(f"Failed to verify schemas: {str(e)}")
         return False
 
 
@@ -305,7 +293,14 @@ def close_all_connections():
     """Lukk alle aktive databasetilkoblinger"""
     try:
         logger.info("Starting to close all database connections")
-        databases = ["login_history", "stroing", "tunbroyting", "customer", "feedback"]
+        databases = [
+            "login_history", 
+            "stroing", 
+            "tunbroyting", 
+            "customer", 
+            "feedback",
+            "system"
+        ]
 
         for db_name in databases:
             try:
@@ -351,49 +346,6 @@ def verify_stroing_database() -> bool:
         logger.error(f"Error verifying stroing database: {str(e)}")
         return False
 
-
-def create_database_tables(db_name: str) -> bool:
-    """Opprett tabeller basert på skjemaer"""
-    try:
-        logger.info(f"=== Creating tables for {db_name} database ===")
-        logger.info(f"Database path: {DATABASE_PATH}")
-
-        schemas = get_database_schemas()
-        if db_name not in schemas:
-            logger.error(f"No schema found for database: {db_name}")
-            return False
-
-        schema = schemas[db_name]
-        logger.info(f"Using schema: {schema}")
-
-        with get_db_connection(db_name) as conn:
-            cursor = conn.cursor()
-            logger.info(f"Executing schema creation for {db_name}")
-            cursor.execute(schema)
-            conn.commit()
-
-            # Bestem riktig tabellnavn basert på database
-            table_name = {
-                "customer": "customer",
-                "login_history": "login_history",
-                "feedback": "feedback",
-            }.get(db_name, f"{db_name}_bestillinger")
-
-            cursor.execute(
-                f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'"
-            )
-            if not cursor.fetchone():
-                logger.error(f"Table {table_name} was not created successfully")
-                return False
-
-            logger.info(f"Successfully created table {table_name}")
-            return True
-
-    except Exception as e:
-        logger.error(f"Error creating tables for {db_name}: {str(e)}", exc_info=True)
-        return False
-
-
 def verify_table_exists(db_name: str, table_name: str) -> bool:
     """Sjekk om en tabell eksisterer i databasen"""
     try:
@@ -409,20 +361,6 @@ def verify_table_exists(db_name: str, table_name: str) -> bool:
             return cursor.fetchone() is not None
     except sqlite3.Error as e:
         logger.error(f"Error verifying table {table_name} in {db_name}: {str(e)}")
-        return False
-
-
-def create_customer_table() -> bool:
-    """Opprett customer-tabellen"""
-    try:
-        with get_db_connection("customer") as conn:
-            cursor = conn.cursor()
-            cursor.execute(get_database_schemas()["customer"])
-            conn.commit()
-            logger.info("Created customer table successfully")
-            return True
-    except sqlite3.Error as e:
-        logger.error(f"Error creating customer table: {str(e)}")
         return False
 
 def verify_customer_database() -> bool:

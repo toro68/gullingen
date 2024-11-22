@@ -12,7 +12,7 @@ from utils.core.config import (
     DATABASE_PATH
 )
 from utils.core.logging_config import get_logger
-from utils.db.db_utils import create_customer_table, get_db_connection
+from utils.db.db_utils import get_db_connection, initialize_database_system
 from utils.db.data_import import import_customers_from_csv
 
 # Sett opp logging
@@ -21,37 +21,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-try:
-    from utils.db.db_utils import create_customer_table, insert_customer
-except ImportError as e:
-    logger.error(f"Error importing from db_utils: {e}")
-    logger.info("Please make sure all required packages are installed.")
-    logger.info("You can install them by running: pip install -r requirements.txt")
-    exit(1)
-
-
 def database_exists():
-    return os.path.exists(DATABASE_PATH / "customer.db")
-
-
-def table_exists(table_name):
-    conn = sqlite3.connect(DATABASE_PATH / "customer.db")
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,)
+    """Sjekk om databasefilene eksisterer"""
+    return all(
+        os.path.exists(DATABASE_PATH / f"{db}.db")
+        for db in ["customer", "feedback", "login_history", "stroing", "tunbroyting", "system"]
     )
-    result = cursor.fetchone()
-    conn.close()
-    return result is not None
 
+def table_exists(db_name: str, table_name: str) -> bool:
+    """Sjekk om en spesifikk tabell eksisterer"""
+    try:
+        with get_db_connection(db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?", 
+                (table_name,)
+            )
+            return cursor.fetchone() is not None
+    except Exception as e:
+        logger.error(f"Error checking table existence: {str(e)}")
+        return False
 
 def setup_database():
     """Setter opp hele databasesystemet"""
     try:
         logger.info(f"Setting up database system at {DATABASE_PATH}")
-
-        # Initialiser databasesystemet
-        from utils.db.db_utils import initialize_database_system
 
         if not initialize_database_system():
             logger.error("Failed to initialize database system")
@@ -63,7 +57,6 @@ def setup_database():
     except Exception as e:
         logger.error(f"Error setting up database system: {str(e)}")
         return False
-
 
 if __name__ == "__main__":
     if setup_database():

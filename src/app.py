@@ -58,7 +58,8 @@ from utils.db.migrations import (
     migrate_feedback_table,
     migrate_tunbroyting_table,
     migrate_login_history_table,
-    migrate_stroing_table
+    migrate_stroing_table,
+    migrate_customer_table
 )
 from utils.services.admin_utils import (  # admin_utils er i services, ikke core
     admin_alert,
@@ -180,34 +181,41 @@ def display_home_page(customer):
         )
 
 
-def initialize_app() -> bool:
+def initialize_app():
     """Initialiserer applikasjonen"""
     try:
         logger.info("=== Starting app initialization ===")
         
         # Kjør migrasjoner først
-        logger.info("Running database migrations")
+        migrations = [
+            migrate_feedback_table,
+            migrate_tunbroyting_table,
+            migrate_login_history_table,
+            migrate_stroing_table,
+            migrate_customer_table
+        ]
+        
+        for migration in migrations:
+            logger.info(f"Running migration: {migration.__name__}")
+            if not migration():
+                logger.error(f"Failed to run {migration.__name__}")
+                return False
+        
+        # Kjør generell migrasjonssjekk
         if not run_migrations():
-            logger.error("Failed to run database migrations")
+            logger.error("Failed to run migrations")
             return False
             
-        # Deretter initialiser databasesystem
-        logger.info("Initializing database system")
+        # Initialiser databasesystem
         if not initialize_database_system():
             logger.error("Failed to initialize database system")
             return False
-            
-        # Til slutt verifiser skjemaer
-        if not hasattr(st.session_state, 'schemas_verified'):
-            logger.info("Verifying database schemas")
-            verify_database_schemas()
-            st.session_state.schemas_verified = True
             
         logger.info("=== App initialization completed successfully ===")
         return True
         
     except Exception as e:
-        logger.error(f"Error during app initialization: {str(e)}", exc_info=True)
+        logger.error(f"Error during app initialization: {str(e)}")
         return False
 
 

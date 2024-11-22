@@ -64,9 +64,7 @@ DATE_DEFAULTS = {
 DB_DATE_TYPES = {
     "tunbroyting_bestillinger": {
         "ankomst_dato": "DATE",
-        "avreise_dato": "DATE",
-        "ankomst_tid": "TIME",
-        "avreise_tid": "TIME"
+        "avreise_dato": "DATE"
     }
 }
 # Konverteringsregler for datoer
