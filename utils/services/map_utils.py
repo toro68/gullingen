@@ -16,8 +16,7 @@ from utils.core.util_functions import get_marker_properties
 from utils.services.customer_utils import get_cabin_coordinates
 from utils.core.validation_utils import validate_cabin_id, validate_date
 from utils.services.stroing_utils import (
-    hent_stroing_bestillinger,
-    add_stroing_marker
+    hent_stroing_bestillinger
 )
 from utils.core.config import get_booking_popup_text
 # Set up logging
