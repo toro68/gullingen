@@ -42,6 +42,7 @@ try:
         admin_alert,
         handle_user_feedback,
         admin_stroing_page,
+        display_admin_dashboard,
         handle_tun,
         unified_report_page,
     )
@@ -100,8 +101,8 @@ try:
                     vis_tunbroyting_oversikt()
                 elif admin_choice == "Varsler":
                     admin_alert()
-                elif admin_choice == "Feedback":
-                    handle_user_feedback()
+                elif admin_choice == "Feedback Dashboard":
+                    display_admin_dashboard()
                 elif admin_choice == "Strøing":
                     admin_stroing_page()
                 elif admin_choice == "Kunder" and user_type == "Superadmin":
