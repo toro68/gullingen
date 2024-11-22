@@ -28,13 +28,14 @@ def is_valid_date(date_string):
 
 # Database operasjoner
 @st.cache_data(ttl=60)
-def get_alerts(alert_type='active', only_today=False):
+def get_alerts(alert_type='active', only_today=False, include_expired=False):
     """
     Henter varsler fra databasen.
     
     Args:
         alert_type (str): 'active' for aktive varsler, 'inactive' for tidligere varsler
         only_today (bool): Hvis True, returner kun dagens varsler
+        include_expired (bool): Hvis True, inkluder utgåtte varsler
     """
     try:
         base_query = """
@@ -43,48 +44,32 @@ def get_alerts(alert_type='active', only_today=False):
                    is_alert, display_on_weather, expiry_date, target_group
             FROM feedback
             WHERE type LIKE 'Admin varsel:%'
-            AND (hidden = 0 OR hidden IS NULL)
-            AND (is_alert = 1 OR is_alert IS NULL)
         """
         
-        current_date = format_date(get_current_time(), "database", "date")
-        
+        if not include_expired:
+            base_query += """ 
+                AND (expiry_date IS NULL 
+                    OR datetime(expiry_date) > datetime('now')
+                    OR expiry_date = '')
+            """
+            
+        if alert_type == 'active':
+            base_query += " AND (status IS NULL OR status != 'Inaktiv')"
+        elif alert_type == 'inactive':
+            base_query += " AND status = 'Inaktiv'"
+            
         if only_today:
-            query = base_query + """
-                AND status = 'Aktiv'
-                AND date(datetime) = date(?)
-                AND (expiry_date IS NULL OR date(expiry_date) >= date(?))
-                ORDER BY datetime DESC
-            """
-            params = (current_date, current_date)
-        elif alert_type == 'active':
-            query = base_query + """
-                AND status = 'Aktiv'
-                AND (expiry_date IS NULL OR date(expiry_date) >= date(?))
-                ORDER BY datetime DESC
-            """
-            params = (current_date,)
-        else:
-            query = base_query + """
-                AND (status = 'Inaktiv' OR date(expiry_date) < date(?))
-                ORDER BY datetime DESC LIMIT 5
-            """
-            params = (current_date,)
+            base_query += " AND date(datetime) = date('now')"
             
-        result = fetch_data("feedback", query, params)
-        if not result:
-            return pd.DataFrame()
-            
-        df = pd.DataFrame(result, columns=[
-            'id', 'type', 'datetime', 'comment', 'customer_id', 'status', 
-            'status_changed_by', 'status_changed_at', 'hidden', 
-            'is_alert', 'display_on_weather', 'expiry_date', 'target_group'
-        ])
+        base_query += " ORDER BY datetime DESC"
         
-        return df
+        alerts = fetch_data("feedback", base_query)
+        
+        logger.debug(f"Hentet {len(alerts)} varsler")
+        return alerts
         
     except Exception as e:
-        logger.error(f"Error fetching alerts: {str(e)}")
+        logger.error(f"Feil ved henting av varsler: {str(e)}")
         return pd.DataFrame()
 
 def save_alert(alert_type: str, message: str, expiry_date: str, 
