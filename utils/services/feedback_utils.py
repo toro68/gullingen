@@ -74,7 +74,17 @@ def get_date_range_input(default_days=DATE_VALIDATION["default_date_range"]):
         logger.error(f"Feil i get_date_range_input: {str(e)}", exc_info=True)
         return None, None
 # crud-operasjoner
-def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden):
+def save_feedback(feedback_type, datetime_str, comment, customer_id, hidden):
+    """
+    Lagrer feedback i databasen.
+    
+    Args:
+        feedback_type (str): Type tilbakemelding
+        datetime_str (str): Dato og tid i ISO-format
+        comment (str): Kommentartekst
+        customer_id (str): Hytte-ID
+        hidden (bool): Om feedbacken skal være skjult
+    """
     try:
         query = """INSERT INTO feedback (type, datetime, comment, customer_id, status, status_changed_at, hidden) 
                    VALUES (?, ?, ?, ?, ?, ?, ?)"""
@@ -83,7 +93,7 @@ def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden
             feedback_type,
             datetime_str,
             comment,
-            cabin_identifier,
+            customer_id,
             initial_status,
             datetime.now(TZ).isoformat(),
             hidden,
@@ -92,7 +102,7 @@ def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden
         execute_query("feedback", query, params)
 
         logger.info(
-            f"Feedback saved successfully: {feedback_type}, {datetime_str}, Cabin: {cabin_identifier}, hidden: {hidden}"
+            f"Feedback saved successfully: {feedback_type}, {datetime_str}, Customer: {customer_id}, hidden: {hidden}"
         )
         return True
     except Exception as e:
@@ -100,7 +110,7 @@ def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden
         return False
 
 
-def get_feedback(start_date=None, end_date=None, include_hidden=False):
+def get_feedback(start_date=None, end_date=None, include_hidden=False, customer_id=None):
     """
     Henter feedback fra databasen.
     
@@ -108,6 +118,7 @@ def get_feedback(start_date=None, end_date=None, include_hidden=False):
         start_date (datetime, optional): Startdato for filtrering
         end_date (datetime, optional): Sluttdato for filtrering
         include_hidden (bool): Om skjulte elementer skal inkluderes
+        customer_id (str, optional): Filtrer på spesifikk hytte-ID
     """
     try:
         with get_db_connection("feedback") as conn:
@@ -116,6 +127,10 @@ def get_feedback(start_date=None, end_date=None, include_hidden=False):
                 WHERE (hidden = 0 OR ? = 1)
             """
             params = [1 if include_hidden else 0]
+            
+            if customer_id:
+                base_query += " AND customer_id = ?"
+                params.append(customer_id)
             
             if start_date and end_date:
                 base_query += " AND datetime BETWEEN ? AND ?"
@@ -313,70 +328,82 @@ def handle_user_feedback(feedback_data: pd.DataFrame = None) -> pd.DataFrame:
 
 
 def give_feedback():
-    st.title("Gi feedback")
-    st.info(
-        """
+    try:
+        st.title("Gi tilbakemelding")
+        
+        # Hent brukerens customer_id fra session state
+        customer_id = st.session_state.get('customer_id')
+        if not customer_id:
+            st.error("Kunne ikke finne hytte-ID")
+            return
+            
+        # Sjekk eksisterende feedback
+        existing_feedback = get_feedback(
+            start_date=datetime.now(TZ).date(),
+            end_date=datetime.now(TZ).date(),
+            customer_id=customer_id
+        )
+        
+        st.info(
+            """
     Her kan du gi tilbakemeldinger, melde avvik eller komme med forslag til forbedringer. Velg type feedback fra menyen nedenfor. 
     """
-    )
-
-    feedback_type = st.radio(
-        "Velg type feedback:",
-        ["Avvik", "Generell tilbakemelding", "Forslag til forbedring", "Annet"],
-    )
-
-    st.write("---")
-
-    avvik_tidspunkt = None
-    if feedback_type == "Avvik":
-        st.subheader("Rapporter et avvik")
-        deviation_type = st.selectbox(
-            "Velg type avvik:",
-            [
-                "Glemt tunbryting",
-                "Dårlig framkommelighet",
-                "For sen brøytestart",
-                "Manglende brøyting av fellesparkeringsplasser",
-                "Manglende strøing",
-                "Uønsket snødeponering",
-                "Manglende rydding av snøfenner",
-                "For høy hastighet under brøyting",
-                "Skader på eiendom under brøyting",
-                "Annet",
-            ],
         )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            avvik_dato = st.date_input(
-                "Dato for avviket", value=datetime.now(TZ).date(), format="DD.MM.YYYY"
+        feedback_type = st.radio(
+            "Velg type feedback:",
+            ["Avvik", "Generell tilbakemelding", "Forslag til forbedring", "Annet"],
+        )
+
+        st.write("---")
+
+        avvik_tidspunkt = None
+        if feedback_type == "Avvik":
+            st.subheader("Rapporter et avvik")
+            deviation_type = st.selectbox(
+                "Velg type avvik:",
+                [
+                    "Glemt tunbryting",
+                    "Dårlig framkommelighet",
+                    "For sen brøytestart",
+                    "Manglende brøyting av fellesparkeringsplasser",
+                    "Manglende strøing",
+                    "Uønsket snødeponering",
+                    "Manglende rydding av snøfenner",
+                    "For høy hastighet under brøyting",
+                    "Skader på eiendom under brøyting",
+                    "Annet",
+                ],
             )
+
+            col1, col2 = st.columns(2)
+            with col1:
+                avvik_dato = st.date_input(
+                    "Dato for avviket", value=datetime.now(TZ).date(), format="DD.MM.YYYY"
+                )
+            with col2:
+                avvik_tid = st.time_input(
+                    "Tidspunkt for avviket", value=datetime.now(TZ).time()
+                )
+
+            avvik_tidspunkt = datetime.combine(avvik_dato, avvik_tid).replace(tzinfo=TZ)
+
+            feedback_type = f"Avvik: {deviation_type}"
+        elif feedback_type == "Generell tilbakemelding":
+            st.subheader("Gi en generell tilbakemelding")
+        elif feedback_type == "Forslag til forbedring":
+            st.subheader("Kom med et forslag til forbedring")
+        else:  # Annet
+            st.subheader("Annen type feedback")
+
+        description = st.text_area("Beskriv din feedback i detalj:", height=150)
+
+        col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
-            avvik_tid = st.time_input(
-                "Tidspunkt for avviket", value=datetime.now(TZ).time()
-            )
+            submit_button = st.button("Send inn feedback", use_container_width=True)
 
-        avvik_tidspunkt = datetime.combine(avvik_dato, avvik_tid).replace(tzinfo=TZ)
-
-        feedback_type = f"Avvik: {deviation_type}"
-    elif feedback_type == "Generell tilbakemelding":
-        st.subheader("Gi en generell tilbakemelding")
-    elif feedback_type == "Forslag til forbedring":
-        st.subheader("Kom med et forslag til forbedring")
-    else:  # Annet
-        st.subheader("Annen type feedback")
-
-    description = st.text_area("Beskriv din feedback i detalj:", height=150)
-
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        submit_button = st.button("Send inn feedback", use_container_width=True)
-
-    if submit_button:
-        if description:
-            cabin_identifier = st.session_state.get("customer_id")
-
-            if cabin_identifier:
+        if submit_button:
+            if description:
                 if avvik_tidspunkt:
                     description = (
                         f"Tidspunkt for avvik: {avvik_tidspunkt.strftime('%Y-%m-%d %H:%M')}\n\n"
@@ -391,7 +418,7 @@ def give_feedback():
                     feedback_type,
                     feedback_datetime.isoformat(),
                     description,
-                    cabin_identifier,
+                    customer_id,
                     hidden=False,
                 )
 
@@ -402,30 +429,27 @@ def give_feedback():
                         "Det oppstod en feil ved innsending av feedback. Vennligst prøv igjen senere."
                     )
             else:
-                st.error("Kunne ikke identifisere hytten. Vennligst logg inn på nytt.")
-        else:
-            st.warning("Vennligst skriv en beskrivelse før du sender inn.")
+                st.warning("Vennligst skriv en beskrivelse før du sender inn.")
 
-    st.write("---")
+        st.write("---")
 
-    st.subheader("Din tidligere feedback")
-    cabin_identifier = st.session_state.get("customer_id")
-    if cabin_identifier:
-        existing_feedback = get_feedback(
-            start_date=None,
-            end_date=None,
-            include_hidden=False,
-            cabin_identifier=cabin_identifier,
-        )
-        if existing_feedback.empty:
-            st.info("Du har ingen tidligere feedback å vise.")
+        st.subheader("Din tidligere feedback")
+        if customer_id:
+            existing_feedback = get_feedback(
+                start_date=None,
+                end_date=None,
+                include_hidden=False,
+                customer_id=customer_id,
+            )
+            if existing_feedback.empty:
+                st.info("Du har ingen tidligere feedback å vise.")
+            else:
+                for _, feedback in existing_feedback.iterrows():
+                    with st.expander(f"{feedback['type']} - {feedback['datetime']}"):
+                        st.write(f"Beskrivelse: {feedback['comment']}")
+                        st.write(f"Status: {feedback['status']}")
         else:
-            for _, feedback in existing_feedback.iterrows():
-                with st.expander(f"{feedback['type']} - {feedback['datetime']}"):
-                    st.write(f"Beskrivelse: {feedback['comment']}")
-                    st.write(f"Status: {feedback['status']}")
-    else:
-        st.warning("Kunne ikke hente tidligere feedback. Vennligst logg inn på nytt.")
+            st.warning("Kunne ikke hente tidligere feedback. Vennligst logg inn på nytt.")
 
 
 def display_recent_feedback():
@@ -613,7 +637,7 @@ def save_maintenance_reaction(customer_id, reaction_type, date):
     Lagrer en vedlikeholdsreaksjon i feedback-tabellen.
 
     Args:
-        customer_id (str): Hytteeierens ID
+        customer_id (str): Hytte-ID
         reaction_type (str): 'positive', 'neutral', eller 'negative'
         date (datetime): Datoen reaksjonen gjelder for
     """
@@ -635,7 +659,7 @@ def save_maintenance_reaction(customer_id, reaction_type, date):
             feedback_type=feedback_type,
             datetime_str=date.isoformat(),
             comment=comment,
-            cabin_identifier=customer_id,
+            customer_id=customer_id,
             hidden=False,
         )
 
