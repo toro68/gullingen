@@ -1434,3 +1434,86 @@ def display_feedback_table(feedback_data):
             "application/vnd.ms-excel"
         )
 
+def get_maintenance_data(period):
+    """Henter vedlikeholdsdata for valgt periode"""
+    try:
+        logger.info(f"Henter vedlikeholdsdata for periode: {period}")
+        # Implementer logikk for å hente data
+        return pd.DataFrame()  # Returner tom DataFrame hvis ingen data
+    except Exception as e:
+        logger.error(f"Feil ved henting av vedlikeholdsdata: {str(e)}")
+        return pd.DataFrame()
+
+def get_today_maintenance_stats():
+    """Henter dagens vedlikeholdsstatistikk"""
+    try:
+        logger.info("Henter dagens vedlikeholdsstatistikk")
+        # Implementer logikk for å hente statistikk
+        return {
+            "happy": 0,
+            "neutral": 0,
+            "sad": 0
+        }
+    except Exception as e:
+        logger.error(f"Feil ved henting av vedlikeholdsstatistikk: {str(e)}")
+        return None
+
+def display_satisfaction_metrics(data):
+    """Viser tilfredshetsmålinger"""
+    try:
+        if data.empty:
+            st.info("Ingen data tilgjengelig for valgt periode")
+            return
+            
+        # Implementer visning av målinger
+        st.metric("😊 Fornøyde", 0)
+        st.metric("😐 Nøytrale", 0)
+        st.metric("😡 Misfornøyde", 0)
+    except Exception as e:
+        logger.error(f"Feil ved visning av tilfredshetsmålinger: {str(e)}")
+
+def display_response_time_metrics(data):
+    """Viser responstidsmålinger"""
+    try:
+        if data.empty:
+            st.info("Ingen data tilgjengelig for valgt periode")
+            return
+            
+        # Implementer visning av responstider
+        st.metric("Gjennomsnittlig responstid", "N/A")
+    except Exception as e:
+        logger.error(f"Feil ved visning av responstidsmålinger: {str(e)}")
+
+def display_maintenance_chart(data):
+    """Viser vedlikeholdsgraf"""
+    try:
+        if data.empty:
+            st.info("Ingen data tilgjengelig for grafen")
+            return
+            
+        # Implementer grafvisning
+        st.line_chart(data)
+    except Exception as e:
+        logger.error(f"Feil ved visning av vedlikeholdsgraf: {str(e)}")
+
+def display_time_based_stats():
+    """Viser tidsbasert statistikk"""
+    try:
+        st.info("Tidsbasert statistikk kommer snart")
+    except Exception as e:
+        logger.error(f"Feil ved visning av tidsbasert statistikk: {str(e)}")
+
+def display_cabin_based_stats():
+    """Viser hyttebasert statistikk"""
+    try:
+        st.info("Hyttebasert statistikk kommer snart")
+    except Exception as e:
+        logger.error(f"Feil ved visning av hyttebasert statistikk: {str(e)}")
+
+def display_response_time_stats():
+    """Viser responstidsstatistikk"""
+    try:
+        st.info("Responstidsstatistikk kommer snart")
+    except Exception as e:
+        logger.error(f"Feil ved visning av responstidsstatistikk: {str(e)}")
+
