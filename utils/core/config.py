@@ -206,11 +206,19 @@ def combine_date_with_tz(date_obj, time_obj=None):
 def parse_date(date_str: str, format_type: str = "display") -> datetime:
     """Parser datostrengen med riktig format og tidssone"""
     try:
-        return pd.to_datetime(
-            date_str, 
-            format=DATE_FORMATS["parse"]["date"], 
-            dayfirst=True
-        ).tz_localize(TZ)
+        # Først, prøv med det spesifiserte formatet
+        try:
+            return pd.to_datetime(
+                date_str, 
+                format=DATE_FORMATS[format_type]["date"]
+            ).tz_localize(TZ)
+        except ValueError:
+            # Hvis det feiler, prøv å la pandas gjette formatet
+            return pd.to_datetime(
+                date_str,
+                format='mixed',
+                dayfirst=True
+            ).tz_localize(TZ)
     except Exception as e:
         logger.error(f"Feil ved parsing av dato {date_str}: {str(e)}")
         return None

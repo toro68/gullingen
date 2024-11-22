@@ -741,44 +741,30 @@ def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
     """
     try:
         logger.info("Starter filtrering av dagens bestillinger")
-        logger.info(f"Input DataFrame shape: {bookings_df.shape}")
-        logger.info(f"Input DataFrame columns: {bookings_df.columns.tolist()}")
-        logger.info(f"Input DataFrame første rad: {bookings_df.iloc[0].to_dict() if not bookings_df.empty else 'Tom'}")
-        
         if bookings_df.empty:
-            logger.info("Input DataFrame er tom")
             return pd.DataFrame()
             
         # Konverter datokolonner til datetime med tidssone
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in bookings_df.columns:
-                logger.info(f"Konverterer {col} til datetime")
-                logger.info(f"Før konvertering - {col} dtype: {bookings_df[col].dtype}")
-                logger.info(f"Før konvertering - {col} første verdi: {bookings_df[col].iloc[0] if not bookings_df.empty else 'Tom'}")
-                
-                bookings_df[col] = bookings_df[col].apply(safe_to_datetime)
-                
-                logger.info(f"Etter konvertering - {col} dtype: {bookings_df[col].dtype}")
-                logger.info(f"Etter konvertering - {col} første verdi: {bookings_df[col].iloc[0] if not bookings_df.empty else 'Tom'}")
+                # Bruk pandas to_datetime direkte for ISO-format
+                bookings_df[col] = pd.to_datetime(bookings_df[col]).dt.tz_localize(TZ)
         
         dagens_dato = normalize_datetime(get_current_time())
-        logger.info(f"Dagens dato (normalisert): {dagens_dato}")
         
         # Filtrer bestillinger
         dagens_bestillinger = bookings_df[
             (bookings_df['abonnement_type'] == 'Årsabonnement') |
             (
-                (bookings_df['ankomst_dato'].apply(normalize_datetime) <= dagens_dato) &
+                (bookings_df['ankomst_dato'].dt.normalize() <= dagens_dato) &
                 (
                     bookings_df['avreise_dato'].isna() |
-                    (bookings_df['avreise_dato'].apply(normalize_datetime) >= dagens_dato)
+                    (bookings_df['avreise_dato'].dt.normalize() >= dagens_dato)
                 )
             )
         ]
         
         logger.info(f"Filtrert DataFrame shape: {dagens_bestillinger.shape}")
-        logger.info(f"Filtrert DataFrame første rad: {dagens_bestillinger.iloc[0].to_dict() if not dagens_bestillinger.empty else 'Tom'}")
-        
         return dagens_bestillinger
         
     except Exception as e:
