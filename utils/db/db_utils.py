@@ -2,6 +2,7 @@ import os
 import sqlite3
 import time
 from pathlib import Path
+import pandas as pd
 from functools import wraps
 from typing import Any, Callable
 
