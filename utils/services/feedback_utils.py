@@ -1230,9 +1230,12 @@ def display_daily_maintenance_rating():
 def display_admin_dashboard():
     """Hovedfunksjon for admin-dashboard"""
     try:
-        st.title("🎛️ Administrasjonspanel")
+        logger.info("=== Starting display_admin_dashboard ===")
+        
+        st.title("🎛️ Feedback Dashboard")
         
         # Velg visning med tabs
+        logger.info("Creating tabs")
         tab1, tab2, tab3 = st.tabs([
             "📊 Feedback Oversikt",
             "🚜 Vedlikehold",
@@ -1241,10 +1244,12 @@ def display_admin_dashboard():
         
         # Tab 1: Generell Feedback
         with tab1:
+            logger.info("Displaying feedback overview tab")
             display_feedback_dashboard()
             
         # Tab 2: Vedlikehold
         with tab2:
+            logger.info("Displaying maintenance tab")
             col1, col2 = st.columns([2, 1])
             with col1:
                 display_maintenance_summary()
@@ -1253,11 +1258,14 @@ def display_admin_dashboard():
                 
         # Tab 3: Statistikk
         with tab3:
+            logger.info("Displaying statistics tab")
             display_reaction_statistics()
 
     except Exception as e:
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av dashboardet")
+        # Vis mer detaljert feilmelding i development
+        st.exception(e)
 
 def display_feedback_dashboard():
     """Viser generell feedback-oversikt"""
