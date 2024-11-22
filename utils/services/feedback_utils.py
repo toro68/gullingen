@@ -11,8 +11,7 @@ from utils.core.config import (
     DATE_FORMATS,
     get_date_format,
     get_current_time,
-    DATE_VALIDATION,
-    STATUS_COLORS
+    DATE_VALIDATION
 )
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import execute_query, fetch_data, get_db_connection
@@ -497,7 +496,6 @@ def display_recent_feedback():
             for _, row in recent_feedback.iterrows():
                 icon = FEEDBACK_ICONS.get(row["type"], "❓")
                 status = row["status"]
-                status_color = STATUS_COLORS.get(status, STATUS_COLORS["default"])
                 date_str = (
                     row["datetime"].strftime("%Y-%m-%d %H:%M")
                     if pd.notnull(row["datetime"])
@@ -505,10 +503,7 @@ def display_recent_feedback():
                 )
 
                 with st.expander(f"{icon} {row['type']} - {date_str}"):
-                    st.markdown(
-                        f"<span style='color:{status_color};'>●</span> **Status:** {status}",
-                        unsafe_allow_html=True,
-                    )
+                    st.write(f"**Status:** {status}")
                     st.write(f"**Rapportert av:** {row['customer_id']}")
                     st.write(f"**Kommentar:** {row['comment']}")
                     if pd.notnull(row["status_changed_at"]):

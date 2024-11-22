@@ -149,8 +149,17 @@ def get_marker_properties(
         return "gray", "circle"  # Ingen brøyting
 
 
-def get_status_display(db_status):
-    return next((k for k, v in STATUS_MAPPING.items() if v == db_status), "Ukjent")
+def get_status_display(status):
+    """
+    Returnerer status-teksten direkte.
+    
+    Args:
+        status: Status som skal vises
+        
+    Returns:
+        str: Status-teksten eller 'Ukjent' hvis status er None
+    """
+    return status if status is not None else "Ukjent"
 
 
 def format_norwegian_date(date):

@@ -6,10 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.core.config import (
-    TZ,
-    STATUS_COLORS
-)
+from utils.core.config import TZ
 from utils.core.logging_config import get_logger
 from utils.services.alert_utils import get_alerts, handle_alerts_ui
 from utils.services.feedback_utils import get_feedback
@@ -252,7 +249,6 @@ def unified_report_page(include_hidden=False):
             title="Antall brukerfeedback per status",
             labels={"x": "Status", "y": "Antall"},
             color=user_status_counts.index,
-            color_discrete_map=STATUS_COLORS,
         )
         st.plotly_chart(fig_user_bar, use_container_width=True)
 
@@ -453,3 +449,6 @@ def admin_stroing_overview():
     except Exception as e:
         logger.error(f"Feil i strøing-administrasjon: {str(e)}")
         return False
+
+def display_status(status):
+    return status  # Returner bare status-teksten direkte
