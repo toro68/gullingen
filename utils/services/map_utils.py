@@ -43,52 +43,89 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
         # Debug logging
         debug_map_data(bestillinger)
         
-        # Opprett kartet
+        # Opprett kartet med grupperte markører
         fig = go.Figure()
         
-        # Legg til alle hytter som grå markører først
+        # Legg til grå markører som én gruppe
+        gray_lats = []
+        gray_lons = []
+        gray_texts = []
         for cabin_id, (lat, lon) in cabin_coordinates.items():
-            fig.add_trace(go.Scattermapbox(
-                lat=[lat],
-                lon=[lon],
-                mode='markers',
-                marker=dict(
-                    size=8,
-                    color=GRAY,
-                    symbol='circle'
-                ),
-                text=f"Hytte: {cabin_id}",
-                hoverinfo='text',
-                name='Ingen bestilling'
-            ))
+            gray_lats.append(lat)
+            gray_lons.append(lon)
+            gray_texts.append(f"Hytte: {cabin_id}")
         
-        # Legg til aktive bestillinger over de grå markørene
+        fig.add_trace(go.Scattermapbox(
+            lat=gray_lats,
+            lon=gray_lons,
+            mode='markers',
+            marker=dict(
+                size=8,
+                color=GRAY,
+                symbol='circle'
+            ),
+            text=gray_texts,
+            hoverinfo='text',
+            name='Ingen bestilling',
+            showlegend=True
+        ))
+        
+        # Grupper aktive bestillinger etter type
         if not bestillinger.empty:
-            for _, booking in bestillinger.iterrows():
-                customer_id = str(booking['customer_id'])
-                if customer_id in cabin_coordinates:
-                    lat, lon = cabin_coordinates[customer_id]
-                    popup_text = get_map_popup_text(booking)
-                    
-                    # Bestem markørfarge basert på abonnement_type
-                    color = GREEN if booking['abonnement_type'] == 'Årsabonnement' else RED
-                    marker_name = 'Årsabonnement' if booking['abonnement_type'] == 'Årsabonnement' else 'Ukentlig bestilling'
-                    
+            yearly_bookings = bestillinger[bestillinger['abonnement_type'] == 'Årsabonnement']
+            weekly_bookings = bestillinger[bestillinger['abonnement_type'] != 'Årsabonnement']
+            
+            # Legg til årsabonnement
+            if not yearly_bookings.empty:
+                yearly_lats = []
+                yearly_lons = []
+                yearly_texts = []
+                for _, booking in yearly_bookings.iterrows():
+                    customer_id = str(booking['customer_id'])
+                    if customer_id in cabin_coordinates:
+                        lat, lon = cabin_coordinates[customer_id]
+                        yearly_lats.append(lat)
+                        yearly_lons.append(lon)
+                        yearly_texts.append(get_map_popup_text(booking))
+                
+                if yearly_lats:  # Bare legg til hvis det finnes punkter
                     fig.add_trace(go.Scattermapbox(
-                        lat=[lat],
-                        lon=[lon],
+                        lat=yearly_lats,
+                        lon=yearly_lons,
                         mode='markers',
-                        marker=dict(
-                            size=12,
-                            color=color,
-                            symbol='circle'
-                        ),
-                        text=popup_text,
+                        marker=dict(size=12, color=GREEN),
+                        text=yearly_texts,
                         hoverinfo='text',
-                        name=marker_name
+                        name='Årsabonnement',
+                        showlegend=True
+                    ))
+            
+            # Legg til ukentlige bestillinger
+            if not weekly_bookings.empty:
+                weekly_lats = []
+                weekly_lons = []
+                weekly_texts = []
+                for _, booking in weekly_bookings.iterrows():
+                    customer_id = str(booking['customer_id'])
+                    if customer_id in cabin_coordinates:
+                        lat, lon = cabin_coordinates[customer_id]
+                        weekly_lats.append(lat)
+                        weekly_lons.append(lon)
+                        weekly_texts.append(get_map_popup_text(booking))
+                
+                if weekly_lats:  # Bare legg til hvis det finnes punkter
+                    fig.add_trace(go.Scattermapbox(
+                        lat=weekly_lats,
+                        lon=weekly_lons,
+                        mode='markers',
+                        marker=dict(size=12, color=RED),
+                        text=weekly_texts,
+                        hoverinfo='text',
+                        name='Ukentlig bestilling',
+                        showlegend=True
                     ))
         
-        # Konfigurer kartet
+        # Oppdatert layout med forbedret legend
         fig.update_layout(
             mapbox=dict(
                 accesstoken=mapbox_token,
@@ -104,9 +141,14 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
                 y=0.99,
                 xanchor="left",
                 x=0.01,
-                bgcolor="rgba(255, 255, 255, 0.8)",
-                bordercolor="rgba(0, 0, 0, 0.3)",
-                borderwidth=1
+                bgcolor="rgba(255, 255, 255, 0.9)",
+                bordercolor="rgba(0, 0, 0, 0.2)",
+                borderwidth=1,
+                font=dict(size=12),
+                itemsizing='constant',
+                itemwidth=30,
+                orientation="v",
+                traceorder="normal"
             ),
             height=600
         )
