@@ -154,7 +154,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
         )
         
         # Vis kartet
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="tunkart_map")
         
         # Vis informasjonstekst om antall bestillinger
         if bestillinger.empty:
