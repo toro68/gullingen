@@ -18,7 +18,8 @@ from utils.core.config import (
     format_date,
     combine_date_with_tz,
     normalize_datetime,
-    convert_for_db
+    convert_for_db,
+    parse_date
 )
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import neste_fredag
@@ -736,9 +737,7 @@ def filter_tunbroyting_bestillinger(bestillinger: pd.DataFrame, filters: Dict[st
     return filtered
 
 def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Filtrerer bestillinger for å finne aktive bestillinger for dagens dato.
-    """
+    """Filtrerer bestillinger for å finne aktive bestillinger for dagens dato."""
     try:
         logger.info("Starter filtrering av dagens bestillinger")
         if bookings_df.empty:
@@ -747,8 +746,7 @@ def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
         # Konverter datokolonner til datetime med tidssone
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in bookings_df.columns:
-                # Bruk pandas to_datetime direkte for ISO-format
-                bookings_df[col] = pd.to_datetime(bookings_df[col]).dt.tz_localize(TZ)
+                bookings_df[col] = bookings_df[col].apply(parse_date)
         
         dagens_dato = normalize_datetime(get_current_time())
         
@@ -756,10 +754,10 @@ def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
         dagens_bestillinger = bookings_df[
             (bookings_df['abonnement_type'] == 'Årsabonnement') |
             (
-                (bookings_df['ankomst_dato'].dt.normalize() <= dagens_dato) &
+                (bookings_df['ankomst_dato'].apply(normalize_datetime) <= dagens_dato) &
                 (
                     bookings_df['avreise_dato'].isna() |
-                    (bookings_df['avreise_dato'].dt.normalize() >= dagens_dato)
+                    (bookings_df['avreise_dato'].apply(normalize_datetime) >= dagens_dato)
                 )
             )
         ]
