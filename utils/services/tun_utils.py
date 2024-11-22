@@ -805,6 +805,7 @@ def tunbroyting_kommende_uke(bestillinger):
                 (bestillinger["avreise_dato"].isnull())
                 | (bestillinger["avreise_dato"].dt.tz_convert(TZ) >= current_date)
             )
+        )
         |
         (bestillinger["abonnement_type"] == "Årsabonnement")
     ]
