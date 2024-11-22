@@ -7,6 +7,7 @@ from utils.core.config import (
     GPS_URL
 )
 from utils.core.logging_config import get_logger
+import pandas as pd
 
 logger = get_logger(__name__)
 

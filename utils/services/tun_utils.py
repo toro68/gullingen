@@ -1014,6 +1014,7 @@ def vis_dagens_bestillinger():
             )
             visnings_df["avreise"] = dagens_bestillinger["avreise_dato"].apply(
                 lambda x: format_date(x, "display", "datetime") if pd.notnull(x) else "Ikke satt"
+            )
             # Vis DataFrame
             st.dataframe(
                 visnings_df,
