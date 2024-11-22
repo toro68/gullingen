@@ -18,7 +18,7 @@ from utils.core.validation_utils import validate_cabin_id, validate_date
 from utils.services.stroing_utils import (
     hent_stroing_bestillinger
 )
-from utils.core.config import get_booking_popup_text
+
 # Set up logging
 logger = get_logger(__name__)
 
@@ -380,3 +380,22 @@ def debug_map_data(bestillinger: pd.DataFrame):
     logger.info(f"Kolonner i bestillinger: {bestillinger.columns.tolist()}")
     if not bestillinger.empty:
         logger.info(f"Første rad i bestillinger:\n{bestillinger.iloc[0]}")
+        
+def get_booking_popup_text(booking):
+    """Genererer popup tekst for en bestilling på kartet"""
+    try:
+        status = booking.get('status', 'Ukjent')
+        ankomst = booking.get('ankomst_dato', 'Ikke satt')
+        avreise = booking.get('avreise_dato', 'Ikke satt')
+        bestilt = booking.get('bestilt_dato', 'Ukjent')
+        
+        return f"""
+        <b>Tunbrøyting</b><br>
+        Status: {status}<br>
+        Ankomst: {ankomst}<br>
+        Avreise: {avreise}<br>
+        Bestilt: {bestilt}
+        """
+    except Exception as e:
+        logger.error(f"Feil ved generering av popup tekst: {str(e)}")
+        return "Kunne ikke vise detaljer"
