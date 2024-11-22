@@ -8,7 +8,7 @@ logger = get_logger(__name__)
 def run_migrations():
     """Kjører nødvendige databasemigrasjoner"""
     try:
-        CURRENT_VERSION = "1.9.1"
+        CURRENT_VERSION = "1.9.4"
         IS_CLOUD = os.getenv('IS_STREAMLIT_CLOUD', 'false').lower() == 'true'
         
         logger.info(f"Running migrations. Environment: {'Cloud' if IS_CLOUD else 'Local'}")
@@ -79,43 +79,64 @@ def run_migrations():
         logger.error(f"Error running migrations: {str(e)}", exc_info=True)
         return False
 
+# File: utils/db/migrations.py
+# Category: Database Migrations
+
 def migrate_feedback_table():
-    """Migrerer feedback-tabellen"""
+    """
+    Migrerer feedback-tabellen fra gammel til ny struktur.
+    
+    Endringer:
+    - Konverterer 'innsender' kolonne til 'customer_id'
+    - Legger til nye kolonner med standardverdier
+    - Oppretter indekser for bedre ytelse
+    
+    Returns:
+        bool: True hvis migreringen var vellykket, False hvis ikke
+    """
     try:
         with get_db_connection("feedback") as conn:
             cursor = conn.cursor()
             
-            # Sjekk om feedback-tabellen eksisterer
+            # 1. Sjekk om feedback-tabellen eksisterer
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'")
             table_exists = cursor.fetchone() is not None
             
             if table_exists:
-                # Backup eksisterende tabell
+                # 2. Ta backup og logg
+                logger.info("Creating backup of existing feedback table")
                 cursor.execute("DROP TABLE IF EXISTS feedback_backup")
-                cursor.execute("""
-                    CREATE TABLE feedback_backup 
-                    AS SELECT * FROM feedback
-                """)
+                cursor.execute("CREATE TABLE feedback_backup AS SELECT * FROM feedback")
                 
-                # Sjekk hvilke kolonner som finnes i backup
+                # 3. Analyser eksisterende kolonner
                 cursor.execute("PRAGMA table_info(feedback_backup)")
-                columns = [col[1] for col in cursor.fetchall()]
+                existing_columns = {col[1]: col for col in cursor.fetchall()}
+                logger.info(f"Existing columns: {list(existing_columns.keys())}")
                 
-                # Velg riktig kolonnenavn
-                id_column = "innsender" if "innsender" in columns else "customer_id"
+                # 4. Velg riktig ID-kolonne og valider
+                id_column = None
+                if "innsender" in existing_columns:
+                    id_column = "innsender"
+                elif "customer_id" in existing_columns:
+                    id_column = "customer_id"
+                    
+                if not id_column:
+                    raise ValueError("Neither 'innsender' nor 'customer_id' column found")
                 
-                # Dropp original tabell
+                logger.info(f"Using {id_column} as identifier column")
+                
+                # 5. Dropp original tabell
                 cursor.execute("DROP TABLE IF EXISTS feedback")
             
-            # Opprett ny tabell med oppdatert skjema
+            # 6. Opprett ny tabell med oppdatert skjema og indekser
             cursor.execute("""
                 CREATE TABLE feedback (
                     id INTEGER PRIMARY KEY,
                     type TEXT,
-                    customer_id TEXT,
-                    datetime TIMESTAMP,
+                    customer_id TEXT NOT NULL,
+                    datetime TIMESTAMP NOT NULL,
                     comment TEXT,
-                    status TEXT,
+                    status TEXT DEFAULT 'new',
                     status_changed_by TEXT,
                     status_changed_at TIMESTAMP,
                     hidden INTEGER DEFAULT 0,
@@ -126,23 +147,53 @@ def migrate_feedback_table():
                 )
             """)
             
+            # Opprett indekser for bedre ytelse
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_customer_id ON feedback(customer_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_datetime ON feedback(datetime)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)")
+            
             if table_exists:
-                # Kopier data fra backup
-                cursor.execute(f"""
-                    INSERT INTO feedback 
-                    SELECT id, type, {id_column}, datetime, comment,
-                           status, status_changed_by, status_changed_at,
-                           hidden, is_alert, display_on_weather,
-                           expiry_date, target_group
+                # 7. Kopier data med NULL-håndtering
+                insert_sql = f"""
+                    INSERT INTO feedback (
+                        id, type, customer_id, datetime, comment,
+                        status, status_changed_by, status_changed_at,
+                        hidden, is_alert, display_on_weather,
+                        expiry_date, target_group
+                    )
+                    SELECT 
+                        id,
+                        COALESCE(type, 'general'),
+                        {id_column},
+                        COALESCE(datetime, CURRENT_TIMESTAMP),
+                        comment,
+                        COALESCE(status, 'new'),
+                        status_changed_by,
+                        status_changed_at,
+                        COALESCE(hidden, 0),
+                        COALESCE(is_alert, 0),
+                        COALESCE(display_on_weather, 0),
+                        expiry_date,
+                        target_group
                     FROM feedback_backup
-                """)
+                """
+                cursor.execute(insert_sql)
+                
+                # 8. Verifiser migrering
+                cursor.execute("SELECT COUNT(*) FROM feedback")
+                new_count = cursor.fetchone()[0]
+                cursor.execute("SELECT COUNT(*) FROM feedback_backup")
+                old_count = cursor.fetchone()[0]
+                
+                if new_count != old_count:
+                    raise ValueError(f"Data count mismatch: {old_count} rows in backup, {new_count} in new table")
             
             conn.commit()
             logger.info("Successfully completed feedback table migration")
             return True
             
     except Exception as e:
-        logger.error(f"Error migrating feedback table: {str(e)}")
+        logger.error(f"Error migrating feedback table: {str(e)}", exc_info=True)
         return False
 
 def migrate_tunbroyting_table():
