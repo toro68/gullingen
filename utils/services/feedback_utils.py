@@ -273,7 +273,7 @@ def display_feedback_dashboard():
         # Vis statistikk
         st.info(f"Totalt {len(feedback_data)} feedback-elementer for perioden")
         
-        # Vis filtrering
+        # Vis filtrering - bruk direkte status-strenger
         status_filter = st.multiselect(
             "Filtrer på status:",
             options=['Ny', 'Under behandling', 'Løst', 'Avvist'],

@@ -4,10 +4,7 @@ from typing import Tuple
 import pytz
 import streamlit as st
 
-from utils.core.config import (
-    TZ,
-    STATUS_MAPPING
-)
+from utils.core.config import TZ
 from utils.core.logging_config import get_logger
 from utils.services.gps_utils import get_last_gps_activity
 

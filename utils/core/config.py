@@ -130,22 +130,6 @@ DB_CONFIG = {
 # GPS konfigurasjon
 GPS_URL = "https://kart.irute.net/fjellbergsskardet_busses.json?_=1657373465172"
 
-# Status mapping og farger
-STATUS_MAPPING = {
-    "Ny": 1,
-    "Under behandling": 2,
-    "Fullført": 3,
-    "Kansellert": 4,
-}
-
-STATUS_COLORS = {
-    "Ny": "#FF4136",
-    "Under behandling": "#FF851B",
-    "Løst": "#2ECC40",
-    "Lukket": "#AAAAAA",
-    "default": "#CCCCCC",
-}
-
 # Autentisering og sesjon
 MAX_ATTEMPTS = 5
 LOCKOUT_PERIOD = timedelta(minutes=15)
