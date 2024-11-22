@@ -25,7 +25,6 @@ from utils.core.logging_config import get_logger
 from utils.db.db_utils import execute_query, get_db_connection, fetch_data
 from utils.components.ui.alert_card import get_alert_icon, is_new_alert
 from utils.services.feedback_utils import update_feedback_status
-from utils.db.feedback_db import save_to_feedback_table, update_feedback_record
 
 logger = get_logger(__name__)
 
