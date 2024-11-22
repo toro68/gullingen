@@ -11,7 +11,7 @@ from utils.core.config import (
     safe_to_datetime
 )
 from utils.core.logging_config import get_logger
-from utils.db.db_utils import execute_query, get_db_connection
+from utils.db.db_utils import execute_query, get_db_connection, fetch_data
 from utils.components.ui.alert_card import get_alert_icon, is_new_alert
 
 logger = get_logger(__name__)
