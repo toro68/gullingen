@@ -47,7 +47,7 @@ def get_alerts(alert_type='active', only_today=False):
             AND (is_alert = 1 OR is_alert IS NULL)
         """
         
-        current_date = get_current_time().date()
+        current_date = format_date(get_current_time(), "database", "date")
         
         if only_today:
             query = base_query + """
@@ -56,20 +56,20 @@ def get_alerts(alert_type='active', only_today=False):
                 AND (expiry_date IS NULL OR date(expiry_date) >= date(?))
                 ORDER BY datetime DESC
             """
-            params = (current_date.isoformat(), current_date.isoformat())
+            params = (current_date, current_date)
         elif alert_type == 'active':
             query = base_query + """
                 AND status = 'Aktiv'
                 AND (expiry_date IS NULL OR date(expiry_date) >= date(?))
                 ORDER BY datetime DESC
             """
-            params = (current_date.isoformat(),)
+            params = (current_date,)
         else:
             query = base_query + """
                 AND (status = 'Inaktiv' OR date(expiry_date) < date(?))
                 ORDER BY datetime DESC LIMIT 5
             """
-            params = (current_date.isoformat(),)
+            params = (current_date,)
             
         result = fetch_data("feedback", query, params)
         if not result:
