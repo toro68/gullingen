@@ -766,9 +766,9 @@ def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
                 (
                     bookings_df['avreise_dato'].isna() |
                     (bookings_df['avreise_dato'].apply(normalize_datetime) >= dagens_dato)
+                )
             )
         ]
-        
         # Formater datoer for logging ved hjelp av format_date
         visnings_df = dagens_bestillinger.copy()
         for col in ['ankomst_dato', 'avreise_dato']:
@@ -805,7 +805,6 @@ def tunbroyting_kommende_uke(bestillinger):
                 (bestillinger["avreise_dato"].isnull())
                 | (bestillinger["avreise_dato"].dt.tz_convert(TZ) >= current_date)
             )
-        )
         |
         (bestillinger["abonnement_type"] == "Årsabonnement")
     ]
