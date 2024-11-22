@@ -239,68 +239,45 @@ def display_feedback_dashboard():
         logger.info("=== Starting display_feedback_dashboard ===")
         st.subheader("Feedback Dashboard")
 
-        # Default datoer hvis ikke annet er valgt
-        default_start = datetime.now(TZ) - timedelta(days=30)
-        default_end = datetime.now(TZ)
+        # Default datoer med riktig tidssone
+        default_start = get_current_time() - timedelta(days=30)
+        default_end = get_current_time()
         
-        # Dato-velgere
+        # Dato-velgere med riktig format
         col1, col2 = st.columns(2)
         with col1:
             start_date = st.date_input(
                 "Fra dato",
                 value=default_start.date(),
-                key="feedback_start_date"
+                key="feedback_start_date",
+                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
             )
-            logger.debug(f"Valgt startdato: {start_date}")
             
         with col2:
             end_date = st.date_input(
                 "Til dato",
                 value=default_end.date(),
-                key="feedback_end_date"
+                key="feedback_end_date",
+                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
             )
-            logger.debug(f"Valgt sluttdato: {end_date}")
 
-        # Konverter til datetime med tidssone
-        start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=TZ)
-        end_datetime = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=TZ)
+        # Konverter til datetime med tidssone ved bruk av config-funksjoner
+        start_datetime = combine_date_with_tz(start_date)
+        end_datetime = combine_date_with_tz(end_date, datetime.max.time())
         
-        logger.info(f"Henter feedback for periode: {start_datetime} til {end_datetime}")
-        
-        # Hent feedback data
+        # Hent og vis data
         feedback_data = get_feedback(
             start_date=start_datetime,
             end_date=end_datetime,
             include_hidden=st.checkbox("Vis skjult feedback", value=False)
         )
         
-        logger.debug(f"Hentet {len(feedback_data) if not feedback_data.empty else 0} feedback-elementer")
-
-        if feedback_data.empty:
-            st.warning(f"Ingen feedback-data tilgjengelig for perioden {start_date} til {end_date}")
-            return
-
-        # Vis statistikk
-        st.info(f"Totalt {len(feedback_data)} feedback-elementer for perioden")
-        
-        # Vis filtrering - bruk direkte status-strenger
-        status_filter = st.multiselect(
-            "Filtrer på status:",
-            options=['Ny', 'Under behandling', 'Løst', 'Avvist'],
-            default=['Ny', 'Under behandling']
-        )
-        
-        if status_filter:
-            feedback_data = feedback_data[feedback_data['status'].isin(status_filter)]
-            logger.debug(f"Filtrert til {len(feedback_data)} elementer basert på status")
-
-        # Vis data i tabellform
         if not feedback_data.empty:
-            st.write("### Feedback oversikt")
-            
-            # Formater datetime for visning
+            # Formater datetime for visning med config-funksjoner
             display_data = feedback_data.copy()
-            display_data['datetime'] = display_data['datetime'].dt.strftime('%d.%m.%Y %H:%M')
+            display_data['datetime'] = display_data['datetime'].apply(
+                lambda x: format_date(x, "display", "datetime")
+            )
             
             # Vis tabell
             st.dataframe(
