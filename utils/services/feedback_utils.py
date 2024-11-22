@@ -96,39 +96,23 @@ def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden
         return False
 
 
-def get_feedback(start_date=None, end_date=None, include_hidden=False, cabin_identifier=None):
+def get_feedback(include_hidden=False):
+    """Henter feedback fra databasen"""
     try:
-        query = "SELECT * FROM feedback WHERE 1=1"
-        params = []
-        
-        if start_date:
-            query += " AND datetime >= ?"
-            if isinstance(start_date, str):
-                params.append(start_date)
-            else:
-                params.append(start_date.strftime(DATE_FORMATS["database"]["datetime"]))
+        with get_db_connection("feedback") as conn:
+            query = """
+                SELECT * FROM feedback 
+                WHERE (hidden = 0 OR ? = 1)
+                ORDER BY datetime DESC
+            """
+            params = (1 if include_hidden else 0,)
             
-        if end_date:
-            query += " AND datetime <= ?"
-            if isinstance(end_date, str):
-                params.append(end_date)
-            else:
-                params.append(end_date.strftime(DATE_FORMATS["database"]["datetime"]))
+            # Bruk connection direkte med pandas
+            df = pd.read_sql_query(query, conn, params=params)
+            return df
             
-        if not include_hidden:
-            query += " AND (hidden = 0 OR hidden IS NULL)"
-            
-        if cabin_identifier:
-            query += " AND customer_id = ?"
-            params.append(cabin_identifier)
-            
-        logger.debug(f"Executing query: {query} with params: {params}")
-        df = pd.read_sql_query(query, get_db_connection("feedback"), params=params)
-        
-        return df
-        
     except Exception as e:
-        logger.error(f"Error in get_feedback: {str(e)}", exc_info=True)
+        logger.error(f"Error in get_feedback: {str(e)}")
         return pd.DataFrame()
 
 
@@ -331,7 +315,7 @@ def give_feedback():
         deviation_type = st.selectbox(
             "Velg type avvik:",
             [
-                "Glemt tunbr��yting",
+                "Glemt tunbryting",
                 "Dårlig framkommelighet",
                 "For sen brøytestart",
                 "Manglende brøyting av fellesparkeringsplasser",

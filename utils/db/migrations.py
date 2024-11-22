@@ -169,7 +169,7 @@ def migrate_feedback_table():
         return False
 
 def migrate_tunbroyting_table():
-    """Migrerer tunbroyting-tabellen til forenklet skjema uten tidkolonner"""
+    """Migrerer tunbroyting-tabellen"""
     try:
         with get_db_connection("tunbroyting") as conn:
             cursor = conn.cursor()
@@ -183,7 +183,7 @@ def migrate_tunbroyting_table():
             # Dropp original tabell
             cursor.execute("DROP TABLE IF EXISTS tunbroyting_bestillinger")
             
-            # Opprett ny tabell med forenklet skjema
+            # Opprett ny tabell med oppdatert skjema
             cursor.execute("""
                 CREATE TABLE tunbroyting_bestillinger (
                     id INTEGER PRIMARY KEY,
@@ -195,34 +195,21 @@ def migrate_tunbroyting_table():
                 )
             """)
             
-            # Kopier data fra backup, ignorer tidkolonnene
+            # Kopier data fra backup
             cursor.execute("""
-                INSERT INTO tunbroyting_bestillinger 
-                (id, customer_id, ankomst_dato, avreise_dato, abonnement_type)
+                INSERT INTO tunbroyting_bestillinger (
+                    id, customer_id, ankomst_dato, avreise_dato, abonnement_type
+                )
                 SELECT 
                     id, 
-                    customer_id, 
+                    customer_id,
                     ankomst_dato,
                     avreise_dato,
                     abonnement_type
                 FROM tunbroyting_bestillinger_backup
             """)
             
-            # Opprett indekser
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_tunbroyting_customer_id 
-                ON tunbroyting_bestillinger(customer_id)
-            """)
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst 
-                ON tunbroyting_bestillinger(ankomst_dato)
-            """)
-            
-            # Fjern backup
-            cursor.execute("DROP TABLE IF EXISTS tunbroyting_bestillinger_backup")
-            
             conn.commit()
-            logger.info("Successfully migrated tunbroyting table to simplified schema")
             return True
             
     except Exception as e:
@@ -419,7 +406,7 @@ MIGRATIONS = [
     {
         'version': '1.9',
         'function': migrate_tunbroyting_table,
-        'description': 'Migrerer tunbroyting-tabellen til forenklet skjema'
+        'description': 'Migrerer tunbroyting-tabellen'
     },
     {
         'version': '1.9',
