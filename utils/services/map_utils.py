@@ -32,11 +32,6 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
     try:
         logger.info(f"Starter vis_dagens_tunkart med {len(bestillinger)} bestillinger")
         
-        if mapbox_token is None:
-            logger.error("Mapbox token mangler")
-            st.error("Mapbox token mangler - kan ikke vise kart")
-            return None
-            
         # Opprett kartet
         fig = go.Figure()
         
@@ -76,7 +71,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
         else:
             st.info("Ingen aktive bestillinger i dag.")
         
-        # Konfigurer og vis kartet uansett
+        # Konfigurer og vis kartet uansett om det er bestillinger eller ikke
         fig.update_layout(
             mapbox=dict(
                 accesstoken=mapbox_token,
