@@ -1,11 +1,4 @@
 from utils.core.logging_config import get_logger
-from utils.core.config import (
-    TZ,
-    DATE_FORMATS,
-    get_current_time,
-    get_default_date_range,
-    DATE_VALIDATION
-)
 
 logger = get_logger(__name__)
 
@@ -52,12 +45,11 @@ def get_database_schemas():
         "tunbroyting": """
             CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
                 id INTEGER PRIMARY KEY,
-                customer_id TEXT,
-                ankomst_dato DATE,
-                ankomst_tid TIME,
+                customer_id TEXT NOT NULL,
+                ankomst_dato DATE NOT NULL,
                 avreise_dato DATE,
-                avreise_tid TIME,
-                abonnement_type TEXT
+                abonnement_type TEXT NOT NULL,
+                FOREIGN KEY (customer_id) REFERENCES customer(customer_id)
             )
         """,
         "customer": """

@@ -1,15 +1,13 @@
 import logging
 import sqlite3
 import pytest
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 
-from conftest import TEST_USER, TEST_TZ, TEST_DB
+from conftest import TEST_USER
 from utils.core.validation_utils import validere_bestilling
-from utils.db.db_utils import get_db_connection
 from utils.services.tun_utils import (
     lagre_bestilling,
-    get_bookings,
-    hent_aktive_bestillinger_for_dag
+    get_bookings
 )
 
 logging.basicConfig(level=logging.DEBUG)

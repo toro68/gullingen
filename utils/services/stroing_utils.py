@@ -1,22 +1,15 @@
-import math
 import sqlite3
-import traceback
 from datetime import datetime, timedelta
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import altair as alt
-import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
 from utils.core.config import (
     TZ,
-    DATE_FORMATS,
-    get_date_format,
-    get_current_time,
-    get_default_date_range,
-    DATE_VALIDATION
+    get_date_format
 )
 from utils.core.logging_config import get_logger
 from utils.core.validation_utils import validate_customer_id  

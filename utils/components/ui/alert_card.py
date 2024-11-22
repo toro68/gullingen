@@ -1,22 +1,14 @@
 # Fil: components/ui/alert_card.py
 # Kategori: UI Components
 
-import logging
 from datetime import datetime
 from typing import Any, Dict
-from zoneinfo import ZoneInfo  # Lagt til import av ZoneInfo
 
 import pytz
 import streamlit as st# Legg til denne importen øverst i filen
 import html  # Legg til denne importen øverst i filen
 
 from utils.core.config import (
-    TZ,
-    DATE_FORMATS,
-    get_date_format,
-    get_current_time,
-    get_default_date_range,
-    DATE_VALIDATION,
     safe_to_datetime,
     format_date
 )
@@ -180,7 +172,7 @@ def display_alert_card(alert: Dict[str, Any]) -> None:
         alert_html = [
             '<div class="alert-card">',
             '    <div class="alert-header">',
-            f'        <div class="alert-type">',
+            '        <div class="alert-type">',
             f'            <i class="fas {icon_class}"></i>',
             f"            {display_type}",
             "        </div>",

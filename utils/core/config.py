@@ -4,7 +4,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 import pandas as pd
 
@@ -127,12 +127,6 @@ DB_CONFIG = {
     },
 }
 
-# Værdata konfigurasjon
-STATION_ID = "SN46220"
-API_URL = "https://frost.met.no/observations/v0.jsonld"
-ELEMENTS = "air_temperature,surface_snow_thickness,sum(precipitation_amount PT1H),wind_from_direction,max(wind_speed_of_gust PT1H),mean(wind_speed PT1H),surface_temperature,relative_humidity,dew_point_temperature"
-TIME_RESOLUTION = "PT1H"
-
 # GPS konfigurasjon
 GPS_URL = "https://kart.irute.net/fjellbergsskardet_busses.json?_=1657373465172"
 
@@ -150,14 +144,6 @@ STATUS_COLORS = {
     "Løst": "#2ECC40",
     "Lukket": "#AAAAAA",
     "default": "#CCCCCC",
-}
-
-# UI ikoner
-FEEDBACK_ICONS = {
-    "Føreforhold": "🚗",
-    "Parkering": "🅿️",
-    "Fasilitet": "🏠",
-    "Annet": "❓",
 }
 
 # Autentisering og sesjon

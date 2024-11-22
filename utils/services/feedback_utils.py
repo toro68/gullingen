@@ -1,10 +1,8 @@
 # feedback_utils.py
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, timedelta
 from io import BytesIO
-from zoneinfo import ZoneInfo
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -12,16 +10,22 @@ from utils.core.config import (
     TZ,
     DATE_FORMATS,
     get_date_format,
-    get_current_time,    get_default_date_range,
-    DATE_VALIDATION
+    get_current_time,
+    DATE_VALIDATION,
+    STATUS_COLORS
 )
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import execute_query, fetch_data, get_db_connection
-from utils.services.alert_utils import display_active_alerts as display_user_alerts
+from utils.services.stroing_utils import log_stroing_activity
 
 logger = get_logger(__name__)
 
-icons = {"Føreforhold": "🚗", "Parkering": "🅿️", "Fasilitet": "🏠", "Annet": "❓"}
+FEEDBACK_ICONS = {
+    "Føreforhold": "🚗",
+    "Parkering": "🅿️",
+    "Fasilitet": "🏠",
+    "Annet": "❓",
+}
 
 # hjelpefunksjoner
 def safe_to_datetime(date_string):
@@ -424,7 +428,7 @@ def display_recent_feedback():
         st.write(f"Viser {len(recent_feedback)} rapporter fra de siste 7 dagene:")
 
         for _, row in recent_feedback.iterrows():
-            icon = icons.get(row["type"], "❓")
+            icon = FEEDBACK_ICONS.get(row["type"], "❓")
             status = row["status"]
             status_color = STATUS_COLORS.get(status, STATUS_COLORS["default"])
             date_str = (

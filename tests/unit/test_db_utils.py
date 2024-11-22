@@ -1,16 +1,10 @@
 import sqlite3
 import pandas as pd
 
-import pytest
 
 from utils.db.db_utils import (
     execute_query, 
-    fetch_data,
-    verify_schema_version,
-    verify_database_schemas,
-    verify_stroing_database_state,
-    verify_table_exists,
-    verify_customer_database
+    fetch_data
 )
 
 

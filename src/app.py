@@ -1,57 +1,20 @@
-import base64
-import io
-import json
-import logging
 import os
-import re
-import sqlite3
-import traceback
-from datetime import datetime, timedelta
-from io import BytesIO
 from time import time
 
 # Fjernet import av 'streamlit_calendar' siden det ikke kunne importeres
-from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo  # ZoneInfo er en underklasse av tzinfo
 
-import altair as alt
-import matplotlib.pyplot as plt
-import numpy as np  # NumPy
-import pandas as pd  # Pandas
-import plotly.express as px  # Plotly Express
-import plotly.graph_objects as go  # Plotly Graph Objects
-import pytz
-import requests
 import streamlit as st
-from plotly.subplots import make_subplots  # Plotly Subplots
-from statsmodels.nonparametric.smoothers_lowess import lowess  # Lowess Smoothing
-from streamlit_option_menu import option_menu  # Streamlit Option Menu
 
 from utils.components.ui.alert_card import display_alert_card
 from utils.core.auth_utils import check_session_timeout, login_page
 from utils.core.config import (
     DATABASE_PATH,
-    LOCKOUT_PERIOD,
-    MAX_ATTEMPTS,
-    SESSION_TIMEOUT,
-    STATUS_COLORS,
-    STATUS_MAPPING,
-    TZ,
 )
 from utils.core.logging_config import get_logger, setup_logging
 from utils.core.menu_utils import create_menu
-from utils.core.util_functions import get_date_range
-from utils.core.validation_utils import (
-    sanitize_input,
-    validate_customers_and_passwords,
-    validate_user_input,
-)
-from utils.db import db_utils  # Legg til denne importen øverst med de andre importene
 from utils.db.db_utils import (
-    close_all_connections,
-    get_db_connection,
-    initialize_database_system,
-    verify_database_schemas
+    initialize_database_system
 )
 from utils.db.migrations import (
     run_migrations,
@@ -66,15 +29,10 @@ from utils.services.admin_utils import (  # admin_utils er i services, ikke core
     unified_report_page,
 )
 from utils.services.alert_utils import (
-    clean_invalid_expiry_dates,
-    get_active_alerts,
-    display_active_alerts
+    get_active_alerts
 )
 from utils.services.customer_utils import (
-    get_cabin_coordinates,
-    get_customer_by_id,
-    load_customer_database,
-    setup_customer_data
+    get_customer_by_id
 )
 from utils.services.feedback_utils import (
     display_daily_maintenance_rating,
@@ -85,24 +43,14 @@ from utils.services.gps_utils import display_last_activity
 from utils.services.map_utils import display_live_plowmap
 from utils.services.stroing_utils import (
     admin_stroing_page,
-    bestill_stroing,
-    display_stroing_bookings,
-    initialize_stroing_database,
-    verify_stroing_data
+    bestill_stroing
 )
 from utils.services.tun_utils import (
     bestill_tunbroyting,
     handle_tun,
-    hent_bruker_bestillinger,
     vis_hyttegrend_aktivitet,
     vis_tunbroyting_oversikt,
 )
-from utils.services.weather_display_utils import (
-    display_weather_data,
-    handle_weather_page,
-)
-from utils.services.weather_utils import fetch_and_process_data
-from utils.db.data_import import import_customers_from_csv
 
 # Set up logging ONCE
 setup_logging()

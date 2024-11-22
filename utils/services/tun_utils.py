@@ -1,7 +1,6 @@
-import os
 import sqlite3
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 
 import pandas as pd
 import plotly.express as px
@@ -15,18 +14,16 @@ from utils.core.config import (
     get_current_time,
     get_default_date_range,
     DATE_VALIDATION,
-    DATABASE_PATH,
     safe_to_datetime,
     format_date,
     combine_date_with_tz,
     normalize_datetime,
-    convert_for_db,
-    DB_DATE_TYPES
+    convert_for_db
 )
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import neste_fredag
 from utils.core.validation_utils import validere_bestilling
-from utils.db.db_utils import fetch_data, get_db_connection
+from utils.db.db_utils import get_db_connection
 from utils.services.map_utils import vis_dagens_tunkart, verify_map_configuration, debug_map_data
 from utils.services.customer_utils import (
     customer_edit_component,
@@ -35,7 +32,6 @@ from utils.services.customer_utils import (
     load_customer_database,
     vis_arsabonnenter,
 )
-from utils.services.utils import is_active_booking
 
 logger = get_logger(__name__)
 
@@ -267,7 +263,7 @@ def hent_bruker_bestillinger(customer_id):
             query = """
             SELECT DISTINCT * FROM tunbroyting_bestillinger 
             WHERE customer_id = ? 
-            ORDER BY ankomst_dato DESC, ankomst_tid DESC
+            ORDER BY ankomst_dato DESC
             """
             df = pd.read_sql_query(query, conn, params=(customer_id,))
 
@@ -309,17 +305,14 @@ def hent_bestillinger_for_periode(start_date, end_date):
 
         with get_db_connection("tunbroyting") as conn:
             query = """
-            SELECT id, customer_id, ankomst_dato, ankomst_tid, 
-                   avreise_dato, avreise_tid, abonnement_type
+            SELECT id, customer_id, ankomst_dato, 
+                   avreise_dato, abonnement_type
             FROM tunbroyting_bestillinger 
             WHERE 
-                -- Bestillinger som er aktive i den valgte perioden
                 (
-                    -- Vanlige bestillinger
                     (abonnement_type != 'Årsabonnement' AND
                      ankomst_dato >= ? AND ankomst_dato <= ?)
                     OR
-                    -- Årsabonnement som er aktive i perioden
                     (abonnement_type = 'Årsabonnement' AND
                      ankomst_dato <= ? AND 
                      (avreise_dato IS NULL OR avreise_dato >= ?))
@@ -793,7 +786,6 @@ def tunbroyting_kommende_uke(bestillinger):
         |
         (bestillinger["abonnement_type"] == "Årsabonnement")
     ]
-
 
 # Visninger for tunbrøyting
 def vis_tunbroyting_statistikk(bookings_func=None):
@@ -1378,9 +1370,7 @@ def get_bookings(start_date=None, end_date=None):
                 id, 
                 customer_id,
                 ankomst_dato,
-                ankomst_tid,
                 avreise_dato,
-                avreise_tid,
                 abonnement_type
             FROM tunbroyting_bestillinger
             """

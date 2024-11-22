@@ -1,19 +1,10 @@
 import logging
 import os
-import sqlite3
 
 from utils.core.config import (
-    TZ,
-    DATE_FORMATS,
-    get_date_format,
-    get_current_time,
-    get_default_date_range,
-    DATE_VALIDATION,
     DATABASE_PATH
 )
-from utils.core.logging_config import get_logger
 from utils.db.db_utils import get_db_connection, initialize_database_system
-from utils.db.data_import import import_customers_from_csv
 
 # Sett opp logging
 logging.basicConfig(

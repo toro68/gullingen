@@ -1,7 +1,5 @@
 # map_utils.py
 # Standard library imports
-import logging
-from datetime import datetime, timedelta
 
 # Third-party imports
 import pandas as pd
@@ -10,22 +8,12 @@ import streamlit as st
 
 # Local imports
 from utils.core.config import (
-    TZ,
-    DATE_FORMATS,
-    get_date_format,
-    get_current_time,
-    get_default_date_range,
-    DATE_VALIDATION,
     safe_to_datetime,
-    format_date,
-    normalize_datetime,
-    convert_for_db,
-    parse_date
+    format_date
 )
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import get_marker_properties
-from utils.services.customer_utils import get_cabin_coordinates, load_customer_database
-from utils.services.utils import is_active_booking
+from utils.services.customer_utils import get_cabin_coordinates
 from utils.core.validation_utils import validate_cabin_id, validate_date
 # Set up logging
 logger = get_logger(__name__)

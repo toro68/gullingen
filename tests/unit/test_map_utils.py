@@ -7,10 +7,8 @@ from zoneinfo import ZoneInfo
 from utils.services.map_utils import (
     vis_dagens_tunkart,
     vis_stroingskart_kommende,
-    create_map,
-    add_stroing_to_map
+    create_map
 )
-from utils.core.util_functions import get_date_range
 
 TZ = ZoneInfo("Europe/Oslo")
 GULLINGEN_LAT = 59.39210

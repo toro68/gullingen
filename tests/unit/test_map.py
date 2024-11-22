@@ -1,4 +1,3 @@
-import pytest
 
 from utils.services.map_utils import vis_dagens_tunkart
 

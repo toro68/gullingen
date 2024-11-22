@@ -1,5 +1,4 @@
 import io
-import sys
 import traceback
 from datetime import datetime, timedelta
 
@@ -9,15 +8,9 @@ import streamlit as st
 
 from utils.core.config import (
     TZ,
-    DATE_FORMATS,
-    get_date_format,
-    get_current_time,
-    get_default_date_range,
-    DATE_VALIDATION,
     STATUS_COLORS
 )
 from utils.core.logging_config import get_logger
-from utils.db.db_utils import get_db_connection
 from utils.services.alert_utils import get_alerts, handle_alerts_ui
 from utils.services.feedback_utils import get_feedback
 from utils.services.tun_utils import get_bookings
@@ -28,12 +21,9 @@ def get_login_data():
 
     return get_login_history
 
-
 logger = get_logger(__name__)
 
 # Administrasjonsfunksjoner
-
-
 def admin_alert():
     handle_alerts_ui()
 

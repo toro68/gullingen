@@ -4,17 +4,12 @@ validation_utils.py - Sentralisert validering for Fjellbergsskardet
 
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple, Union
-from zoneinfo import ZoneInfo
+from typing import Any, Dict, Optional, Tuple
 
 import streamlit as st
 
 from utils.core.config import (
-    TZ,
-    DATE_FORMATS,
     get_date_format,
-    get_current_time,
-    get_default_date_range,
     DATE_VALIDATION
 )
 from utils.core.logging_config import get_logger

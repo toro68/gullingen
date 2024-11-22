@@ -1,17 +1,14 @@
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
-import pandas as pd
+from unittest.mock import patch
 import streamlit as st
 
-from conftest import TEST_USER, TEST_TZ
+from conftest import TEST_USER
 from utils.core.validation_utils import validate_user_input
 from src.app import (
     initialize_app,
     initialize_session_state,
     check_session_timeout,
-    display_home_page,
-    get_customer_by_id
+    display_home_page
 )
 
 def test_initialize_session_state(mock_streamlit):

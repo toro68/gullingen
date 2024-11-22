@@ -10,11 +10,9 @@ from utils.services.tun_utils import (
     get_bookings,
     lagre_bestilling,
     hent_aktive_bestillinger_for_dag,
-    vis_dagens_bestillinger,
     vis_hyttegrend_aktivitet,
     oppdater_bestilling,
-    tunbroyting_kommende_uke,
-    slett_bestilling
+    tunbroyting_kommende_uke
 )
 from freezegun import freeze_time
 from utils.db.db_utils import get_db_connection

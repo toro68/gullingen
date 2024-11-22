@@ -1,23 +1,18 @@
-import logging
 import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import List, Optional
 
 import pandas as pd
 import streamlit as st
 from utils.core.config import (
     TZ,
-    DATE_FORMATS,
-    get_date_format,
     get_current_time,
-    get_default_date_range,
     format_date,
-    normalize_datetime,
-    safe_to_datetime,
-    DATE_VALIDATION
+    safe_to_datetime
 )
 from utils.core.logging_config import get_logger
-from utils.db.db_utils import execute_query, fetch_data, get_db_connection
+from utils.db.db_utils import execute_query, get_db_connection
+from utils.components.ui.alert_card import get_alert_icon, is_new_alert
 
 logger = get_logger(__name__)
 
@@ -86,15 +81,6 @@ def get_alerts(alert_type='active', only_today=False):
             'is_alert', 'display_on_weather', 'expiry_date', 'target_group'
         ])
         
-        # Konverter datokolonner
-        date_columns = ['datetime', 'status_changed_at', 'expiry_date']
-        for col in date_columns:
-            if col in df.columns:
-                df[col] = df[col].apply(
-                    lambda x: format_date(safe_to_datetime(x), "display", "datetime") 
-                    if pd.notna(x) else None
-                )
-        
         return df
         
     except Exception as e:
@@ -147,41 +133,6 @@ def save_alert(alert_type: str, message: str, expiry_date: str,
     except Exception as e:
         logger.error(f"Error saving alert: {str(e)}", exc_info=True)
         return None
-
-def update_alert(alert_id: int, new_type: str, new_message: str, 
-                new_expiry_date: str, new_target_group: List[str], 
-                new_status: str, updated_by: str) -> bool:
-    try:
-        query = """
-        UPDATE feedback 
-        SET type = ?, comment = ?, expiry_date = ?, target_group = ?, 
-            status = ?, status_changed_by = ?, status_changed_at = ?
-        WHERE id = ?
-        """
-        params = (
-            f"Admin varsel: {new_type}",
-            new_message,
-            new_expiry_date,
-            ",".join(new_target_group),
-            new_status,
-            updated_by,
-            datetime.now(TZ).isoformat(),
-            alert_id,
-        )
-        
-        affected_rows = execute_query("feedback", query, params)
-        success = affected_rows > 0
-        
-        if success:
-            logger.info(f"Alert {alert_id} updated successfully by {updated_by}")
-            get_alerts.clear()
-        else:
-            logger.warning(f"No alert found with id: {alert_id}")
-            
-        return success
-    except Exception as e:
-        logger.error(f"Error updating alert: {str(e)}", exc_info=True)
-        return False
 
 def delete_alert(alert_id: int) -> bool:
     try:
@@ -319,10 +270,6 @@ def clean_invalid_expiry_dates():
     except Exception as e:
         logger.error(f"Feil ved rensing av utløpsdatoer: {str(e)}")
 
-def get_active_alerts():
-    """Henter aktive varsler"""
-    return get_alerts(alert_type='active')
-
 def display_alarms_homepage():
     try:
         active_alerts = get_alerts(alert_type='active')
@@ -332,9 +279,7 @@ def display_alarms_homepage():
                     if pd.notnull(alert['display_on_weather']) and alert['display_on_weather'] == 1:
                         icon = get_alert_icon(alert['type'])
                         alert_type = alert['type'].replace("Admin varsel: ", "")
-                        alert_type = alert['type'].replace("Admin varsel: ", "")
                         st.markdown(f"### <i class='fas {icon}'></i> {alert_type}", unsafe_allow_html=True)
-                        st.write(alert['comment'])
                         st.write(alert['comment'])
                         expiry_date = safe_to_datetime(alert["expiry_date"])
                         if expiry_date:
@@ -443,84 +388,6 @@ def display_alert_details(alert):
     except Exception as e:
         logger.error(f"Feil ved visning av varseldetaljer: {str(e)}")
         st.error("Feil ved visning av varseldetaljer")
-
-def edit_alert(alert):
-    """Redigerer et eksisterende varsel"""
-    try:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            new_status = st.selectbox(
-                "Status",
-                ["Aktiv", "Inaktiv"],
-                index=0 if alert['status'] == 'Aktiv' else 1,
-                key=f"status_{alert['id']}"
-            )
-            
-            new_expiry = st.date_input(
-                "Utløpsdato",
-                value=pd.to_datetime(alert['expiry_date']).date() if pd.notnull(alert['expiry_date']) else datetime.now(TZ).date(),
-                min_value=datetime.now(TZ).date(),
-                key=f"expiry_{alert['id']}"
-            )
-        
-        with col2:
-            new_display = st.checkbox(
-                "Vis på værsiden",
-                value=bool(alert['display_on_weather']),
-                key=f"display_{alert['id']}"
-            )
-            
-            new_target = st.multiselect(
-                "Målgruppe",
-                ["Alle brukere", "Årsabonnenter", "Ukentlig ved bestilling", "Ikke-abonnenter"],
-                default=alert['target_group'].split(',') if alert['target_group'] else ["Alle brukere"],
-                key=f"target_{alert['id']}"
-            )
-
-        if st.button("Oppdater varsel", key=f"update_{alert['id']}"):
-            success = update_alert(
-                alert['id'],
-                new_status,
-                new_expiry.isoformat(),
-                new_display,
-                ','.join(new_target)
-            )
-            if success:
-                st.success("Varsel oppdatert")
-                get_alerts.clear()
-                st.rerun()
-            else:
-                st.error("Kunne ikke oppdatere varselet")
-                
-    except Exception as e:
-        logger.error(f"Feil ved redigering av varsel: {str(e)}")
-        st.error("Feil ved redigering av varselet")
-
-def update_alert(alert_id: int, status: str, expiry_date: str, display_on_weather: bool, target_group: str) -> bool:
-    """Oppdaterer et eksisterende varsel i databasen"""
-    try:
-        query = """
-            UPDATE feedback 
-            SET status = ?,
-                expiry_date = ?,
-                display_on_weather = ?,
-                target_group = ?,
-                status_changed_by = ?,
-                status_changed_at = datetime('now')
-            WHERE id = ? AND type LIKE 'Admin varsel:%'
-        """
-        execute_query(
-            "feedback",
-            query,
-            (status, expiry_date, int(display_on_weather), target_group, st.session_state.customer_id, alert_id)
-        )
-        logger.info(f"Alert {alert_id} updated successfully")
-        get_alerts.clear()
-        return True
-    except Exception as e:
-        logger.error(f"Error updating alert: {str(e)}")
-        return False
 
 @st.cache_data(ttl=60)
 def get_active_alerts():

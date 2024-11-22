@@ -2,7 +2,6 @@
 import logging
 import os
 from logging.handlers import RotatingFileHandler
-from zoneinfo import ZoneInfo
 
 def setup_logging():
     # Opprett logs-mappen hvis den ikke eksisterer

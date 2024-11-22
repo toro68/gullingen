@@ -1,4 +1,3 @@
-import logging
 import os
 import sys
 from pathlib import Path
@@ -13,9 +12,8 @@ sys.path.append(str(current_dir))
 if os.path.exists("/mount/gullingen"):
     os.chdir("/mount/gullingen")
 
-# Now we can import utils
 from utils.core.logging_config import get_logger, setup_logging
-# Set up logging
+
 setup_logging()
 logger = get_logger(__name__)
 
@@ -32,7 +30,6 @@ if 'TZ' not in st.session_state:
 try:
     from src.app import (
         initialize_app,
-        initialize_session_state,
         display_home_page,
         get_customer_by_id,
         login_page,

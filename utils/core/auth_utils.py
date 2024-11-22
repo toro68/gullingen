@@ -1,28 +1,16 @@
-import logging
-import os
-import re
-import sqlite3
 import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, Tuple
+from datetime import datetime
+from typing import Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import streamlit as st
 
 from utils.core.config import (
-    DATABASE_PATH,
     LOCKOUT_PERIOD,
     MAX_ATTEMPTS,
-    SESSION_TIMEOUT,
-    TZ,
-    DATE_FORMATS,
-    get_date_format,
-    get_current_time,
-    get_default_date_range,
-    DATE_VALIDATION
+    SESSION_TIMEOUT
 )
 from utils.core.logging_config import get_logger
-from utils.core.validation_utils import sanitize_input, validate_cabin_id, validate_customer_id
 from utils.db.db_utils import get_db_connection
 from utils.services.customer_utils import get_customer_by_id
 from utils.services.utils import get_passwords

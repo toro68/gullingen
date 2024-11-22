@@ -1,8 +1,6 @@
 import os
 from datetime import datetime, timedelta
 
-import pandas as pd
-import pytest
 import streamlit as st
 from dotenv import load_dotenv
 
