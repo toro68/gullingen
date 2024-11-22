@@ -257,7 +257,7 @@ def main():
                     elif admin_choice == "Varsler":
                         admin_alert()
                     elif admin_choice == "Feedback":
-                        handle_user_feedback()
+                        display_admin_dashboard()
                     elif admin_choice == "Strøing":
                         admin_stroing_page()
                     elif admin_choice == "Dashboard":

@@ -232,7 +232,6 @@ def delete_feedback(feedback_id):
         logger.error(f"Error deleting feedback with id {feedback_id}: {str(e)}")
         return False
 
-
 def display_feedback_dashboard():
     """Viser feedback-dashboard for administratorer"""
     try:

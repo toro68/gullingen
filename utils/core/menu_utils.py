@@ -56,7 +56,6 @@ def create_menu(customer_id, user_type):
                 "Varsler",
                 "Feedback",
                 "Strøing",
-                "Dashboard",
             ]
             if user_type == "Superadmin":
                 logger.info("Adding superadmin options")
@@ -69,7 +68,6 @@ def create_menu(customer_id, user_type):
                 "bell",
                 "chat-dots",
                 "snow",
-                "speedometer2",
                 "people",
                 "house",
                 "graph-up",
