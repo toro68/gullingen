@@ -7,8 +7,7 @@ from typing import Any, Dict
 from zoneinfo import ZoneInfo  # Lagt til import av ZoneInfo
 
 import pytz
-import streamlit as st
-from bs4 import BeautifulSoup  # Legg til denne importen øverst i filen
+import streamlit as st# Legg til denne importen øverst i filen
 import html  # Legg til denne importen øverst i filen
 
 from utils.core.config import (
