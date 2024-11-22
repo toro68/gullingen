@@ -68,7 +68,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
                             text=popup_text,
                             hoverinfo='text'
                         ))
-            
+        else:
             st.info("Ingen aktive bestillinger i dag.")
         
         # Konfigurer og vis kartet uansett om det er bestillinger eller ikke
