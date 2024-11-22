@@ -43,6 +43,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
             is_valid, message = verify_map_configuration(bestillinger, mapbox_token)
             if not is_valid:
                 logger.warning(f"Kartvalidering feilet: {message}")
+                st.warning(message)
             else:
                 # Legg til markører for hver bestilling
                 cabin_coordinates = get_cabin_coordinates()
@@ -67,10 +68,10 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
                             text=popup_text,
                             hoverinfo='text'
                         ))
-        else:
-            st.info("Ingen aktive bestillinger i dag.")
             
-        # Konfigurer kartvisning uansett om det er bestillinger eller ikke
+            st.info("Ingen aktive bestillinger i dag.")
+        
+        # Konfigurer og vis kartet uansett om det er bestillinger eller ikke
         fig.update_layout(
             mapbox=dict(
                 accesstoken=mapbox_token,
@@ -79,9 +80,12 @@ def vis_dagens_tunkart(bestillinger, mapbox_token=None, title=None):
                 center=dict(lat=59.39111, lon=6.42755)
             ),
             margin=dict(l=0, r=0, t=30, b=0),
-            title=title,
+            title=title or "Tunbrøytingskart",
             showlegend=False
         )
+        
+        # Vis kartet
+        st.plotly_chart(fig, use_container_width=True)
         
         return fig
         
