@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo  # Lagt til import av ZoneInfo
 
 import pytz
 import streamlit as st
+from bs4 import BeautifulSoup  # Legg til denne importen øverst i filen
+import html  # Legg til denne importen øverst i filen
 
 from utils.core.config import (
     TZ,
@@ -15,7 +17,9 @@ from utils.core.config import (
     get_date_format,
     get_current_time,
     get_default_date_range,
-    DATE_VALIDATION
+    DATE_VALIDATION,
+    safe_to_datetime,
+    format_date
 )
 from utils.core.logging_config import get_logger
 
@@ -103,25 +107,6 @@ def get_alert_icon(alert_type: str) -> str:
     }
     return icons.get(clean_type, "fa-circle-info")
 
-
-def convert_to_local_time(dt) -> datetime:
-    """Konverterer en datetime til lokal tid"""
-    if dt is None:
-        return None
-
-    if isinstance(dt, str):
-        try:
-            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
-        except ValueError:
-            logger.error(f"Kunne ikke parse dato: {dt}")
-            return None
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
-
-    return dt.astimezone(TZ)
-
-
 def is_new_alert(alert_datetime: datetime, hours: int = 24) -> bool:
     """Sjekker om varselet er nyere enn gitt antall timer"""
     try:
@@ -161,39 +146,38 @@ def display_alert_card(alert: Dict[str, Any]) -> None:
             - expiry_date: Optional datetime eller string for utløpsdato
     """
     try:
-        # Håndter datetime
-        if isinstance(alert["datetime"], str):
-            alert_datetime = datetime.fromisoformat(
-                alert["datetime"].replace("Z", "+00:00")
-            )
-        else:
-            alert_datetime = alert["datetime"]
+        # Debug-logging for å se hva som kommer inn
+        logger.debug(f"Raw comment from database: {alert['comment']}")
+        
+        # Parse datoer med config.py sine funksjoner
+        alert_datetime = safe_to_datetime(alert["datetime"])
+        if not alert_datetime:
+            logger.error(f"Kunne ikke parse dato: {alert['datetime']}")
+            return
 
-        # Konverter til lokal tid
-        local_datetime = convert_to_local_time(alert_datetime)
-        formatted_datetime = local_datetime.strftime("%d.%m.%Y %H:%M")
+        formatted_datetime = format_date(alert_datetime, 
+                                      format_type="display", 
+                                      date_type="datetime")
 
         # Håndter utløpsdato
         expiry_date = None
         if alert.get("expiry_date"):
-            if isinstance(alert["expiry_date"], str):
-                expiry_datetime = datetime.fromisoformat(
-                    alert["expiry_date"].replace("Z", "+00:00")
-                )
-                expiry_date = convert_to_local_time(expiry_datetime).strftime(
-                    "%d.%m.%Y"
-                )
-            elif alert["expiry_date"] is not None:
-                expiry_date = convert_to_local_time(alert["expiry_date"]).strftime(
-                    "%d.%m.%Y"
-                )
+            expiry_datetime = safe_to_datetime(alert["expiry_date"])
+            if expiry_datetime:
+                expiry_date = format_date(expiry_datetime, 
+                                        format_type="display", 
+                                        date_type="date")
 
-        # Rens varseltypen og kommentaren
+        # Rens varseltypen
         display_type = alert["type"].replace("Admin varsel: ", "")
         icon_class = get_alert_icon(alert["type"])
-        comment = str(alert["comment"]).replace("<", "&lt;").replace(">", "&gt;")
+        
+        # Escape HTML med Python sin html modul
+        comment = html.escape(str(alert["comment"]))
+        
+        logger.debug(f"Comment after HTML escaping: {comment}")
 
-        # Bygg HTML
+        # Bygg HTML uten footer først
         alert_html = [
             '<div class="alert-card">',
             '    <div class="alert-header">',
@@ -211,24 +195,24 @@ def display_alert_card(alert: Dict[str, Any]) -> None:
             "    </div>",
         ]
 
-        # Legg til footer hvis vi har utløpsdato
+        # Legg til footer bare hvis vi har en utløpsdato
         if expiry_date:
-            alert_html.extend(
-                [
-                    '    <div class="alert-footer">',
-                    '        <div class="footer-item">',
-                    '            <i class="far fa-calendar-times"></i>',
-                    f"            Utløper: {expiry_date}",
-                    "        </div>",
-                    "    </div>",
-                ]
-            )
+            footer_html = [
+                '    <div class="alert-footer">',
+                '        <div class="footer-item">',
+                '            <i class="far fa-calendar-times"></i>',
+                f"            Utløper: {expiry_date}",
+                "        </div>",
+                "    </div>"
+            ]
+            alert_html.extend(footer_html)
 
+        # Lukk hovedkortet
         alert_html.append("</div>")
 
-        # Vis CSS-stilen og alert-kortet
+        # Vis CSS og HTML som én sammenhengende streng
         st.markdown(create_alert_style(), unsafe_allow_html=True)
-        st.markdown("\n".join(alert_html), unsafe_allow_html=True)
+        st.markdown("".join(alert_html), unsafe_allow_html=True)  # Bruk join istedenfor \n.join
 
     except Exception as e:
         logger.error(f"Feil ved visning av varsel: {str(e)}", exc_info=True)

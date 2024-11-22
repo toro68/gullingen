@@ -615,3 +615,29 @@ def lag_stroing_graf(df):
         height=400,
         title='Daglige strøingsbestillinger'
     )
+
+def get_stroing_bestillinger(start_date=None, end_date=None):
+    try:
+        query = "SELECT * FROM stroing_bestillinger WHERE 1=1"
+        params = []
+        
+        if start_date:
+            query += " AND bestillings_dato >= ?"
+            params.append(start_date)
+            
+        if end_date:
+            query += " AND bestillings_dato <= ?"
+            params.append(end_date)
+            
+        df = pd.read_sql_query(query, get_db_connection("stroing"), params=params)
+        
+        # Konverter datokolonner
+        for col in ['bestillings_dato', 'onske_dato']:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col])
+                
+        return df
+        
+    except Exception as e:
+        logger.error(f"Error in get_stroing_bestillinger: {str(e)}", exc_info=True)
+        return pd.DataFrame()

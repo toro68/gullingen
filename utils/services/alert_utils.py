@@ -11,6 +11,9 @@ from utils.core.config import (
     get_date_format,
     get_current_time,
     get_default_date_range,
+    format_date,
+    normalize_datetime,
+    safe_to_datetime,
     DATE_VALIDATION
 )
 from utils.core.logging_config import get_logger
@@ -32,7 +35,7 @@ def is_valid_date(date_string):
 @st.cache_data(ttl=60)
 def get_alerts(alert_type='active', only_today=False):
     """
-    Henter varsler fra databasen
+    Henter varsler fra databasen.
     
     Args:
         alert_type (str): 'active' for aktive varsler, 'inactive' for tidligere varsler
@@ -49,30 +52,50 @@ def get_alerts(alert_type='active', only_today=False):
             AND (is_alert = 1 OR is_alert IS NULL)
         """
         
+        current_date = get_current_time().date()
+        
         if only_today:
             query = base_query + """
                 AND status = 'Aktiv'
-                AND date(datetime) = date('now')
-                AND (expiry_date IS NULL OR expiry_date >= date('now'))
+                AND date(datetime) = date(?)
+                AND (expiry_date IS NULL OR date(expiry_date) >= date(?))
                 ORDER BY datetime DESC
             """
+            params = (current_date.isoformat(), current_date.isoformat())
         elif alert_type == 'active':
             query = base_query + """
                 AND status = 'Aktiv'
-                AND (expiry_date IS NULL OR expiry_date >= date('now'))
+                AND (expiry_date IS NULL OR date(expiry_date) >= date(?))
                 ORDER BY datetime DESC
             """
+            params = (current_date.isoformat(),)
         else:
             query = base_query + """
-                AND (status = 'Inaktiv' OR expiry_date < date('now'))
+                AND (status = 'Inaktiv' OR date(expiry_date) < date(?))
                 ORDER BY datetime DESC LIMIT 5
             """
+            params = (current_date.isoformat(),)
             
-        result = fetch_data("feedback", query)
-        columns = ['id', 'type', 'datetime', 'comment', 'customer_id', 'status', 
-                  'status_changed_by', 'status_changed_at', 'hidden', 
-                  'is_alert', 'display_on_weather', 'expiry_date', 'target_group']
-        return pd.DataFrame(result, columns=columns)
+        result = fetch_data("feedback", query, params)
+        if not result:
+            return pd.DataFrame()
+            
+        df = pd.DataFrame(result, columns=[
+            'id', 'type', 'datetime', 'comment', 'customer_id', 'status', 
+            'status_changed_by', 'status_changed_at', 'hidden', 
+            'is_alert', 'display_on_weather', 'expiry_date', 'target_group'
+        ])
+        
+        # Konverter datokolonner
+        date_columns = ['datetime', 'status_changed_at', 'expiry_date']
+        for col in date_columns:
+            if col in df.columns:
+                df[col] = df[col].apply(
+                    lambda x: format_date(safe_to_datetime(x), "display", "datetime") 
+                    if pd.notna(x) else None
+                )
+        
+        return df
         
     except Exception as e:
         logger.error(f"Error fetching alerts: {str(e)}")
@@ -81,15 +104,24 @@ def get_alerts(alert_type='active', only_today=False):
 def save_alert(alert_type: str, message: str, expiry_date: str, 
                target_group: List[str], created_by: str) -> Optional[int]:
     try:
+        # Konverter og valider datoer
+        expiry_dt = safe_to_datetime(expiry_date)
+        if expiry_dt:
+            expiry_date = format_date(expiry_dt, "database", "date")
+        
+        current_time = get_current_time()
+        
         query = """
-        INSERT INTO feedback (type, comment, datetime, customer_id, status, 
-                            is_alert, display_on_weather, expiry_date, target_group)
+        INSERT INTO feedback (
+            type, comment, datetime, customer_id, status, 
+            is_alert, display_on_weather, expiry_date, target_group
+        )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         params = (
             f"Admin varsel: {alert_type}",
             message,
-            datetime.now(TZ).isoformat(),
+            format_date(current_time, "database", "datetime"),
             created_by,
             "Aktiv",
             1,
@@ -106,9 +138,12 @@ def save_alert(alert_type: str, message: str, expiry_date: str,
 
         if new_id:
             logger.info(f"Alert saved successfully by {created_by}. New ID: {new_id}")
+            get_alerts.clear()  # Clear cache
             return new_id
+            
         logger.warning("Alert may not have been saved. No new ID returned.")
         return None
+        
     except Exception as e:
         logger.error(f"Error saving alert: {str(e)}", exc_info=True)
         return None
@@ -486,3 +521,18 @@ def update_alert(alert_id: int, status: str, expiry_date: str, display_on_weathe
     except Exception as e:
         logger.error(f"Error updating alert: {str(e)}")
         return False
+
+@st.cache_data(ttl=60)
+def get_active_alerts():
+    """
+    Henter aktive varsler for visning på hjemmesiden.
+    Wrapper rundt get_alerts() med riktige parametre.
+    
+    Returns:
+        pd.DataFrame: DataFrame med aktive varsler
+    """
+    try:
+        return get_alerts(alert_type='active', only_today=False)
+    except Exception as e:
+        logger.error(f"Feil ved henting av aktive varsler: {str(e)}")
+        return pd.DataFrame()

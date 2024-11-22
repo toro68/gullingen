@@ -402,6 +402,7 @@ def get_customer_by_id(customer_id):
             logger.error("Ingen customer_id oppgitt")
             return None
             
+        logger.info(f"Forsøker å hente kunde med ID: {customer_id}")
         with get_db_connection("customer") as conn:
             query = """
                 SELECT 
@@ -433,7 +434,7 @@ def get_customer_by_id(customer_id):
             return None
             
     except Exception as e:
-        logger.error(f"Feil ved henting av kunde med ID {customer_id}: {str(e)}")
+        logger.error(f"Feil ved henting av kunde med ID {customer_id}: {str(e)}", exc_info=True)
         return None
 
 def handle_customers():

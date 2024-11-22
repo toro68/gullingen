@@ -123,6 +123,7 @@ def display_home_page(customer):
     try:
         logger.info("Getting active alerts")
         alerts = get_active_alerts()
+        
         if not alerts.empty:
             st.subheader("Aktive varsler")
             logger.info(f"Found {len(alerts)} active alerts")

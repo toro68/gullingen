@@ -16,7 +16,7 @@ from utils.core.config import (
     DATE_VALIDATION
 )
 from utils.core.logging_config import get_logger
-from utils.db.db_utils import execute_query, fetch_data
+from utils.db.db_utils import execute_query, fetch_data, get_db_connection
 from utils.services.alert_utils import display_active_alerts as display_user_alerts
 
 logger = get_logger(__name__)
@@ -98,26 +98,22 @@ def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden
 
 def get_feedback(start_date=None, end_date=None, include_hidden=False, cabin_identifier=None):
     try:
-        columns = [
-            'id', 'type', 'datetime', 'comment', 'customer_id', 
-            'status', 'status_changed_by', 'status_changed_at', 'hidden',
-            'is_alert', 'display_on_weather', 'expiry_date', 'target_group'
-        ]
-        
-        query = f"""
-            SELECT {', '.join(columns)}
-            FROM feedback
-            WHERE 1=1
-        """
-        
+        query = "SELECT * FROM feedback WHERE 1=1"
         params = []
+        
         if start_date:
             query += " AND datetime >= ?"
-            params.append(start_date)
+            if isinstance(start_date, str):
+                params.append(start_date)
+            else:
+                params.append(start_date.strftime(DATE_FORMATS["database"]["datetime"]))
             
         if end_date:
             query += " AND datetime <= ?"
-            params.append(end_date)
+            if isinstance(end_date, str):
+                params.append(end_date)
+            else:
+                params.append(end_date.strftime(DATE_FORMATS["database"]["datetime"]))
             
         if not include_hidden:
             query += " AND (hidden = 0 OR hidden IS NULL)"
@@ -126,23 +122,14 @@ def get_feedback(start_date=None, end_date=None, include_hidden=False, cabin_ide
             query += " AND customer_id = ?"
             params.append(cabin_identifier)
             
-        logger.debug(f"SQL Query: {query}")
-        logger.debug(f"Parameters: {params}")
-        
-        rows = fetch_data("feedback", query, params)
-        df = pd.DataFrame(rows, columns=columns)
-        
-        if not df.empty and 'datetime' in df.columns:
-            df['datetime'] = pd.to_datetime(df['datetime'])
-            
-        logger.debug(f"Retrieved columns: {df.columns.tolist()}")
-        logger.debug(f"Number of rows: {len(df)}")
+        logger.debug(f"Executing query: {query} with params: {params}")
+        df = pd.read_sql_query(query, get_db_connection("feedback"), params=params)
         
         return df
         
     except Exception as e:
         logger.error(f"Error in get_feedback: {str(e)}", exc_info=True)
-        return pd.DataFrame(columns=columns)
+        return pd.DataFrame()
 
 
 def update_feedback_status(feedback_id, new_status, changed_by):
@@ -193,113 +180,134 @@ def delete_feedback(feedback_id):
 
 
 def display_feedback_dashboard():
+    """Viser feedback-dashboard for administratorer"""
     try:
-        logger.debug("Starting display_feedback_dashboard")
+        logger.info("=== Starting display_feedback_dashboard ===")
         st.subheader("Feedback Dashboard")
 
-        start_date, end_date = get_date_range_input()
-        if start_date is None or end_date is None:
-            return
+        # Default datoer hvis ikke annet er valgt
+        default_start = datetime.now(TZ) - timedelta(days=30)
+        default_end = datetime.now(TZ)
+        
+        # Dato-velgere
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input(
+                "Fra dato",
+                value=default_start.date(),
+                key="feedback_start_date"
+            )
+            logger.debug(f"Valgt startdato: {start_date}")
+            
+        with col2:
+            end_date = st.date_input(
+                "Til dato",
+                value=default_end.date(),
+                key="feedback_end_date"
+            )
+            logger.debug(f"Valgt sluttdato: {end_date}")
 
+        # Konverter til datetime med tidssone
         start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=TZ)
         end_datetime = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=TZ)
         
-        logger.debug(f"Henter feedback for periode: {start_datetime} til {end_datetime}")
+        logger.info(f"Henter feedback for periode: {start_datetime} til {end_datetime}")
         
+        # Hent feedback data
         feedback_data = get_feedback(
-            start_date=start_datetime.isoformat(),
-            end_date=end_datetime.isoformat(),
-            include_hidden=False,
+            start_date=start_datetime,
+            end_date=end_datetime,
+            include_hidden=st.checkbox("Vis skjult feedback", value=False)
         )
+        
+        logger.debug(f"Hentet {len(feedback_data) if not feedback_data.empty else 0} feedback-elementer")
 
         if feedback_data.empty:
-            st.warning(f"Ingen feedback-data tilgjengelig for perioden {start_date} til {end_date}.")
+            st.warning(f"Ingen feedback-data tilgjengelig for perioden {start_date} til {end_date}")
             return
 
-        feedback_data["datetime"] = pd.to_datetime(feedback_data["datetime"])
-        feedback_data.loc[
-            feedback_data["status"].isnull() | (feedback_data["status"] == "Innmeldt"),
-            "status",
-        ] = "Ny"
-
-        full_date_range = pd.date_range(
-            start=start_date, end=end_date, freq="D"
+        # Vis statistikk
+        st.info(f"Totalt {len(feedback_data)} feedback-elementer for perioden")
+        
+        # Vis filtrering
+        status_filter = st.multiselect(
+            "Filtrer på status:",
+            options=['Ny', 'Under behandling', 'Løst', 'Avvist'],
+            default=['Ny', 'Under behandling']
         )
-        daily_counts = (
-            feedback_data.groupby(feedback_data["datetime"].dt.date)
-            .size()
-            .reindex(full_date_range, fill_value=0)
-            .reset_index()
-        )
-        daily_counts.columns = ["date", "count"]
+        
+        if status_filter:
+            feedback_data = feedback_data[feedback_data['status'].isin(status_filter)]
+            logger.debug(f"Filtrert til {len(feedback_data)} elementer basert på status")
 
-        fig_bar = px.bar(
-            daily_counts, x="date", y="count", title="Antall feedback over tid"
-        )
-        fig_bar.update_xaxes(title_text="Dato", tickformat="%Y-%m-%d")
-        fig_bar.update_yaxes(title_text="Antall feedback", dtick=1)
-        fig_bar.update_layout(bargap=0.2)
-        st.plotly_chart(fig_bar)
-
-        st.info(
-            f"Totalt {len(feedback_data)} feedback-elementer for perioden {start_date} til {end_date}"
-        )
-
-        if st.checkbox("Vis rådata for grafen"):
-            st.write("Rådata for grafen:")
-            st.write(daily_counts)
-
+        # Vis data i tabellform
         if not feedback_data.empty:
+            st.write("### Feedback oversikt")
+            
+            # Formater datetime for visning
+            display_data = feedback_data.copy()
+            display_data['datetime'] = display_data['datetime'].dt.strftime('%d.%m.%Y %H:%M')
+            
+            # Vis tabell
+            st.dataframe(
+                display_data[[
+                    'datetime', 'type', 'comment', 'status', 
+                    'customer_id', 'status_changed_at'
+                ]],
+                use_container_width=True
+            )
+            
+            # Last ned knapp
             csv = feedback_data.to_csv(index=False)
             st.download_button(
                 label="Last ned som CSV",
                 data=csv,
-                file_name="feedback_data.csv",
+                file_name=f"feedback_data_{start_date}_{end_date}.csv",
                 mime="text/csv",
             )
 
     except Exception as e:
         logger.error(f"Feil i display_feedback_dashboard: {str(e)}", exc_info=True)
-        st.error("Kunne ikke vise feedback dashboard")
+        st.error("Det oppstod en feil ved visning av feedback dashboard. Sjekk loggene for detaljer.")
 
 
-def handle_user_feedback():
+def handle_user_feedback(feedback_data: pd.DataFrame = None) -> pd.DataFrame:
+    """
+    Håndterer bruker-feedback data i samsvar med databaseskjema.
+    """
     try:
-        logger.debug("Starting handle_user_feedback()")
-        st.title("Feedback fra hytteeierne")
-        
-        # Hent feedback data
-        feedback_data = get_feedback(include_hidden=True)
-        
+        if feedback_data is None:
+            feedback_data = get_feedback()
+            
         if feedback_data.empty:
-            st.warning("Ingen feedback funnet")
-            return
+            return feedback_data
             
-        # Konverter datetime
-        if 'datetime' not in feedback_data.columns:
-            logger.error(f"Mangler datetime kolonne. Tilgjengelige kolonner: {feedback_data.columns.tolist()}")
-            st.error("Feil i dataformat - mangler datetime kolonne")
-            return
-            
-        feedback_data["datetime"] = pd.to_datetime(feedback_data["datetime"])
-
-        # Legg til faner for ulike visninger
-        tab1, tab2, tab3 = st.tabs(
-            ["Rapport", "Statistikk", "Feedback-oversikt"]
-        )
-
-        with tab1:
-            display_reaction_report(feedback_data)
+        # Konverter datetime-kolonner fra TEXT til datetime
+        datetime_columns = ['datetime', 'status_changed_at', 'expiry_date']
+        for col in datetime_columns:
+            if col in feedback_data.columns and not feedback_data[col].empty:
+                # Konverter fra databasens tekstformat til datetime
+                feedback_data[col] = pd.to_datetime(
+                    feedback_data[col],
+                    format=DATE_FORMATS["database"]["datetime"],
+                    errors='coerce'
+                )
+                
+                # Hvis kolonnen ikke har tidssone, legg til
+                if feedback_data[col].dt.tz is None:
+                    feedback_data[col] = feedback_data[col].dt.tz_localize(TZ)
+                else:
+                    # Hvis kolonnen allerede har tidssone, konverter til riktig
+                    feedback_data[col] = feedback_data[col].dt.tz_convert(TZ)
         
-        with tab2:
-            display_reaction_statistics(feedback_data)
-            
-        with tab3:
-            display_feedback_overview(feedback_data)
-            
+        # Sorter etter datetime
+        feedback_data = feedback_data.sort_values('datetime', ascending=False)
+        
+        return feedback_data
+        
     except Exception as e:
         logger.error(f"Feil i handle_user_feedback: {str(e)}", exc_info=True)
-        st.error("Det oppstod en feil ved håndtering av feedback")
+        return pd.DataFrame()
 
 
 def give_feedback():
@@ -323,7 +331,7 @@ def give_feedback():
         deviation_type = st.selectbox(
             "Velg type avvik:",
             [
-                "Glemt tunbrøyting",
+                "Glemt tunbr��yting",
                 "Dårlig framkommelighet",
                 "For sen brøytestart",
                 "Manglende brøyting av fellesparkeringsplasser",

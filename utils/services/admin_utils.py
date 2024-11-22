@@ -20,6 +20,7 @@ from utils.core.logging_config import get_logger
 from utils.db.db_utils import get_db_connection
 from utils.services.alert_utils import get_alerts, handle_alerts_ui
 from utils.services.feedback_utils import get_feedback
+from utils.services.tun_utils import get_bookings
 
 # Lazy imports
 def get_login_data():
@@ -100,11 +101,11 @@ def unified_report_page(include_hidden=False):
         st.write("Debug: Hentet bruker-feedback data")  # Debug utskrift
 
     if "Tunbrøyting" in data_types:
-        tunbroyting_data = hent_bestillinger()
+        tunbroyting_data = get_bookings()
         st.write("Debug: Hentet tunbrøyting data")  # Debug utskrift
 
     if "Strøing" in data_types:
-        stroing_data = hent_stroing_bestillinger()
+        stroing_data = get_stroing_bestillinger()
         st.write("Debug: Hentet strøing data")  # Debug utskrift
 
     if "Påloggingshistorikk" in data_types:

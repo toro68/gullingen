@@ -214,14 +214,41 @@ def validate_toml_structure(config: Dict[str, Any]) -> bool:
 
 
 # validerer bestilling i vis_rediger_bestilling
-def validere_bestilling(data):
-    if data["avreise_dato"] is None or data["avreise_tid"] is None:
-        return True  # Hvis avreisedato eller -tid ikke er satt, er bestillingen gyldig
-
-    ankomst = datetime.combine(data["ankomst_dato"], data["ankomst_tid"])
-    avreise = datetime.combine(data["avreise_dato"], data["avreise_tid"])
-
-    return avreise > ankomst
+def validere_bestilling(data: Dict[str, Any]) -> bool:
+    """
+    Validerer en tunbrøytingsbestilling
+    
+    Args:
+        data (Dict[str, Any]): Bestillingsdata med ankomst_dato og avreise_dato
+        
+    Returns:
+        bool: True hvis bestillingen er gyldig
+    """
+    try:
+        # Hvis avreisedato ikke er satt, er bestillingen gyldig
+        if data.get("avreise_dato") is None:
+            return True
+            
+        # Konverter datoer hvis de ikke allerede er datetime objekter
+        ankomst = data["ankomst_dato"]
+        if not isinstance(ankomst, datetime):
+            ankomst = safe_to_datetime(ankomst)
+            
+        avreise = data["avreise_dato"]
+        if not isinstance(avreise, datetime):
+            avreise = safe_to_datetime(avreise)
+            
+        # Hvis vi ikke kan parse datoene, er bestillingen ugyldig
+        if ankomst is None or avreise is None:
+            logger.error("Kunne ikke konvertere datoer")
+            return False
+            
+        # Sjekk at avreise er etter ankomst
+        return avreise > ankomst
+        
+    except Exception as e:
+        logger.error(f"Feil i validere_bestilling: {str(e)}")
+        return False
 
 
 def validate_data(data):
