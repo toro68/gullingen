@@ -746,7 +746,7 @@ def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
         # Konverter datokolonner til datetime med tidssone
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in bookings_df.columns:
-                bookings_df[col] = bookings_df[col].apply(safe_to_datetime)
+                bookings_df[col] = bookings_df[col].apply(parse_date)
         
         dagens_dato = normalize_datetime(get_current_time())
         
