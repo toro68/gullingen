@@ -735,37 +735,50 @@ def filter_tunbroyting_bestillinger(bestillinger: pd.DataFrame, filters: Dict[st
 
     return filtered
 
-def filter_todays_bookings(bookings_df):
-    """Filtrerer bookinger for  finne dagens aktive bestillinger."""
+def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filtrerer bestillinger for å finne aktive bestillinger for dagens dato.
+    
+    Args:
+        bookings_df: DataFrame med alle bestillinger
+        
+    Returns:
+        DataFrame med dagens aktive bestillinger
+    """
     try:
         logger.info("Starter filtrering av dagens bestillinger")
-        
         if bookings_df.empty:
             return pd.DataFrame()
             
-        result = bookings_df.copy()
+        # Konverter datokolonner til datetime med tidssone ved hjelp av safe_to_datetime
+        for col in ['ankomst_dato', 'avreise_dato']:
+            if col in bookings_df.columns:
+                bookings_df[col] = bookings_df[col].apply(safe_to_datetime)
+        
+        # Bruk get_current_time og normalize_datetime fra config
         dagens_dato = normalize_datetime(get_current_time())
         
-        # Filtrer basert på dato og abonnement_type
-        mask = (
-            (result['abonnement_type'] == 'Årsabonnement') |
+        # Filtrer bestillinger
+        dagens_bestillinger = bookings_df[
+            (bookings_df['abonnement_type'] == 'Årsabonnement') |
             (
-                (result['ankomst_dato'].apply(normalize_datetime) <= dagens_dato) & 
+                (bookings_df['ankomst_dato'].apply(normalize_datetime) <= dagens_dato) &
                 (
-                    result['avreise_dato'].isnull() |
-                    (result['avreise_dato'].apply(normalize_datetime) >= dagens_dato)
-                )
+                    bookings_df['avreise_dato'].isna() |
+                    (bookings_df['avreise_dato'].apply(normalize_datetime) >= dagens_dato)
             )
-        )
+        ]
         
-        filtered_df = result[mask].copy()
-        
-        # Formater datoer for visning
+        # Formater datoer for logging ved hjelp av format_date
+        visnings_df = dagens_bestillinger.copy()
         for col in ['ankomst_dato', 'avreise_dato']:
-            if col in filtered_df.columns:
-                filtered_df[col] = filtered_df[col].dt.strftime(DATE_FORMATS["display"]["date"])
+            if col in visnings_df.columns:
+                visnings_df[col] = visnings_df[col].apply(
+                    lambda x: format_date(x, "display", "date")
+                )
         
-        return filtered_df
+        logger.info(f"Dagens aktive bestillinger: {visnings_df}")
+        return dagens_bestillinger
         
     except Exception as e:
         logger.error(f"Feil i filter_todays_bookings: {str(e)}")
