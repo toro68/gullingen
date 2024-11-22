@@ -75,12 +75,7 @@ def get_alerts(alert_type='active', only_today=False):
         if not result:
             return pd.DataFrame()
             
-        df = pd.DataFrame(result, columns=[
-            'id', 'type', 'datetime', 'comment', 'customer_id', 'status', 
-            'status_changed_by', 'status_changed_at', 'hidden', 
-            'is_alert', 'display_on_weather', 'expiry_date', 'target_group'
-        ])
-        
+        df = pd.DataFrame(result)
         return df
         
     except Exception as e:
