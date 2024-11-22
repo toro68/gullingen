@@ -743,21 +743,27 @@ def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
         if bookings_df.empty:
             return pd.DataFrame()
             
+        # Lag en kopi for å unngå SettingWithCopyWarning
+        df = bookings_df.copy()
+        
         # Konverter datokolonner til datetime med tidssone
         for col in ['ankomst_dato', 'avreise_dato']:
-            if col in bookings_df.columns:
-                bookings_df[col] = pd.to_datetime(bookings_df[col]).dt.date.apply(combine_date_with_tz)
+            if col in df.columns:
+                # Konverter først til date objekter
+                df[col] = pd.to_datetime(df[col]).dt.date
+                # Deretter kombiner med tidssone
+                df[col] = df[col].apply(lambda x: combine_date_with_tz(x) if pd.notna(x) else None)
         
         dagens_dato = get_current_time().replace(hour=0, minute=0, second=0, microsecond=0)
         
         # Filtrer bestillinger
-        dagens_bestillinger = bookings_df[
-            (bookings_df['abonnement_type'] == 'Årsabonnement') |
+        dagens_bestillinger = df[
+            (df['abonnement_type'] == 'Årsabonnement') |
             (
-                (bookings_df['ankomst_dato'] <= dagens_dato) &
+                (df['ankomst_dato'] <= dagens_dato) &
                 (
-                    bookings_df['avreise_dato'].isna() |
-                    (bookings_df['avreise_dato'] >= dagens_dato)
+                    df['avreise_dato'].isna() |
+                    (df['avreise_dato'] >= dagens_dato)
                 )
             )
         ]
