@@ -130,7 +130,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             mapbox=dict(
                 accesstoken=mapbox_token,
                 style='streets',
-                zoom=13.8,
+                zoom=14,
                 center=dict(lat=59.39111, lon=6.42755)
             ),
             margin=dict(l=0, r=0, t=30, b=0),
