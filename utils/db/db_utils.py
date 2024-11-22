@@ -87,32 +87,98 @@ def create_tables():
 
 
 def initialize_database_system() -> bool:
-    """Initialiserer hele databasesystemet."""
+    """
+    Initialiserer hele databasesystemet inkludert tabeller, migrasjoner 
+    og importerer kundedata hvis nødvendig.
+    """
     try:
         logger.info("Starting complete database system initialization")
         
-        # Opprett tabeller først
+        # 1. Opprett tabeller først
         if not create_tables():
             logger.error("Failed to create tables")
             return False
             
-        # Deretter kjør migrasjoner
+        # 2. Kjør migrasjoner
         if not run_migrations():
             logger.error("Failed to run migrations")
             return False
             
-        # Til slutt verifiser skjemaene
+        # 3. Verifiser skjemaene
         if not verify_database_schemas():
             logger.error("Failed to verify schemas")
             return False
-        
+            
+        # 4. Sjekk og importer kundedata hvis nødvendig
+        try:
+            with get_db_connection("customer") as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM customer")
+                count = cursor.fetchone()[0]
+                
+                if count == 0:
+                    logger.info("Customer table is empty, importing initial data")
+                    
+                    # Import kundedata
+                    try:
+                        # Les customers.csv
+                        csv_path = Path('data/customers.csv')
+                        if not csv_path.exists():
+                            raise FileNotFoundError(f"customers.csv not found at {csv_path}")
+                            
+                        customers_df = pd.read_csv(csv_path)
+                        cursor.execute("BEGIN TRANSACTION")
+                        
+                        for _, row in customers_df.iterrows():
+                            cursor.execute("""
+                                INSERT INTO customer (
+                                    customer_id, lat, lon, subscription, type,
+                                    created_at, last_updated
+                                ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            """, (
+                                str(row['customer_id']), 
+                                float(row['Latitude']), 
+                                float(row['Longitude']),
+                                row['Subscription'],
+                                row['Type']
+                            ))
+                        
+                        conn.commit()
+                        logger.info(f"Successfully imported {len(customers_df)} customers from CSV")
+                        
+                    except Exception as e:
+                        conn.rollback()
+                        logger.error(f"Error importing customers: {str(e)}")
+                        raise
+                        
+                else:
+                    logger.info(f"Customer database already contains {count} records")
+                    
+                # 5. Verifiser kritiske brukere
+                cursor.execute("""
+                    SELECT customer_id, type 
+                    FROM customer 
+                    WHERE type IN ('Admin', 'Superadmin')
+                    AND customer_id IN ('199', '999', '22')
+                """)
+                admins = cursor.fetchall()
+                found_admin_ids = [admin[0] for admin in admins]
+                
+                if not all(aid in found_admin_ids for aid in ['199', '999', '22']):
+                    logger.warning("Missing critical admin users!")
+                else:
+                    logger.info("All critical admin users verified")
+                    
+        except Exception as e:
+            logger.error(f"Error in customer data initialization: {str(e)}")
+            return False
+            
         logger.info("Database system initialization completed successfully")
         return True
         
     except Exception as e:
         logger.error(f"Critical database initialization error: {str(e)}")
         return False
-
 
 def verify_schema_version(expected_version: str) -> bool:
     """Verifiser at databaseskjemaene har riktig versjon"""
