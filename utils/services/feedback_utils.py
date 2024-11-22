@@ -100,20 +100,34 @@ def save_feedback(feedback_type, datetime_str, comment, cabin_identifier, hidden
         return False
 
 
-def get_feedback(include_hidden=False):
-    """Henter feedback fra databasen"""
+def get_feedback(start_date=None, end_date=None, include_hidden=False):
+    """
+    Henter feedback fra databasen.
+    
+    Args:
+        start_date (datetime, optional): Startdato for filtrering
+        end_date (datetime, optional): Sluttdato for filtrering
+        include_hidden (bool): Om skjulte elementer skal inkluderes
+    """
     try:
         with get_db_connection("feedback") as conn:
-            query = """
+            base_query = """
                 SELECT * FROM feedback 
                 WHERE (hidden = 0 OR ? = 1)
-                ORDER BY datetime DESC
             """
-            params = (1 if include_hidden else 0,)
+            params = [1 if include_hidden else 0]
             
-            # Bruk connection direkte med pandas
-            df = pd.read_sql_query(query, conn, params=params)
-            return df
+            if start_date and end_date:
+                base_query += " AND datetime BETWEEN ? AND ?"
+                params.extend([start_date.isoformat(), end_date.isoformat()])
+            
+            base_query += " ORDER BY datetime DESC"
+            
+            logger.debug(f"SQL Query: {base_query}")
+            logger.debug(f"Parameters: {params}")
+            
+            df = pd.read_sql_query(base_query, conn, params=params)
+            return handle_user_feedback(df)
             
     except Exception as e:
         logger.error(f"Error in get_feedback: {str(e)}")
