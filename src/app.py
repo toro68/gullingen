@@ -256,7 +256,7 @@ def main():
                         vis_tunbroyting_oversikt()
                     elif admin_choice == "Varsler":
                         admin_alert()
-                    elif admin_choice == "Feedback":
+                    elif admin_choice == "Feedback Dashboard":
                         display_admin_dashboard()
                     elif admin_choice == "Strøing":
                         admin_stroing_page()

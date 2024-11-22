@@ -54,7 +54,7 @@ def create_menu(customer_id, user_type):
             admin_options = [
                 "Tunkart",
                 "Varsler",
-                "Feedback",
+                "Feedback Dashboard",
                 "Strøing",
             ]
             if user_type == "Superadmin":
