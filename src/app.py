@@ -32,12 +32,14 @@ from utils.services.alert_utils import (
     get_active_alerts
 )
 from utils.services.customer_utils import (
-    get_customer_by_id
+    get_customer_by_id,
+    handle_customers
 )
 from utils.services.feedback_utils import (
     display_daily_maintenance_rating,
     give_feedback,
     handle_user_feedback,
+    display_admin_dashboard,
 )
 from utils.services.gps_utils import display_last_activity
 from utils.services.map_utils import display_live_plowmap
@@ -258,6 +260,8 @@ def main():
                         handle_user_feedback()
                     elif admin_choice == "Strøing":
                         admin_stroing_page()
+                    elif admin_choice == "Dashboard":
+                        display_admin_dashboard()
                     elif admin_choice == "Kunder" and user_type == "Superadmin":
                         handle_customers()
                     elif (

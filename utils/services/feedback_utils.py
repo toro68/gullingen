@@ -1228,3 +1228,202 @@ def display_daily_maintenance_rating():
         logger.error(f"Error in display_daily_maintenance_rating: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av tilbakemeldingsskjema")
 
+def display_admin_dashboard():
+    """Hovedfunksjon for admin-dashboard"""
+    try:
+        st.title("🎛️ Administrasjonspanel")
+        
+        # Velg visning med tabs
+        tab1, tab2, tab3 = st.tabs([
+            "📊 Feedback Oversikt",
+            "🚜 Vedlikehold",
+            "📈 Statistikk"
+        ])
+        
+        # Tab 1: Generell Feedback
+        with tab1:
+            display_feedback_dashboard()
+            
+        # Tab 2: Vedlikehold
+        with tab2:
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                display_maintenance_summary()
+            with col2:
+                display_daily_maintenance_rating()
+                
+        # Tab 3: Statistikk
+        with tab3:
+            display_reaction_statistics()
+
+    except Exception as e:
+        logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
+        st.error("Det oppstod en feil ved lasting av dashboardet")
+
+def display_feedback_dashboard():
+    """Viser generell feedback-oversikt"""
+    try:
+        st.header("📬 Feedback Oversikt")
+        
+        # Filtre
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            start_date, end_date = get_date_range_input()
+        with col2:
+            feedback_types = ["Alle"] + list(FEEDBACK_ICONS.keys())
+            selected_type = st.selectbox("Type", feedback_types)
+        with col3:
+            include_hidden = st.checkbox("Vis skjult", value=False)
+            
+        # Hent og vis data
+        feedback_data = get_filtered_feedback(start_date, end_date, selected_type, include_hidden)
+        display_feedback_table(feedback_data)
+        
+    except Exception as e:
+        logger.error(f"Feil i feedback oversikt: {str(e)}")
+        st.error("Kunne ikke vise feedback oversikt")
+
+def display_maintenance_summary():
+    """Viser vedlikeholdsoversikt"""
+    try:
+        st.header("🚜 Vedlikeholdsoversikt")
+        
+        # Tidsperiode-velger
+        period = st.selectbox(
+            "Vis periode",
+            ["Siste uke", "Siste måned", "Siste år"],
+            key="maintenance_period"
+        )
+        
+        # Hent data basert på valgt periode
+        maintenance_data = get_maintenance_data(period)
+        
+        # Vis statistikk
+        col1, col2 = st.columns(2)
+        with col1:
+            display_satisfaction_metrics(maintenance_data)
+        with col2:
+            display_response_time_metrics(maintenance_data)
+            
+        # Vis graf
+        display_maintenance_chart(maintenance_data)
+        
+    except Exception as e:
+        logger.error(f"Feil i vedlikeholdsoversikt: {str(e)}")
+        st.error("Kunne ikke vise vedlikeholdsoversikt")
+
+def display_reaction_statistics():
+    """Viser detaljert statistikk"""
+    try:
+        st.header("📊 Statistikk og Analyse")
+        
+        # Velg statistikktype
+        stat_type = st.selectbox(
+            "Velg statistikktype",
+            ["Reaksjoner over tid", "Reaksjoner per hytte", "Responstidsanalyse"]
+        )
+        
+        if stat_type == "Reaksjoner over tid":
+            display_time_based_stats()
+        elif stat_type == "Reaksjoner per hytte":
+            display_cabin_based_stats()
+        else:
+            display_response_time_stats()
+            
+    except Exception as e:
+        logger.error(f"Feil i statistikkvisning: {str(e)}")
+        st.error("Kunne ikke vise statistikk")
+
+def display_daily_maintenance_rating():
+    """Viser daglig vurderingsskjema"""
+    try:
+        st.subheader("📝 Dagens vurdering")
+        
+        # Vis dagens statistikk
+        today_stats = get_today_maintenance_stats()
+        if today_stats:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("😊 Fornøyd", today_stats.get("happy", 0))
+            with col2:
+                st.metric("😐 Nøytral", today_stats.get("neutral", 0))
+            with col3:
+                st.metric("😡 Misfornøyd", today_stats.get("sad", 0))
+                
+        # Vis vurderingsskjema
+        st.write("---")
+        st.write("Gi din vurdering:")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("😊 Fornøyd"):
+                save_maintenance_reaction("happy")
+        with col2:
+            if st.button("😐 Nøytral"):
+                save_maintenance_reaction("neutral")
+        with col3:
+            if st.button("😡 Misfornøyd"):
+                save_maintenance_reaction("sad")
+                
+    except Exception as e:
+        logger.error(f"Feil i vurderingsskjema: {str(e)}")
+        st.error("Kunne ikke vise vurderingsskjema")
+
+# Hjelpefunksjoner
+def get_filtered_feedback(start_date, end_date, feedback_type, include_hidden):
+    """Henter filtrert feedback fra databasen"""
+    try:
+        start_datetime = combine_date_with_tz(start_date)
+        end_datetime = combine_date_with_tz(end_date, datetime.max.time())
+        
+        feedback_data = get_feedback(
+            start_date=start_datetime,
+            end_date=end_datetime,
+            include_hidden=include_hidden
+        )
+        
+        if feedback_type != "Alle":
+            feedback_data = feedback_data[feedback_data['type'] == feedback_type]
+            
+        return feedback_data
+        
+    except Exception as e:
+        logger.error(f"Feil ved henting av feedback: {str(e)}")
+        return pd.DataFrame()
+
+def display_feedback_table(feedback_data):
+    """Viser feedback-tabell med nedlastingsmuligheter"""
+    if feedback_data.empty:
+        st.info("Ingen feedback funnet i valgt periode")
+        return
+        
+    # Vis tabell
+    st.dataframe(
+        feedback_data[[
+            'datetime', 'type', 'comment', 'status', 
+            'customer_id', 'status_changed_at'
+        ]],
+        use_container_width=True
+    )
+    
+    # Nedlastingsknapper
+    col1, col2 = st.columns(2)
+    with col1:
+        csv = feedback_data.to_csv(index=False)
+        st.download_button(
+            "📥 Last ned CSV",
+            csv,
+            "feedback.csv",
+            "text/csv"
+        )
+    with col2:
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+            feedback_data.to_excel(writer, index=False)
+        st.download_button(
+            "📊 Last ned Excel",
+            buffer.getvalue(),
+            "feedback.xlsx",
+            "application/vnd.ms-excel"
+        )
+
