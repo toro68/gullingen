@@ -18,8 +18,7 @@ from utils.services.tun_utils import get_bookings
 # Lazy imports
 def get_login_data():
     from utils.core.auth_utils import get_login_history
-
-    return get_login_history
+    return get_login_history()
 
 logger = get_logger(__name__)
 
