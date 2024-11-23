@@ -253,7 +253,6 @@ def hent_bruker_stroing_bestillinger(user_id):
         )
         return pd.DataFrame()
 
-
 def hent_stroing_bestilling(bestilling_id: int) -> Optional[Dict[str, Any]]:
     try:
         with get_db_connection("stroing") as conn:

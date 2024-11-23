@@ -92,7 +92,6 @@ def authenticate_user(customer_id: str, password: str) -> Tuple[bool, Optional[s
         logger.error(f"Autentiseringsfeil: {str(e)}")
         return False, "En feil oppstod under innlogging"
 
-
 def check_session_timeout() -> bool:
     """Sjekker om sesjonen har utløpt"""
     if "last_activity" not in st.session_state:
@@ -133,7 +132,6 @@ def login_page():
             else:
                 st.error(error_msg or "Feil ved innlogging")
 
-
 def log_login_attempt(customer_id: str, success: bool):
     """Logger innloggingsforsøk"""
     try:
@@ -172,7 +170,6 @@ def can_manage_feedback(customer_id: str) -> bool:
         logger.error(f"Feil ved sjekk av feedback-tilgang: {str(e)}")
         return False
 
-
 def verify_session_state():
     """Logger nåværende sesjonstilstand for debugging"""
     logger.info("=== Current Session State ===")
@@ -181,7 +178,56 @@ def verify_session_state():
     logger.info(f"customer_id: {st.session_state.get('customer_id')}")
     logger.info("===========================")
 
-
 def get_current_user_id() -> Optional[str]:
     """Henter gjeldende bruker-ID fra sesjonen"""
     return st.session_state.get("customer_id")
+
+def get_login_history(start_date=None, end_date=None, limit: int = 1000, offset: int = 0):
+    """
+    Henter innloggingshistorikk fra databasen.
+    
+    Args:
+        start_date: Startdato for filtrering (datetime eller str)
+        end_date: Sluttdato for filtrering (datetime eller str)
+        limit (int): Maksimalt antall rader som skal hentes
+        offset (int): Antall rader som skal hoppes over
+        
+    Returns:
+        list[dict]: Liste med innloggingsforsøk
+    """
+    try:
+        with get_db_connection("login_history") as conn:
+            cursor = conn.cursor()
+            
+            query = """
+                SELECT 
+                    id,
+                    customer_id,
+                    login_time,
+                    success
+                FROM login_history 
+                WHERE 1=1
+            """
+            params = []
+            
+            if start_date:
+                query += " AND login_time >= ?"
+                params.append(start_date.isoformat() if hasattr(start_date, 'isoformat') else start_date)
+                
+            if end_date:
+                query += " AND login_time <= ?"
+                params.append(end_date.isoformat() if hasattr(end_date, 'isoformat') else end_date)
+                
+            query += " ORDER BY login_time DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+            
+            cursor.execute(query, params)
+            
+            # Konverter til liste med dictionaries
+            columns = [col[0] for col in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+    except Exception as e:
+        logger.error(f"Feil ved henting av login-historikk: {str(e)}")
+        return []
+    

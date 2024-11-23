@@ -11,11 +11,23 @@ from utils.core.logging_config import get_logger
 from utils.services.alert_utils import get_alerts, handle_alerts_ui
 from utils.services.feedback_utils import get_feedback
 from utils.services.tun_utils import get_bookings
+from utils.core.auth_utils import get_login_history
+from utils.services.stroing_utils import (
+    get_stroing_bestillinger,
+    hent_stroing_bestillinger
+)
 
 # Lazy imports
-def get_login_data():
-    from utils.core.auth_utils import get_login_history
-    return get_login_history()
+def get_login_data(start_date=None, end_date=None, limit: int = 1000):
+    """
+    Henter innloggingsdata for admin-visning.
+    
+    Args:
+        start_date: Valgfri startdato for filtrering
+        end_date: Valgfri sluttdato for filtrering
+        limit: Maksimalt antall rader som skal hentes
+    """
+    return get_login_history(start_date=start_date, end_date=end_date, limit=limit)
 
 logger = get_logger(__name__)
 
@@ -32,7 +44,6 @@ def admin_alert():
         st.write("SQL-spørring brukt for å hente varsler:")
         query = "SELECT * FROM feedback WHERE is_alert = 1 ORDER BY datetime DESC"
         st.code(query)
-
 
 def unified_report_page(include_hidden=False):
     st.title("Dashbord for rapporter")

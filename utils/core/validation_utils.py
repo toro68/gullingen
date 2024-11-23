@@ -5,6 +5,7 @@ validation_utils.py - Sentralisert validering for Fjellbergsskardet
 import re
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
+import numpy as np
 
 import streamlit as st
 
@@ -12,6 +13,7 @@ from utils.core.config import (
     get_date_format,
     DATE_VALIDATION
 )
+from utils.core.config import safe_to_datetime
 from utils.core.logging_config import get_logger
 from utils.db.connection import get_db_connection
 
@@ -245,7 +247,36 @@ def validere_bestilling(data: Dict[str, Any]) -> bool:
         logger.error(f"Feil i validere_bestilling: {str(e)}")
         return False
 
+# File: utils/services/tun_utils.py
+# Function: validate_tunbroyting_dates()
 
+from datetime import datetime
+
+def validate_tunbroyting_dates(ankomst_dato: str, avreise_dato: str = None) -> bool:
+    """
+    Validerer datoformat for tunbrøyting bestilling.
+    
+    Args:
+        ankomst_dato (str): Ankomstdato på format YYYY-MM-DD
+        avreise_dato (str, optional): Avreisedato på format YYYY-MM-DD
+        
+    Returns:
+        bool: True hvis datoene er gyldige
+    """
+    try:
+        # Valider ankomstdato
+        datetime.strptime(ankomst_dato, '%Y-%m-%d')
+        
+        # Valider avreisedato hvis den er satt
+        if avreise_dato:
+            datetime.strptime(avreise_dato, '%Y-%m-%d')
+            
+        return True
+        
+    except ValueError as e:
+        logger.error(f"Ugyldig datoformat: {str(e)}")
+        return False
+    
 def validate_data(data):
     data = np.array(data, dtype=float)
     if np.all(np.isnan(data)):
