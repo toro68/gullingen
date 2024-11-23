@@ -1136,7 +1136,7 @@ def display_admin_dashboard():
         
         # Opprett dataframe med alle dager først
         date_range = pd.date_range(
-            start=start_date.date(),  # Bare dato, ikke tid
+            start=start_date.date(),
             end=end_date.date(),
             freq='D'
         )
@@ -1144,7 +1144,8 @@ def display_admin_dashboard():
         daily_stats = pd.DataFrame({
             'Dato': date_range,
             'Fornøyd': 0,
-            'Nøytral': 0
+            'Nøytral': 0,
+            'Misfornøyd': 0  # Lagt til misfornøyd
         })
         
         # Hvis vi har vedlikeholdsdata, oppdater statistikken
@@ -1164,6 +1165,7 @@ def display_admin_dashboard():
                 if not day_data.empty:
                     daily_stats.loc[idx, 'Fornøyd'] = day_data['comment'].str.count('😊').sum()
                     daily_stats.loc[idx, 'Nøytral'] = day_data['comment'].str.count('😐').sum()
+                    daily_stats.loc[idx, 'Misfornøyd'] = day_data['comment'].str.count('😡').sum()  # Lagt til telling av misfornøyd
         
         # Formater datoer for visning
         daily_stats['Dato'] = daily_stats['Dato'].dt.strftime(DATE_FORMATS['display']['date'])
@@ -1182,6 +1184,10 @@ def display_admin_dashboard():
                 ),
                 "Nøytral": st.column_config.NumberColumn(
                     "😐 Nøytral",
+                    format="%d"
+                ),
+                "Misfornøyd": st.column_config.NumberColumn(  # Lagt til kolonnekonfigurasjon for misfornøyd
+                    "😡 Misfornøyd",
                     format="%d"
                 )
             },
