@@ -2,7 +2,7 @@
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -259,13 +259,23 @@ def parse_date(date_str: str, format_type: str = "display") -> datetime:
 def normalize_datetime(dt):
     """Normaliserer datetime til midnatt i riktig tidssone"""
     try:
+        # Hvis dt er en date, konverter til datetime først
+        if isinstance(dt, date) and not isinstance(dt, datetime):
+            dt = datetime.combine(dt, datetime.min.time())
+            
         if isinstance(dt, str):
             dt = parse_date(dt)
+            
         if dt is None:
             return None
+            
+        # Sikre at vi har tidssone
         if dt.tzinfo is None:
-            dt = dt.tz_localize(TZ)
+            dt = dt.replace(tzinfo=TZ)
+            
+        # Normaliser til midnatt
         return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        
     except Exception as e:
         logger.error(f"Feil i normalize_datetime: {str(e)}")
         return None
