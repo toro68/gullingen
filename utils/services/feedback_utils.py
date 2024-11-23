@@ -1069,8 +1069,6 @@ def display_admin_dashboard():
     try:
         logger.info("=== Starting display_admin_dashboard ===")
         
-        st.title("🎛️ Feedback Dashboard")
-        
         # Hent data først
         start_date = get_current_time().date() - timedelta(days=30)  # Siste 30 dager som standard
         end_date = get_current_time().date()
@@ -1082,33 +1080,25 @@ def display_admin_dashboard():
             include_hidden=True
         )
         
-        tab1, tab2, tab3 = st.tabs([
-            "📊 Feedback Oversikt",
-            "🚜 Vedlikehold",
-            "📈 Statistikk"
-        ])
+        # Filtrer for vedlikeholdsdata
+        maintenance_data = feedback_data[feedback_data['type'] == 'Vintervedlikehold'].copy()
         
-        with tab1:
-            display_feedback_dashboard()  # Denne funksjonen henter egen data
-            
-        with tab2:
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                # Beregn statistikk for vedlikehold
-                daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(
-                    feedback_data[feedback_data['type'] == 'Vintervedlikehold']
-                )
-                display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, 'day')
-            with col2:
-                display_daily_maintenance_rating()
-                
-        with tab3:
-            display_reaction_statistics(feedback_data)
-
+        logger.debug(f"Maintenance data shape: {maintenance_data.shape}")
+        logger.debug(f"Maintenance data columns: {maintenance_data.columns.tolist()}")
+        logger.debug(f"Sample maintenance data: {maintenance_data.head(1).to_dict('records') if not maintenance_data.empty else 'Empty'}")
+        
+        # Beregn statistikk
+        daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(maintenance_data)
+        
+        logger.debug(f"Daily stats shape: {daily_stats.shape}")
+        logger.debug(f"Daily stats content: {daily_stats.head().to_dict() if not daily_stats.empty else 'Empty'}")
+        
+        # Vis statistikk
+        display_maintenance_summary(daily_stats, daily_stats_pct, daily_score)
+        
     except Exception as e:
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av dashboardet")
-        st.exception(e)
 
 def display_feedback_dashboard():
     try:
