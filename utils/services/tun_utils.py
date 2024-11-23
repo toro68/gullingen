@@ -772,7 +772,7 @@ def vis_dagens_bestillinger():
     - Bestillinger som startet tidligere og fortsatt er aktive
     """
     try:
-        dagens_dato = get_current_time().date()
+        dagens_dato = pd.Timestamp(get_current_time().date())  # Konverter til Timestamp
         logger.info(f"Viser bestillinger for dato: {dagens_dato}")
         
         bestillinger = get_bookings()
@@ -783,7 +783,7 @@ def vis_dagens_bestillinger():
         # Konverter datokolonner til datetime med tidssone
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in bestillinger.columns:
-                bestillinger[col] = pd.to_datetime(bestillinger[col])
+                bestillinger[col] = pd.to_datetime(bestillinger[col]).dt.normalize()  # Normaliser til midnatt
 
         # Filtrer dagens aktive bestillinger
         dagens_bestillinger = bestillinger[
@@ -792,10 +792,10 @@ def vis_dagens_bestillinger():
             # Ukentlige bestillinger som er aktive i dag
             (
                 (bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') &
-                (bestillinger['ankomst_dato'].dt.date <= dagens_dato) &
+                (bestillinger['ankomst_dato'] <= dagens_dato) &
                 (
                     bestillinger['avreise_dato'].isna() | 
-                    (bestillinger['avreise_dato'].dt.date >= dagens_dato)
+                    (bestillinger['avreise_dato'] >= dagens_dato)
                 )
             )
         ]
