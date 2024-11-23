@@ -583,34 +583,51 @@ def handle_tun():
     customer_edit_component()
 
 def hent_aktive_bestillinger_for_dag(dato):
-    """Henter aktive bestillinger for en gitt dato."""
     try:
-        dato_dt = safe_to_datetime(dato)
-        if dato_dt is None:
-            logger.error(f"Ugyldig datoformat: {dato}")
-            return pd.DataFrame()
+        dato_dt = normalize_datetime(dato)
+        logger.info(f"Normalisert dato for filtrering: {dato_dt}")
             
-        dato_normalized = normalize_datetime(dato_dt)
-        
         alle_bestillinger = get_bookings()
-        if alle_bestillinger.empty:
-            return pd.DataFrame()
+        logger.info(f"Totalt antall bestillinger hentet: {len(alle_bestillinger)}")
             
+        # Konverter datokolonner til datetime med tidssone
+        for col in ['ankomst_dato', 'avreise_dato']:
+            if col in alle_bestillinger.columns:
+                alle_bestillinger[col] = pd.to_datetime(alle_bestillinger[col]).dt.tz_localize(TZ)
+
+        # Filtrer bestillinger - endret logikk her
         aktive_bestillinger = alle_bestillinger[
-            (alle_bestillinger['abonnement_type'] == 'Årsabonnement') |
-            (alle_bestillinger['ankomst_dato'].apply(normalize_datetime) == dato_normalized) |
+            # Årsabonnement som er aktive i dag (ikke utløpt)
             (
-                (alle_bestillinger['ankomst_dato'].apply(normalize_datetime) <= dato_normalized) &
-                (alle_bestillinger['avreise_dato'].isna() | 
-                 (alle_bestillinger['avreise_dato'].apply(normalize_datetime) >= dato_normalized))
+                (alle_bestillinger['abonnement_type'] == 'Årsabonnement') &
+                (alle_bestillinger['ankomst_dato'].dt.date <= dato_dt.date()) &
+                (
+                    alle_bestillinger['avreise_dato'].isna() |
+                    (alle_bestillinger['avreise_dato'].dt.date >= dato_dt.date())
+                )
+            ) |
+            # Ukentlige bestillinger som er aktive i dag
+            (
+                (alle_bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') &
+                (alle_bestillinger['ankomst_dato'].dt.date <= dato_dt.date()) &
+                (
+                    alle_bestillinger['avreise_dato'].isna() |
+                    (alle_bestillinger['avreise_dato'].dt.date >= dato_dt.date())
+                )
             )
         ]
+        
+        logger.info(f"=== Resultat ===")
+        logger.info(f"Filtrerte bestillinger for {dato_dt.date()}:")
+        logger.info(f"Antall funnet: {len(aktive_bestillinger)}")
+        logger.info(f"Filtrerte data:\n{aktive_bestillinger.to_string()}")
         
         return aktive_bestillinger
         
     except Exception as e:
-        logger.error(f"Feil i hent_aktive_bestillinger_for_dag: {str(e)}")
+        logger.error(f"Feil i hent_aktive_bestillinger_for_dag: {str(e)}", exc_info=True)
         return pd.DataFrame()
+
 # filtrerer bestillinger i bestill_tunbroyting
 def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -649,7 +666,6 @@ def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
         logger.error(f"Feil i filter_todays_bookings: {str(e)}")
         return pd.DataFrame()
 
-
 def tunbroyting_kommende_uke(bestillinger):
     current_date = get_current_time()
     end_date = current_date + timedelta(days=7)
@@ -660,21 +676,26 @@ def tunbroyting_kommende_uke(bestillinger):
 
     return bestillinger[
         (
-            (bestillinger["ankomst_dato"].dt.tz_convert(TZ) >= current_date) 
-            & (bestillinger["ankomst_dato"].dt.tz_convert(TZ) <= end_date)
-        )
-        |
-        (
-            (bestillinger["ankomst_dato"].dt.tz_convert(TZ) < current_date)
-            & (
-                (bestillinger["avreise_dato"].isnull())
-                | (bestillinger["avreise_dato"].dt.tz_convert(TZ) >= current_date)
+            # Bestillinger som starter i kommende uke
+            (
+                (bestillinger["ankomst_dato"].dt.tz_convert(TZ) >= current_date) & 
+                (bestillinger["ankomst_dato"].dt.tz_convert(TZ) <= end_date)
             )
+            |
+            # Pågående bestillinger
+            (
+                (bestillinger["ankomst_dato"].dt.tz_convert(TZ) < current_date) &
+                (
+                    (bestillinger["avreise_dato"].isnull()) |
+                    (bestillinger["avreise_dato"].dt.tz_convert(TZ) >= current_date)
+                )
+            )
+            |
+            # Årsabonnement bestillinger
+            (bestillinger["abonnement_type"] == "Årsabonnement")
         )
-        |
-        (bestillinger["abonnement_type"] == "Årsabonnement")
     ]
-
+    
 # Visninger for tunbrøyting
 def vis_tunbroyting_statistikk(bookings_func=None):
     """
@@ -764,74 +785,51 @@ def vis_tunbroyting_statistikk(bookings_func=None):
 # Kategori: View Functions
 # liste for tunkart-siden
 def vis_dagens_bestillinger():
-    """
-    Viser dagens aktive bestillinger i en tabell:
-    - Årsabonnement
-    - Ukentlige bestillinger som er aktive i dag
-    - Bestillinger som starter i dag
-    - Bestillinger som startet tidligere og fortsatt er aktive
-    """
+    """Viser dagens aktive bestillinger i en tabell"""
+    dagens_dato = get_current_time().date()  # Bruker config.py funksjon
+    logger.info(f"Viser bestillinger for dato: {dagens_dato}")
+    
     try:
-        dagens_dato = pd.Timestamp(get_current_time().date())  # Konverter til Timestamp
-        logger.info(f"Viser bestillinger for dato: {dagens_dato}")
-        
-        bestillinger = get_bookings()
-        if bestillinger.empty:
-            st.info("Ingen bestillinger funnet.")
-            return
-
-        # Konverter datokolonner til datetime med tidssone
-        for col in ['ankomst_dato', 'avreise_dato']:
-            if col in bestillinger.columns:
-                bestillinger[col] = pd.to_datetime(bestillinger[col]).dt.normalize()  # Normaliser til midnatt
-
-        # Filtrer dagens aktive bestillinger
-        dagens_bestillinger = bestillinger[
-            # Årsabonnement
-            (bestillinger['abonnement_type'] == 'Årsabonnement') |
-            # Ukentlige bestillinger som er aktive i dag
-            (
-                (bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') &
-                (bestillinger['ankomst_dato'] <= dagens_dato) &
-                (
-                    bestillinger['avreise_dato'].isna() | 
-                    (bestillinger['avreise_dato'] >= dagens_dato)
-                )
-            )
-        ]
+        dagens_bestillinger = hent_aktive_bestillinger_for_dag(dagens_dato)
+        logger.info(f"Dagens aktive bestillinger: {dagens_bestillinger.to_string()}")
 
         if not dagens_bestillinger.empty:
-            # Sorter bestillinger: først årsabonnement, så ukentlige
-            dagens_bestillinger = dagens_bestillinger.sort_values(
-                by=['abonnement_type', 'ankomst_dato'],
-                ascending=[False, True]
+            # Lag en ny DataFrame for visning
+            visnings_df = pd.DataFrame()
+            
+            # Legg til 'rode' informasjon
+            visnings_df["rode"] = dagens_bestillinger["customer_id"].apply(get_rode)
+            
+            # Kopier og rename kolonner
+            visnings_df["hytte"] = dagens_bestillinger["customer_id"]
+            visnings_df["abonnement_type"] = dagens_bestillinger["abonnement_type"]
+            
+            # Formater dato og tid med config.py funksjoner
+            visnings_df["ankomst"] = dagens_bestillinger["ankomst_dato"].apply(
+                lambda x: format_date(x, "display", "datetime")
+            )
+            visnings_df["avreise"] = dagens_bestillinger["avreise_dato"].apply(
+                lambda x: format_date(x, "display", "datetime") if pd.notnull(x) else "Ikke satt"
             )
             
-            # Vis bestillingene i en tabell
+            # Vis DataFrame
             st.dataframe(
-                dagens_bestillinger,
+                visnings_df,
                 column_config={
-                    "customer_id": "Hytte",
-                    "ankomst_dato": st.column_config.DatetimeColumn(
-                        "Ankomst",
-                        format="DD.MM.YYYY"
-                    ),
-                    "avreise_dato": st.column_config.DatetimeColumn(
-                        "Avreise",
-                        format="DD.MM.YYYY"
-                    ),
-                    "abonnement_type": "Type"
+                    "rode": "Rode",
+                    "hytte": "Hytte",
+                    "abonnement_type": "Type",
+                    "ankomst": "Ankomst",
+                    "avreise": "Avreise"
                 },
                 hide_index=True
             )
         else:
             st.info("Ingen aktive bestillinger i dag.")
-        
-        logger.info(f"Viser {len(dagens_bestillinger)} aktive bestillinger")
-        
+            
     except Exception as e:
         logger.error(f"Feil i vis_dagens_bestillinger: {str(e)}", exc_info=True)
-        st.error("Kunne ikke vise dagens bestillinger")
+        st.error("Kunne ikke vise dagens bestillinger. Vennligst prøv igjen senere.")
 
 # Category: View Functions
 def vis_tunbroyting_oversikt():
