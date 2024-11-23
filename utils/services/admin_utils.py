@@ -167,7 +167,7 @@ def unified_report_page(include_hidden=False):
 
     if st.button("Last ned data"):
         try:
-            st.write("Debug: Starter nedlasting av data")  # Debug utskrift
+            st.write("Debug: Starter nedlasting av data")
             if export_format == "CSV":
                 csv_data = io.StringIO()
                 for data_type, df in [
@@ -177,7 +177,7 @@ def unified_report_page(include_hidden=False):
                     ("Strøing", stroing_data),
                     ("Påloggingshistorikk", login_history),
                 ]:
-                    st.write(f"Debug: Prosesserer {data_type}")  # Debug utskrift
+                    st.write(f"Debug: Prosesserer {data_type}")
                     if data_type in data_types and not df.empty:
                         csv_data.write(f"{data_type}:\n")
                         df.to_csv(csv_data, index=False)
@@ -190,34 +190,57 @@ def unified_report_page(include_hidden=False):
                     mime="text/csv",
                 )
             else:  # Excel
+                # Bruk BytesIO for å lagre Excel-filen i minnet
                 output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                    for data_type, df in [
-                        ("Bruker-feedback", feedback_data),
-                        ("Admin-varsler", admin_alerts),
-                        ("Tunbrøyting", tunbroyting_data),
-                        ("Strøing", stroing_data),
-                        ("Påloggingshistorikk", login_history),
-                    ]:
-                        st.write(
-                            f"Debug: Prosesserer {data_type} for Excel"
-                        )  # Debug utskrift
-                        if data_type in data_types and not df.empty:
-                            df.to_excel(writer, sheet_name=data_type, index=False)
+                
+                # Opprett Excel-fil med openpyxl direkte
+                import openpyxl
+                workbook = openpyxl.Workbook()
+                
+                # Fjern default sheet
+                workbook.remove(workbook.active)
+                
+                # Legg til data i separate sheets
+                for data_type, df in [
+                    ("Bruker-feedback", feedback_data),
+                    ("Admin-varsler", admin_alerts),
+                    ("Tunbrøyting", tunbroyting_data),
+                    ("Stroing", stroing_data),
+                    ("Paalogging", login_history),
+                ]:
+                    if data_type in data_types and not df.empty:
+                        st.write(f"Debug: Prosesserer {data_type} for Excel")
+                        # Opprett nytt sheet
+                        sheet = workbook.create_sheet(title=data_type)
+                        
+                        # Skriv overskrifter
+                        headers = df.columns.tolist()
+                        for col, header in enumerate(headers, start=1):
+                            sheet.cell(row=1, column=col, value=str(header))
+                        
+                        # Skriv data
+                        for row_idx, row in enumerate(df.values, start=2):
+                            for col_idx, value in enumerate(row, start=1):
+                                sheet.cell(row=row_idx, column=col_idx, value=value)
+                
+                # Lagre til BytesIO
+                workbook.save(output)
+                output.seek(0)
 
+                # Last ned knapp
                 st.download_button(
                     label="Last ned Excel",
                     data=output.getvalue(),
                     file_name="samlet_rapport.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
+                
             st.success("Data lastet ned vellykket!")
+            
         except Exception as e:
             st.error(f"En feil oppstod under nedlasting av data: {str(e)}")
             logger.error("Error during data download: %s", str(e), exc_info=True)
-            st.write(
-                "Debug: Exception stacktrace:", traceback.format_exc()
-            )  # Debug utskrift
+            st.write("Debug: Exception stacktrace:", traceback.format_exc())
 
     # Data visualization
     st.header("Datavisualisering")

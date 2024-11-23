@@ -89,15 +89,25 @@ def get_feedback(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     feedback_type: Optional[str] = None,
-    include_hidden: bool = False
+    include_hidden: bool = False,
+    customer_id: Optional[str] = None
 ) -> pd.DataFrame:
     """
     Henter feedback fra databasen
+    
+    Args:
+        start_date: Start dato for filtrering
+        end_date: Slutt dato for filtrering
+        feedback_type: Type feedback å filtrere på
+        include_hidden: Inkluder skjult feedback
+        customer_id: Filtrer på spesifikk kunde
+        
+    Returns:
+        pd.DataFrame: Feedback data
     """
     try:
         logger.debug("Starting get_feedback")
         
-        # Bygg spørring med spesifikke kolonner
         query = """
         SELECT 
             id,
@@ -119,23 +129,21 @@ def get_feedback(
         if end_date:
             query += " AND datetime <= ?"
             params.append(format_date(end_date, "database", "datetime"))
-            
         if feedback_type:
             query += " AND type = ?"
             params.append(feedback_type)
-            
         if not include_hidden:
             query += " AND (hidden = 0 OR hidden IS NULL)"
+        if customer_id:
+            query += " AND customer_id = ?"
+            params.append(customer_id)
             
-        # Hent data
         feedback_data = fetch_data("feedback", query, params)
         
-        # Konverter til DataFrame med spesifikke kolonnenavn
         columns = ['id', 'type', 'customer_id', 'datetime', 'comment', 'status', 'status_changed_at', 'hidden']
         df = pd.DataFrame(feedback_data, columns=columns)
         
         if not df.empty:
-            # Konverter datetime-kolonner
             date_columns = ['datetime', 'status_changed_at']
             for col in date_columns:
                 if col in df.columns:
@@ -143,7 +151,6 @@ def get_feedback(
                     df[col] = df[col].dt.tz_localize(TZ)
         
         logger.debug(f"Retrieved {len(df) if not df.empty else 0} feedback entries")
-        logger.debug(f"Columns in DataFrame: {df.columns.tolist()}")
         return df
         
     except Exception as e:
@@ -1269,85 +1276,67 @@ def display_admin_dashboard():
         logger.error(f"Error in display_admin_dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av feedback-dashboard")
         
-def display_feedback_overview(feedback_data):
+def display_feedback_overview(feedback_data: pd.DataFrame, title: str = "Feedback Oversikt", section_id: str = None):
     """
-    Viser feedback-oversikt med nedlastingsmuligheter.
+    Viser oversikt over feedback
+    
+    Args:
+        feedback_data: DataFrame med feedback
+        title: Tittel på seksjonen
+        section_id: Unik ID for seksjonen (brukes for å lage unike widget-keys)
     """
     try:
-        logger.debug("Starting display_feedback_overview")
+        st.subheader(title)
         
         if feedback_data.empty:
             st.info("Ingen feedback å vise")
             return
             
-        # Lag en kopi for eksport
-        export_data = feedback_data.copy()
-        
-        # Konverter datetime-kolonner til timezone-naive for Excel
-        datetime_columns = ['datetime', 'status_changed_at', 'expiry_date']
-        for col in datetime_columns:
-            if col in export_data.columns and not export_data[col].empty:
-                if pd.api.types.is_datetime64_any_dtype(export_data[col]):
-                    export_data[col] = export_data[col].dt.tz_convert(TZ).dt.tz_localize(None)
-        
-        # Nedlastingsknapper
-        st.subheader("Last ned data")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            csv = export_data.to_csv(index=False)
-            st.download_button(
-                label="📥 Last ned som CSV",
-                data=csv,
-                file_name="feedback_oversikt.csv",
-                mime="text/csv"
-            )
+        # Sikre at vi har alle nødvendige kolonner
+        required_columns = ['id', 'type', 'datetime', 'status']
+        missing_columns = [col for col in required_columns if col not in feedback_data.columns]
+        if missing_columns:
+            logger.error(f"Mangler påkrevde kolonner: {missing_columns}")
+            st.error("Kunne ikke vise feedback - mangler nødvendige data")
+            return
             
-        with col2:
-            buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                export_data.to_excel(writer, sheet_name="Feedback", index=False)
-            
-            st.download_button(
-                label="📊 Last ned som Excel",
-                data=buffer.getvalue(),
-                file_name="feedback_oversikt.xlsx",
-                mime="application/vnd.ms-excel"
-            )
+        # Generer unik key for denne seksjonen
+        unique_key = f"feedback_{section_id or title.lower().replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
         
-        # Vis feedback i expanders
-        st.subheader("Feedback oversikt")
-        for _, row in feedback_data.iterrows():
-            # Bruk standardisert datoformat fra config
-            date_format = get_date_format("display", "datetime")
-            
-            try:
-                date_str = row['datetime'].strftime(date_format) if pd.notnull(row['datetime']) else "Ukjent dato"
-            except Exception as e:
-                logger.warning(f"Kunne ikke formatere dato: {str(e)}")
-                date_str = "Ukjent dato"
-            
+        # Formater datoer for visning
+        try:
+            date_str = feedback_data['datetime'].dt.strftime('%Y-%m-%d %H:%M').fillna('Ukjent dato')
+        except Exception as e:
+            logger.warning(f"Kunne ikke formatere dato: {str(e)}")
+            date_str = pd.Series(['Ukjent dato'] * len(feedback_data))
+        
+        # Vis feedback som liste
+        for idx, row in feedback_data.iterrows():
             with st.expander(
-                f"{row['type']} - {date_str} - Status: {row['status']}"
+                f"{row.get('type', 'Ukjent type')} - {date_str.iloc[idx]} - Status: {row.get('status', 'Ukjent status')}",
+                key=f"{unique_key}_expander_{idx}"
             ):
-                st.write(f"**Kommentar:** {row['comment']}")
-                st.write(f"**Innsender:** {row['customer_id']}")
-                st.write(f"**Type:** {row['type']}")
-                
-                if pd.notnull(row['status_changed_at']):
-                    try:
-                        changed_date = row['status_changed_at'].strftime(date_format)
-                        st.write(f"**Sist oppdatert:** {changed_date}")
-                    except:
-                        st.write("**Sist oppdatert:** Ukjent tidspunkt")
+                st.write(f"ID: {row.get('id', 'Ukjent')}")
+                st.write(f"Type: {row.get('type', 'Ukjent type')}")
+                st.write(f"Status: {row.get('status', 'Ukjent status')}")
+                st.write(f"Dato: {date_str.iloc[idx]}")
+                if 'comment' in row and pd.notna(row['comment']):
+                    st.write(f"Kommentar: {row['comment']}")
                     
-                    if pd.notnull(row['status_changed_by']):
-                        st.write(f"**Oppdatert av:** {row['status_changed_by']}")
-                        
+        # Last ned knapp med unik key
+        csv_data = feedback_data.to_csv(index=False)
+        st.download_button(
+            "Last ned som CSV",
+            csv_data,
+            "feedback_data.csv",
+            "text/csv",
+            key=unique_key
+        )
+        
     except Exception as e:
         logger.error(f"Feil i display_feedback_overview: {str(e)}", exc_info=True)
-        st.error("Kunne ikke vise feedback-oversikt")
-        
+        st.error("Kunne ikke vise feedback oversikt")
+
 def display_maintenance_tab(feedback_data):
     """Viser vedlikeholdsfanen med statistikk og oversikt"""
     try:

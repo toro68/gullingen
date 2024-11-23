@@ -7,7 +7,11 @@ from functools import wraps
 from typing import Any, Callable
 
 from utils.core.config import (
-    DATABASE_PATH
+    DATABASE_PATH,
+    DB_CONFIG,
+    DB_TIMEOUT,
+    DB_RETRY_ATTEMPTS,
+    DB_RETRY_DELAY
 )
 from utils.core.logging_config import get_logger
 from utils.db.connection import get_db_connection
