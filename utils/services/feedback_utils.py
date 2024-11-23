@@ -15,6 +15,7 @@ from io import BytesIO
 
 import pandas as pd
 import plotly.graph_objects as go
+from typing import Optional
 import streamlit as st
 
 from utils.core.config import (
