@@ -884,7 +884,7 @@ def vis_tunbroyting_oversikt():
         with col1:
             start_date = st.date_input(
                 "Fra dato",
-                value=default_start.date(),
+                value=default_start,  # Nå er dette allerede en date
                 min_value=datetime.now(TZ).date() - timedelta(days=DATE_VALIDATION["default_date_range"]),
                 max_value=datetime.now(TZ).date() + timedelta(days=DATE_VALIDATION["max_future_booking"]),
                 format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
@@ -893,7 +893,7 @@ def vis_tunbroyting_oversikt():
         with col2:
             end_date = st.date_input(
                 "Til dato",
-                value=default_end.date(),
+                value=default_end,  # Nå er dette allerede en date
                 min_value=start_date,
                 max_value=start_date + timedelta(days=DATE_VALIDATION["max_future_booking"]),
                 format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
@@ -961,11 +961,15 @@ def vis_hyttegrend_aktivitet():
                 alle_bestillinger[col] = alle_bestillinger[col].apply(safe_to_datetime)
         
         start_date, end_date = get_date_range_defaults()
+        if isinstance(start_date, date):
+            start_date = datetime.combine(start_date, datetime.min.time())
+        if isinstance(end_date, date):
+            end_date = datetime.combine(end_date, datetime.min.time())
+            
         dato_range = pd.date_range(
-            start=normalize_datetime(start_date),
-            end=normalize_datetime(end_date),
-            freq='D',
-            tz=TZ
+            start=start_date,
+            end=end_date,
+            freq='D'
         )
         
         df_aktivitet = pd.DataFrame(index=dato_range)

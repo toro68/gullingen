@@ -209,23 +209,16 @@ def format_date(date_value: Any, format_type: str = "display", date_type: str = 
         return None
 
 def combine_date_with_tz(date_obj, time_obj=None) -> Optional[datetime]:
-    """
-    Kombinerer dato og tid med tidssone
-    
-    Args:
-        date_obj: Dato-objekt eller datetime
-        time_obj: Tid-objekt (optional)
-        
-    Returns:
-        datetime: Kombinert datetime med tidssone eller None ved feil
-    """
+    """Kombinerer dato og tid med tidssone"""
     try:
         if date_obj is None:
             return None
             
+        # Hvis allerede datetime, normaliser tidssonen
         if isinstance(date_obj, datetime):
-            return ensure_tz_datetime(date_obj)
+            return normalize_datetime(date_obj)
             
+        # Kombiner date med time
         if time_obj is None:
             time_obj = datetime.min.time()
             
@@ -257,24 +250,32 @@ def parse_date(date_str: str, format_type: str = "display") -> datetime:
         return None
 
 def normalize_datetime(dt):
-    """Normaliserer datetime til midnatt i riktig tidssone"""
+    """Normaliserer datetime eller date til midnatt i riktig tidssone"""
     try:
-        # Hvis dt er en date, konverter til datetime først
-        if isinstance(dt, date) and not isinstance(dt, datetime):
-            dt = datetime.combine(dt, datetime.min.time())
-            
-        if isinstance(dt, str):
-            dt = parse_date(dt)
-            
         if dt is None:
             return None
             
-        # Sikre at vi har tidssone
-        if dt.tzinfo is None:
+        # Hvis dt er en date, konverter til datetime
+        if isinstance(dt, date) and not isinstance(dt, datetime):
+            dt = datetime.combine(dt, datetime.min.time())
             dt = dt.replace(tzinfo=TZ)
+            return dt
             
-        # Normaliser til midnatt
-        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Håndter datetime
+        if isinstance(dt, datetime):
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=TZ)
+            else:
+                dt = dt.astimezone(TZ)
+            return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            
+        # Håndter strenger
+        if isinstance(dt, str):
+            parsed_dt = parse_date(dt)
+            if parsed_dt:
+                return normalize_datetime(parsed_dt)
+                
+        return None
         
     except Exception as e:
         logger.error(f"Feil i normalize_datetime: {str(e)}")
@@ -296,7 +297,7 @@ def get_current_time() -> datetime:
     """Returnerer nåværende tid i riktig tidssone"""
     return datetime.now(TZ)
 
-def get_date_range_defaults(default_days: int = DATE_VALIDATION["default_date_range"]) -> tuple[datetime, datetime]:
+def get_date_range_defaults(default_days: int = DATE_VALIDATION["default_date_range"]) -> tuple[date, date]:
     """
     Returnerer standardverdier for datoperiode
     
@@ -304,10 +305,10 @@ def get_date_range_defaults(default_days: int = DATE_VALIDATION["default_date_ra
         default_days: Antall dager i perioden
         
     Returns:
-        tuple[datetime, datetime]: (start_date, end_date)
+        tuple[date, date]: (start_date, end_date)
     """
-    today = get_current_time().date()
-    return (today - timedelta(days=default_days), today)
+    today = datetime.now(TZ).date()
+    return (today, today + timedelta(days=default_days))
 
 def get_date_format(format_type: str, format_name: str) -> Optional[str]:
     """
