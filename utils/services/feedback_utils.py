@@ -1094,19 +1094,31 @@ def display_admin_dashboard():
     try:
         st.title("Feedback Dashboard")
         
-        # Hent all feedback
+        # Legg til datovelger
+        start_date, end_date = get_date_range_input(
+            default_days=DATE_VALIDATION["default_date_range"],
+            key_prefix="feedback_dashboard_"  # Unikt prefiks for denne komponenten
+        )
+        
+        if start_date is None or end_date is None:
+            st.warning("Vennligst velg gyldig datoperiode")
+            return
+            
+        # Hent filtrert feedback basert på valgt datoperiode
         feedback_data = get_feedback(
+            start_date=combine_date_with_tz(start_date),
+            end_date=combine_date_with_tz(end_date, datetime.max.time()),
             include_hidden=True
         )
         
         if feedback_data.empty:
-            st.info("Ingen tilbakemeldinger å vise")
+            st.info("Ingen tilbakemeldinger å vise i valgt periode")
             return
             
         # Vis feedback oversikt med tittel
         display_feedback_overview(
             feedback_data=feedback_data,
-            section_title="Alle tilbakemeldinger"  # Legger til påkrevd section_title
+            section_title="Alle tilbakemeldinger"
         )
         
         # Vis statistikk og andre seksjoner...
