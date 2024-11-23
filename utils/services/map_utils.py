@@ -28,8 +28,18 @@ GREEN = "#03b01f"  # Årsabonnement
 RED = "#db0000"    # Ukentlig bestilling
 GRAY = "#C0C0C0"   # Ingen bestilling
 
-def vis_dagens_tunkart(bestillinger, mapbox_token, title):
-    """Viser kart over dagens tunbrøytinger."""
+def vis_dagens_tunkart(bestillinger: pd.DataFrame, mapbox_token: str = None, title: str = None) -> go.Figure:
+    """
+    Viser kart over dagens tunbrøytinger.
+    
+    Args:
+        bestillinger (pd.DataFrame): DataFrame med bestillinger
+        mapbox_token (str, optional): Mapbox API token
+        title (str, optional): Tittel for kartet
+        
+    Returns:
+        go.Figure: Plotly figur objekt
+    """
     logger.info(f"Starter vis_dagens_tunkart med {len(bestillinger)} bestillinger")
     
     try:
@@ -125,33 +135,25 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
                         showlegend=True
                     ))
         
-        # Oppdatert layout med forbedret legend
-        fig.update_layout(
-            mapbox=dict(
-                accesstoken=mapbox_token,
-                style='streets',
-                zoom=14,
-                center=dict(lat=59.39111, lon=6.42755)
-            ),
-            margin=dict(l=0, r=0, t=30, b=0),
-            title=title or "Tunbrøytingskart",
-            showlegend=True,
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="left",
-                x=0.01,
-                bgcolor="rgba(255, 255, 255, 0.9)",
-                bordercolor="rgba(0, 0, 0, 0.2)",
-                borderwidth=1,
-                font=dict(size=12),
-                itemsizing='constant',
-                itemwidth=30,
-                orientation="v",
-                traceorder="normal"
-            ),
-            height=600
-        )
+        # Oppdater layout med tittel hvis den er gitt
+        layout_dict = {
+            'mapbox': {
+                'style': "carto-positron",
+                'zoom': 13,
+                'center': {'lat': 59.6225, 'lon': 6.4550}
+            },
+            'showlegend': True,
+            'margin': {'r': 0, 't': 30, 'l': 0, 'b': 0}
+        }
+        
+        if title:
+            layout_dict['title'] = title
+            
+        if mapbox_token:
+            layout_dict['mapbox']['accesstoken'] = mapbox_token
+            layout_dict['mapbox']['style'] = "mapbox://styles/mapbox/streets-v11"
+            
+        fig.update_layout(**layout_dict)
         
         # Vis kartet
         st.plotly_chart(fig, use_container_width=True, key="tunkart_map")
