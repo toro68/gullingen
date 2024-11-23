@@ -1134,20 +1134,30 @@ def display_feedback_overview(feedback_data: pd.DataFrame, section_title: str):
             st.info("Ingen tilbakemeldinger å vise")
             return
             
+        # Velg kun relevante kolonner
+        display_columns = [
+            'datetime', 
+            'type', 
+            'comment', 
+            'customer_id'
+        ]
+        
+        display_data = feedback_data[display_columns].copy()
+            
         with st.expander(
-            f"{section_title} ({len(feedback_data)} stk)",
+            f"{section_title} ({len(display_data)} stk)",
             expanded=True
         ):
             # Vis feedback data i en tabell
             st.dataframe(
-                feedback_data,
+                display_data,
                 use_container_width=True,
                 hide_index=True
             )
             
             # Last ned-knapp hvis det finnes data
-            if not feedback_data.empty:
-                csv = feedback_data.to_csv(index=False)
+            if not display_data.empty:
+                csv = display_data.to_csv(index=False)
                 st.download_button(
                     "Last ned som CSV",
                     csv,
