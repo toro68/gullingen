@@ -196,11 +196,33 @@ def format_date(date_value: Any, format_type: str = "display", date_type: str = 
         logger.error(f"Feil i format_date: {str(e)}")
         return None
 
-def combine_date_with_tz(date_obj, time_obj=None):
-    """Kombinerer dato og tid med tidssone"""
-    if time_obj is None:
-        time_obj = datetime.min.time()
-    return datetime.combine(date_obj, time_obj).replace(tzinfo=TZ)
+def combine_date_with_tz(date_obj, time_obj=None) -> Optional[datetime]:
+    """
+    Kombinerer dato og tid med tidssone
+    
+    Args:
+        date_obj: Dato-objekt eller datetime
+        time_obj: Tid-objekt (optional)
+        
+    Returns:
+        datetime: Kombinert datetime med tidssone eller None ved feil
+    """
+    try:
+        if date_obj is None:
+            return None
+            
+        if isinstance(date_obj, datetime):
+            return ensure_tz_datetime(date_obj)
+            
+        if time_obj is None:
+            time_obj = datetime.min.time()
+            
+        dt = datetime.combine(date_obj, time_obj)
+        return dt.replace(tzinfo=TZ)
+        
+    except Exception as e:
+        logger.error(f"Feil i combine_date_with_tz: {str(e)}")
+        return None
 
 def parse_date(date_str: str, format_type: str = "display") -> datetime:
     """Parser datostrengen med riktig format og tidssone"""
@@ -277,3 +299,33 @@ def get_date_format(format_type: str, format_name: str) -> Optional[str]:
         Datoformat-streng eller None hvis ikke funnet
     """
     return DATE_FORMATS.get(format_type, {}).get(format_name)
+
+def ensure_tz_datetime(dt) -> Optional[datetime]:
+    """
+    Sikrer at datetime har riktig tidssone
+    
+    Args:
+        dt: datetime eller datetime-lignende objekt
+        
+    Returns:
+        datetime: Datetime med riktig tidssone eller None ved feil
+    """
+    try:
+        if dt is None:
+            return None
+            
+        if isinstance(dt, str):
+            dt = pd.to_datetime(dt)
+            
+        if not isinstance(dt, datetime):
+            dt = pd.to_datetime(dt)
+            
+        if dt.tzinfo is None:
+            dt = dt.tz_localize(TZ)
+        else:
+            dt = dt.tz_convert(TZ)
+            
+        return dt
+    except Exception as e:
+        logger.error(f"Feil i ensure_tz_datetime: {str(e)}")
+        return None

@@ -46,35 +46,37 @@ FEEDBACK_ICONS = {
 # crud-operasjoner
 def save_feedback(feedback_type, datetime_str, comment, customer_id, hidden):
     """
-    Lagrer feedback i databasen.
-    
-    Args:
-        feedback_type (str): Type tilbakemelding
-        datetime_str (str): Dato og tid i ISO-format
-        comment (str): Kommentartekst
-        customer_id (str): Hytte-ID
-        hidden (bool): Om feedbacken skal være skjult
+    Lagrer feedback med korrekt tidssonebehandling
     """
     try:
-        query = """INSERT INTO feedback (type, datetime, comment, customer_id, status, status_changed_at, hidden) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?)"""
-        initial_status = "Ny"
+        # Konverter datetime_str til datetime med tidssone
+        feedback_dt = pd.to_datetime(datetime_str)
+        if feedback_dt.tzinfo is None:
+            feedback_dt = feedback_dt.tz_localize(TZ)
+        else:
+            feedback_dt = feedback_dt.tz_convert(TZ)
+            
+        current_time = get_current_time()
+        
+        query = """INSERT INTO feedback 
+                  (type, datetime, comment, customer_id, status, status_changed_at, hidden) 
+                  VALUES (?, ?, ?, ?, ?, ?, ?)"""
+                  
         params = (
             feedback_type,
-            datetime_str,
+            feedback_dt.isoformat(),
             comment,
             customer_id,
-            initial_status,
-            datetime.now(TZ).isoformat(),
-            hidden,
+            "Ny",
+            current_time.isoformat(),
+            hidden
         )
-
+        
         execute_query("feedback", query, params)
-
-        logger.info(
-            f"Feedback saved successfully: {feedback_type}, {datetime_str}, Customer: {customer_id}, hidden: {hidden}"
-        )
+        
+        logger.info(f"Feedback saved: {feedback_type}, {feedback_dt}, Customer: {customer_id}")
         return True
+        
     except Exception as e:
         logger.error(f"Error saving feedback: {str(e)}", exc_info=True)
         return False
@@ -82,40 +84,52 @@ def save_feedback(feedback_type, datetime_str, comment, customer_id, hidden):
 
 def get_feedback(start_date=None, end_date=None, include_hidden=False, customer_id=None):
     """
-    Henter feedback fra databasen.
-    
-    Args:
-        start_date (datetime, optional): Startdato for filtrering
-        end_date (datetime, optional): Sluttdato for filtrering
-        include_hidden (bool): Om skjulte elementer skal inkluderes
-        customer_id (str, optional): Filtrer på spesifikk hytte-ID
+    Henter feedback fra databasen med tidssonebehandling
     """
     try:
-        with get_db_connection("feedback") as conn:
-            base_query = """
-                SELECT * FROM feedback 
-                WHERE (hidden = 0 OR ? = 1)
-            """
-            params = [1 if include_hidden else 0]
+        conditions = []
+        params = []
+        
+        if start_date:
+            start_datetime = combine_date_with_tz(start_date)
+            conditions.append("datetime >= ?")
+            params.append(start_datetime.isoformat())
             
-            if customer_id:
-                base_query += " AND customer_id = ?"
-                params.append(customer_id)
+        if end_date:
+            end_datetime = combine_date_with_tz(end_date, datetime.max.time())
+            conditions.append("datetime <= ?")
+            params.append(end_datetime.isoformat())
             
-            if start_date and end_date:
-                base_query += " AND datetime BETWEEN ? AND ?"
-                params.extend([start_date.isoformat(), end_date.isoformat()])
+        if not include_hidden:
+            conditions.append("hidden = 0")
             
-            base_query += " ORDER BY datetime DESC"
+        if customer_id:
+            conditions.append("customer_id = ?")
+            params.append(customer_id)
             
-            logger.debug(f"SQL Query: {base_query}")
-            logger.debug(f"Parameters: {params}")
-            
-            df = pd.read_sql_query(base_query, conn, params=params)
-            return handle_user_feedback(df)
-            
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        
+        query = f"""
+        SELECT id, type, datetime, comment, customer_id, 
+               status, status_changed_by, status_changed_at, hidden
+        FROM feedback 
+        WHERE {where_clause}
+        ORDER BY datetime DESC
+        """
+        
+        feedback_data = fetch_data("feedback", query, params=tuple(params))
+        
+        if not feedback_data.empty:
+            # Konverter datetime-kolonner
+            datetime_columns = ['datetime', 'status_changed_at']
+            for col in datetime_columns:
+                if col in feedback_data.columns:
+                    feedback_data[col] = pd.to_datetime(feedback_data[col]).dt.tz_localize(TZ)
+                    
+        return feedback_data
+        
     except Exception as e:
-        logger.error(f"Error in get_feedback: {str(e)}")
+        logger.error(f"Error fetching feedback: {str(e)}", exc_info=True)
         return pd.DataFrame()
 
 
@@ -316,21 +330,20 @@ def give_feedback():
         if submit_button:
             if description:
                 if avvik_tidspunkt:
+                    avvik_tidspunkt = ensure_tz_datetime(avvik_tidspunkt)
                     description = (
-                        f"Tidspunkt for avvik: {avvik_tidspunkt.strftime('%Y-%m-%d %H:%M')}\n\n"
+                        f"Tidspunkt for avvik: {format_date(avvik_tidspunkt, 'display', 'datetime')}\n\n"
                         + description
                     )
 
-                feedback_datetime = (
-                    avvik_tidspunkt if avvik_tidspunkt else datetime.now(TZ)
-                )
-
+                feedback_datetime = avvik_tidspunkt if avvik_tidspunkt else get_current_time()
+                
                 result = save_feedback(
                     feedback_type,
                     feedback_datetime.isoformat(),
                     description,
                     customer_id,
-                    hidden=False,
+                    hidden=False
                 )
 
                 if result:
@@ -362,7 +375,7 @@ def give_feedback():
         else:
             st.warning("Kunne ikke hente tidligere feedback. Vennligst logg inn på nytt.")
     except Exception as e:
-            logger.error(f"Feil i give_feedback: {str(e)}", exc_info=True)
+            logger.error(f"Error in give_feedback: {str(e)}", exc_info=True)
             st.error("Det oppstod en feil ved visning av feedback-skjema")
 
 def display_recent_feedback():

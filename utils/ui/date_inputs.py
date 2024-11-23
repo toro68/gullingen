@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Tuple
 from utils.core.config import (
     TZ, 
@@ -29,6 +29,12 @@ def get_date_range_input(
         logger.debug("Starting date range input selection")
         start_default, end_default = get_date_range_defaults(default_days)
         
+        # Sikre at vi har date-objekter
+        if isinstance(start_default, datetime):
+            start_default = start_default.date()
+        if isinstance(end_default, datetime):
+            end_default = end_default.date()
+        
         date_format = get_date_format("display", "date").replace(
             "%Y", "YYYY").replace("%m", "MM").replace("%d", "DD"
         )
@@ -39,7 +45,7 @@ def get_date_range_input(
                 DATE_INPUT_CONFIG["start_label"],
                 value=start_default,
                 format=date_format,
-                key=f"{id(start_default)}_start_date"
+                key=f"start_date_{default_days}"  # Mer beskrivende key
             )
         
         with col2:
@@ -47,7 +53,7 @@ def get_date_range_input(
                 DATE_INPUT_CONFIG["end_label"],
                 value=end_default,
                 format=date_format,
-                key=f"{id(end_default)}_end_date"  # Lagt til key
+                key=f"end_date_{default_days}"  # Mer beskrivende key
             )
             
         if start_date > end_date:
