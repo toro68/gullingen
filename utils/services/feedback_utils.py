@@ -1075,11 +1075,17 @@ def display_admin_dashboard():
         start_date = get_current_time().date() - timedelta(days=30)
         end_date = get_current_time().date()
         
+        # Hent feedback og filtrer bort admin-varsler
         feedback_data = get_feedback(
             start_date=start_date,
             end_date=end_date,
             include_hidden=True
         )
+        
+        # Filtrer bort admin-varsler
+        feedback_data = feedback_data[
+            feedback_data['type'] != 'Admin varsel'
+        ].copy()
         
         tab1, tab2, tab3 = st.tabs([
             "📊 Feedback Oversikt",
@@ -1088,13 +1094,13 @@ def display_admin_dashboard():
         ])
         
         with tab1:
-            display_feedback_overview(feedback_data)  # Send med data
+            display_feedback_overview(feedback_data)
             
         with tab2:
             display_maintenance_tab()
                 
         with tab3:
-            display_reaction_statistics(feedback_data)  # Send med data her også
+            display_reaction_statistics(feedback_data)
 
     except Exception as e:
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
