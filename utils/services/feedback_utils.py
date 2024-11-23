@@ -907,7 +907,13 @@ def display_reaction_statistics(feedback_data):
         st.error("Kunne ikke vise statistikk")
 
 
+# feedback_utils.py
+
 def display_feedback_overview(feedback_data):
+    """
+    Viser feedback-oversikt med nedlastingsmuligheter.
+    Håndterer tidssoner korrekt for Excel-eksport.
+    """
     try:
         logger.debug("Starting display_feedback_overview")
         
@@ -915,41 +921,48 @@ def display_feedback_overview(feedback_data):
             st.info("Ingen feedback å vise")
             return
             
-        # Konverter datetime-kolonner til timezone-naive
-        feedback_data['datetime'] = pd.to_datetime(feedback_data['datetime'])
+        # Lag en kopi for eksport og visning
+        export_data = feedback_data.copy()
         
-        # Sorter etter dato
-        feedback_data = feedback_data.sort_values('datetime', ascending=False)
+        # Konverter datetime-kolonner til timezone-naive for Excel
+        datetime_columns = ['datetime', 'status_changed_at', 'expiry_date']
+        for col in datetime_columns:
+            if col in export_data.columns:
+                # Sjekk om kolonnen er datetime og har tidssone
+                if pd.api.types.is_datetime64_any_dtype(export_data[col]):
+                    # Konverter til lokal tid og fjern tidssone
+                    export_data[col] = export_data[col].dt.tz_convert(TZ).dt.tz_localize(None)
         
-        # Legg til nedlastingsknapper
+        # Vis nedlastingsknapper
         st.subheader("Last ned data")
         col1, col2 = st.columns(2)
         
         with col1:
-            csv = feedback_data.to_csv(index=False)
+            csv = export_data.to_csv(index=False)
             st.download_button(
                 label="📥 Last ned som CSV",
                 data=csv,
                 file_name="feedback_oversikt.csv",
-                mime="text/csv",
+                mime="text/csv"
             )
             
         with col2:
             buffer = BytesIO()
             with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                feedback_data.to_excel(writer, sheet_name="Feedback", index=False)
-                
+                export_data.to_excel(writer, sheet_name="Feedback", index=False)
+            
             st.download_button(
                 label="📊 Last ned som Excel",
                 data=buffer.getvalue(),
                 file_name="feedback_oversikt.xlsx",
-                mime="application/vnd.ms-excel",
+                mime="application/vnd.ms-excel"
             )
         
-        # Vis feedback i expanders
+        # Vis feedback i expanders - bruker original data for visning
         st.subheader("Feedback oversikt")
         for _, row in feedback_data.iterrows():
-            date_str = row['datetime'].strftime(DATE_FORMATS['display']['datetime']) if pd.notnull(row['datetime']) else "Ukjent dato"
+            # Formatering av dato med tidssone
+            date_str = format_date(row['datetime'], DATE_FORMATS['display']['datetime']) if pd.notnull(row['datetime']) else "Ukjent dato"
             
             with st.expander(
                 f"{row['type']} - {date_str} - Status: {row['status']}"
@@ -959,7 +972,7 @@ def display_feedback_overview(feedback_data):
                 st.write(f"**Type:** {row['type']}")
                 
                 if pd.notnull(row['status_changed_at']):
-                    changed_date = pd.to_datetime(row['status_changed_at']).strftime(DATE_FORMATS['display']['datetime'])
+                    changed_date = format_date(row['status_changed_at'], DATE_FORMATS['display']['datetime'])
                     st.write(f"**Sist oppdatert:** {changed_date}")
                     if pd.notnull(row['status_changed_by']):
                         st.write(f"**Oppdatert av:** {row['status_changed_by']}")
