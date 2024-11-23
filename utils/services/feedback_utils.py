@@ -792,7 +792,9 @@ def display_reaction_statistics(feedback_data):
 def display_feedback_overview(feedback_data):
     try:
         logger.debug("Starting display_feedback_overview")
-        logger.debug(f"Initial DataFrame dtypes:\n{feedback_data.dtypes}")
+        
+        # Lag en eksplisitt kopi av dataframe
+        feedback_data = feedback_data.copy()
         
         if feedback_data.empty:
             st.info("Ingen feedback å vise")
@@ -801,9 +803,8 @@ def display_feedback_overview(feedback_data):
         # Konverter datetime-kolonner til timezone-naive
         datetime_columns = feedback_data.select_dtypes(include=['datetime64[ns, UTC]']).columns
         for col in datetime_columns:
-            logger.debug(f"Konverterer {col} fra {feedback_data[col].dtype}")
-            feedback_data[col] = pd.to_datetime(feedback_data[col]).dt.tz_localize(None)
-            logger.debug(f"Ny dtype for {col}: {feedback_data[col].dtype}")
+            # Bruk .loc for å unngå warning
+            feedback_data.loc[:, col] = pd.to_datetime(feedback_data[col]).dt.tz_localize(None)
         
         # Sorter etter dato
         feedback_data = feedback_data.sort_values('datetime', ascending=False)
@@ -825,28 +826,22 @@ def display_feedback_overview(feedback_data):
         export_data = feedback_data.copy()
 
         # Rens status-feltet for eksport
-        export_data['status'] = export_data['status'].str.replace(r'#[A-F0-9]{6}', '', regex=True)  # Fjerner hex fargekoder
-        export_data['status'] = export_data['status'].str.replace(r'\(|\)', '', regex=True)  # Fjerner parenteser
-        export_data['status'] = export_data['status'].str.strip()  # Fjerner whitespace
+        export_data.loc[:, 'status'] = export_data['status'].str.replace(r'#[A-F0-9]{6}', '', regex=True)  # Fjerner hex fargekoder
+        export_data.loc[:, 'status'] = export_data['status'].str.replace(r'\(|\)', '', regex=True)  # Fjerner parenteser
+        export_data.loc[:, 'status'] = export_data['status'].str.strip()  # Fjerner whitespace
 
-        # Bruk export_data for nedlasting istedenfor feedback_data
         with col2:
             buffer = BytesIO()
             with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                try:
-                    export_data.to_excel(writer, sheet_name="Feedback", index=False)
-                    logger.debug("Excel-fil generert vellykket")
-                except Exception as excel_error:
-                    logger.error(f"Feil ved Excel-generering: {str(excel_error)}")
-                    raise
-                    
+                export_data.to_excel(writer, sheet_name="Feedback", index=False)
+            
             st.download_button(
                 label="📊 Last ned som Excel",
                 data=buffer.getvalue(),
                 file_name="feedback_oversikt.xlsx",
                 mime="application/vnd.ms-excel",
             )
-        
+            
         # Vis feedback i expanders
         st.subheader("Feedback oversikt")
         for _, row in feedback_data.iterrows():
