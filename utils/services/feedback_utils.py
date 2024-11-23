@@ -1158,10 +1158,10 @@ def display_feedback_overview(feedback_data: pd.DataFrame, section_title: str):
             st.dataframe(
                 display_data,
                 column_config={
-                    'datetime': st.column_config.TextColumn('Tidspunkt'),
-                    'type': st.column_config.TextColumn('Type'),
-                    'comment': st.column_config.TextColumn('Kommentar'),
-                    'customer_id': st.column_config.TextColumn('Hytte')
+                    'datetime': st.column_config.TextColumn('Tidspunkt', width='medium'),
+                    'type': st.column_config.TextColumn('Type', width='small'),
+                    'comment': st.column_config.TextColumn('Kommentar', width='large'),
+                    'customer_id': st.column_config.TextColumn('Hytte', width='small')
                 },
                 use_container_width=True,
                 hide_index=True
