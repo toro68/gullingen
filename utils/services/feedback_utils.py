@@ -1146,14 +1146,23 @@ def display_feedback_overview(feedback_data: pd.DataFrame, section_title: str):
         
         # Sorter etter datetime, nyeste først
         display_data = display_data.sort_values('datetime', ascending=False)
+        
+        # Formater datetime til lesbart format
+        display_data['datetime'] = display_data['datetime'].dt.strftime('%d.%m.%Y %H:%M')
             
         with st.expander(
             f"{section_title} ({len(display_data)} stk)",
             expanded=True
         ):
-            # Vis feedback data i en tabell
+            # Vis feedback data i en tabell med konfigurerte kolonner
             st.dataframe(
                 display_data,
+                column_config={
+                    'datetime': st.column_config.TextColumn('Tidspunkt'),
+                    'type': st.column_config.TextColumn('Type'),
+                    'comment': st.column_config.TextColumn('Kommentar'),
+                    'customer_id': st.column_config.TextColumn('Hytte')
+                },
                 use_container_width=True,
                 hide_index=True
             )
