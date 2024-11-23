@@ -18,51 +18,6 @@ from utils.services.customer_utils import get_rode
 from utils.core.auth_utils import get_current_user_id
 logger = get_logger(__name__)
 
-# Helper functions
-
-
-def update_stroing_table_structure():
-    with get_db_connection("stroing") as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                """
-                CREATE TABLE stroing_bestillinger_new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    customer_id TEXT NOT NULL,
-                    bestillings_dato TEXT NOT NULL,
-                    onske_dato TEXT NOT NULL,
-                    kommentar TEXT,
-                    status TEXT
-                )
-            """
-            )
-
-            # Kopier data fra den gamle tabellen til den nye
-            cursor.execute(
-                """
-                INSERT INTO stroing_bestillinger_new (id, customer_id, bestillings_dato, onske_dato)
-                SELECT id, customer_id, bestillings_dato, onske_dato FROM stroing_bestillinger
-            """
-            )
-
-            # Slett den gamle tabellen
-            cursor.execute("DROP TABLE stroing_bestillinger")
-
-            # Gi den nye tabellen det gamle navnet
-            cursor.execute(
-                "ALTER TABLE stroing_bestillinger_new RENAME TO stroing_bestillinger"
-            )
-
-            conn.commit()
-            logger.info("Successfully updated stroing_bestillinger table structure")
-            return True
-        except sqlite3.Error as e:
-            conn.rollback()
-            logger.error(f"Error updating stroing_bestillinger table structure: {e}")
-            return False
-
-
 # Create
 def lagre_stroing_bestilling(customer_id: str, onske_dato: str, kommentar: str = None) -> bool:
     try:
@@ -253,28 +208,6 @@ def hent_bruker_stroing_bestillinger(user_id):
         )
         return pd.DataFrame()
 
-def hent_stroing_bestilling(bestilling_id: int) -> Optional[Dict[str, Any]]:
-    try:
-        with get_db_connection("stroing") as conn:
-            query = "SELECT * FROM stroing_bestillinger WHERE id = ?"
-            cursor = conn.cursor()
-            cursor.execute(query, (bestilling_id,))
-            result = cursor.fetchone()
-            if result:
-                return dict(zip([column[0] for column in cursor.description], result))
-            return None
-    except Exception as e:
-        logger.error(
-            f"Feil ved henting av strøingsbestilling {bestilling_id}: {str(e)}"
-        )
-        return None
-
-def count_stroing_bestillinger():
-    with get_db_connection("stroing") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM stroing_bestillinger")
-        return cursor.fetchone()[0]
-
 def admin_stroing_page():
     try:
         st.title("Håndter strøing")
@@ -452,52 +385,6 @@ def admin_stroing_page():
         logger.error(f"Feil i admin_stroing_page: {str(e)}")
         st.error("Det oppstod en feil ved lasting av strøingsoversikten")
 
-# Database initialization and maintenance
-def verify_stroing_data():
-    """Verifiser integritet av strøingsdata"""
-    try:
-        with get_db_connection("stroing") as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM stroing_bestillinger")
-            
-            columns = [description[0] for description in cursor.description]
-            results = cursor.fetchall()
-            
-            if not results:
-                logger.info("Ingen strøingsbestillinger å verifisere")
-                return True
-                
-            df = pd.DataFrame(results, columns=columns)
-            validation_errors = []
-            
-            # Valider datoformater
-            for col in ['bestillings_dato', 'onske_dato']:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
-                invalid_dates = df[df[col].isna()]
-                if not invalid_dates.empty:
-                    validation_errors.append(
-                        f"Ugyldige datoer i {col}: {invalid_dates.index.tolist()}"
-                    )
-            
-            # Valider kunde-IDer
-            invalid_customers = df[~df['customer_id'].apply(validate_customer_id)]
-            if not invalid_customers.empty:
-                validation_errors.append(
-                    f"Ugyldige kunde-IDer: {invalid_customers['customer_id'].tolist()}"
-                )
-            
-            if validation_errors:
-                for error in validation_errors:
-                    logger.error(error)
-                return False
-                
-            logger.info("Strøingsdata verifisert uten feil")
-            return True
-            
-    except Exception as e:
-        logger.error(f"Feil ved verifisering av strøingsdata: {str(e)}", exc_info=True)
-        return False
-
 # Visninger
 def display_stroing_bookings(customer_id: str, show_header: bool = False):
     try:
@@ -525,28 +412,6 @@ def display_stroing_bookings(customer_id: str, show_header: bool = False):
         logger.error(f"Feil ved visning av strøingsbestillinger: {str(e)}")
         st.error("Kunne ikke vise dine bestillinger. Vennligst prøv igjen senere.")
 
-def validate_stroing_data(data: pd.DataFrame) -> pd.DataFrame:
-    """Validerer og renser strøingsdata"""
-    try:
-        # Kopier dataframe for å unngå advarsler
-        df = data.copy()
-
-        # Konverter datokolonner
-        for col in ["bestillings_dato", "onske_dato"]:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
-
-        # Fjern ugyldige datoer
-        df = df.dropna(subset=["bestillings_dato", "onske_dato"])
-
-        # Valider kunde-IDer
-        df = df[df["customer_id"].apply(lambda x: validate_customer_id(str(x)))]
-
-        return df
-
-    except Exception as e:
-        logger.error(f"Feil ved validering av strøingsdata: {str(e)}")
-        return pd.DataFrame()
-
 def log_stroing_activity(action: str, user_id: str, details: dict):
     """Logger strøingsaktivitet med detaljer"""
     try:
@@ -560,41 +425,6 @@ def log_stroing_activity(action: str, user_id: str, details: dict):
 
     except Exception as e:
         logger.error(f"Feil ved logging av strøingsaktivitet: {str(e)}")
-
-
-def initialize_stroing_database():
-    """Initialiserer strøing-databasen med versjonskontroll"""
-    try:
-        with get_db_connection("stroing") as conn:
-            cursor = conn.cursor()
-
-            # Opprett hovedtabell med oppdatert skjema
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS stroing_bestillinger (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    customer_id TEXT NOT NULL,
-                    bestillings_dato TEXT NOT NULL,
-                    onske_dato TEXT NOT NULL,
-                    kommentar TEXT,
-                    status TEXT
-                )
-            """
-            )
-            
-            # Opprett indeks
-            cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_stroing_customer_id 
-                ON stroing_bestillinger(customer_id)
-            """)
-
-            conn.commit()
-            logger.info("Stroing database initialized successfully")
-            return True
-
-    except Exception as e:
-        logger.error(f"Feil ved initialisering av strøing-databasen: {str(e)}")
-        return False
 
 def lag_stroing_graf(df):
     """Lager graf over strøingsbestillinger"""

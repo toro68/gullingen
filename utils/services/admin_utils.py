@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from utils.core.config import TZ
+from utils.core.config import TZ, get_current_time, safe_to_datetime, format_date
 from utils.core.logging_config import get_logger
 from utils.services.alert_utils import get_alerts, handle_alerts_ui
 from utils.services.feedback_utils import get_feedback
@@ -51,9 +51,9 @@ def unified_report_page(include_hidden=False):
         "Last ned alle data for tun, strøing, feedback og alerts ved å trykke på knappen 'Last ned data'"
     )
 
-    # Date range selection
-    end_date = datetime.now(TZ).date()
-    start_date = end_date - timedelta(days=30)
+    # Date range selection med riktig tidssone
+    end_date = get_current_time().date()
+    start_date = (end_date - timedelta(days=30))
 
     col1, col2 = st.columns(2)
     with col1:
@@ -61,9 +61,8 @@ def unified_report_page(include_hidden=False):
     with col2:
         end_date = st.date_input("Til dato", value=end_date)
 
-    start_datetime = datetime.combine(start_date, datetime.min.time()).replace(
-        tzinfo=TZ
-    )
+    # Konverter til datetime med riktig tidssone
+    start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=TZ)
     end_datetime = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=TZ)
 
     # Data type selection
@@ -102,7 +101,10 @@ def unified_report_page(include_hidden=False):
         st.write("Debug: Hentet tunbrøyting data")  # Debug utskrift
 
     if "Strøing" in data_types:
-        stroing_data = get_stroing_bestillinger()
+        stroing_data = get_stroing_bestillinger(
+            start_date=format_date(start_datetime, "database", "datetime"),
+            end_date=format_date(end_datetime, "database", "datetime")
+        )
         st.write("Debug: Hentet strøing data")  # Debug utskrift
 
     if "Påloggingshistorikk" in data_types:
