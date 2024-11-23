@@ -244,7 +244,6 @@ def vis_stroingskart_kommende(bestillinger, mapbox_token, title):
         print(f"Feil ved generering av strøingskart: {str(e)}")
         return None
 
-
 def create_map(bestillinger: pd.DataFrame, mapbox_token: str = None, title: str = None):
     """Oppretter og returnerer kartet med bestillinger"""
     try:
@@ -458,3 +457,31 @@ def get_booking_popup_text(booking):
     except Exception as e:
         logger.error(f"Feil ved generering av popup tekst: {str(e)}")
         return "Kunne ikke vise detaljer"
+    
+def vis_broytekart():
+    """Viser kart over dagens aktive brøytebestillinger"""
+    dagens_dato = get_current_time().date()
+    logger.info(f"Viser brøytekart for dato: {dagens_dato}")
+    
+    try:
+        # Hent aktive bestillinger for i dag
+        bestillinger = hent_aktive_bestillinger_for_dag(dagens_dato)
+        logger.info(f"Hentet {len(bestillinger)} aktive bestillinger")
+        
+        # Hent Mapbox token
+        mapbox_token = hent_mapbox_token()
+        if not mapbox_token:
+            st.error("Mangler Mapbox token")
+            return None
+            
+        # Vis kartet med de filtrerte bestillingene
+        karttittel = f"Brøytekart for {format_date(dagens_dato, 'display', 'date')}"
+        return vis_dagens_tunkart(bestillinger, mapbox_token, karttittel)
+        
+    except Exception as e:
+        logger.error(f"Feil i vis_broytekart: {str(e)}", exc_info=True)
+        st.error("Kunne ikke vise brøytekart. Vennligst prøv igjen senere.")
+        return None
+    
+if __name__ == "__main__":
+    vis_broytekart()

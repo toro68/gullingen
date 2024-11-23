@@ -28,7 +28,7 @@ from utils.db.db_utils import (
     get_db_connection,
     verify_tunbroyting_database
 )
-from utils.services.map_utils import vis_dagens_tunkart, verify_map_configuration, debug_map_data
+from utils.services.map_utils import vis_dagens_tunkart, vis_broytekart, verify_map_configuration, debug_map_data
 from utils.services.customer_utils import (
     customer_edit_component,
     get_customer_by_id,
@@ -838,6 +838,7 @@ def vis_tunbroyting_oversikt():
     Bruker config.py for standardisert dato- og tidshåndtering.
     """
     st.title("Oversikt over tunbestillinger")
+    vis_broytekart
     
     try:
         # Hent bestillinger
