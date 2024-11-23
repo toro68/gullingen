@@ -943,7 +943,8 @@ def display_feedback_overview(feedback_data):
                 label="📥 Last ned som CSV",
                 data=csv,
                 file_name="feedback_oversikt.csv",
-                mime="text/csv"
+                mime="text/csv",
+                key=f"download_csv_{id(csv)}"
             )
             
         with col2:

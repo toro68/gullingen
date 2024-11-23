@@ -38,7 +38,8 @@ def get_date_range_input(
             start_date = st.date_input(
                 DATE_INPUT_CONFIG["start_label"],
                 value=start_default,
-                format=date_format
+                format=date_format,
+                key=f"date_input_start_{id(start_default)}"
             )
         
         with col2:
