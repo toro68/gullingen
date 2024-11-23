@@ -764,7 +764,13 @@ def vis_tunbroyting_statistikk(bookings_func=None):
 # Kategori: View Functions
 # liste for tunkart-siden
 def vis_dagens_bestillinger():
-    """Viser dagens aktive bestillinger i en tabell"""
+    """
+    Viser dagens aktive bestillinger i en tabell:
+    - Årsabonnement
+    - Ukentlige bestillinger som er aktive i dag
+    - Bestillinger som starter i dag
+    - Bestillinger som startet tidligere og fortsatt er aktive
+    """
     try:
         dagens_dato = get_current_time().date()
         logger.info(f"Viser bestillinger for dato: {dagens_dato}")
@@ -781,12 +787,12 @@ def vis_dagens_bestillinger():
 
         # Filtrer dagens aktive bestillinger
         dagens_bestillinger = bestillinger[
-            # Årsabonnement eller aktive bestillinger
+            # Årsabonnement
             (bestillinger['abonnement_type'] == 'Årsabonnement') |
+            # Ukentlige bestillinger som er aktive i dag
             (
-                # Ankomst er i dag eller tidligere
+                (bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') &
                 (bestillinger['ankomst_dato'].dt.date <= dagens_dato) &
-                # Og enten ingen avreisedato eller avreise er i dag eller senere
                 (
                     bestillinger['avreise_dato'].isna() | 
                     (bestillinger['avreise_dato'].dt.date >= dagens_dato)
@@ -794,9 +800,34 @@ def vis_dagens_bestillinger():
             )
         ]
 
-        logger.info(f"Dagens aktive bestillinger: {dagens_bestillinger}")
+        if not dagens_bestillinger.empty:
+            # Sorter bestillinger: først årsabonnement, så ukentlige
+            dagens_bestillinger = dagens_bestillinger.sort_values(
+                by=['abonnement_type', 'ankomst_dato'],
+                ascending=[False, True]
+            )
+            
+            # Vis bestillingene i en tabell
+            st.dataframe(
+                dagens_bestillinger,
+                column_config={
+                    "customer_id": "Hytte",
+                    "ankomst_dato": st.column_config.DatetimeColumn(
+                        "Ankomst",
+                        format="DD.MM.YYYY"
+                    ),
+                    "avreise_dato": st.column_config.DatetimeColumn(
+                        "Avreise",
+                        format="DD.MM.YYYY"
+                    ),
+                    "abonnement_type": "Type"
+                },
+                hide_index=True
+            )
+        else:
+            st.info("Ingen aktive bestillinger i dag.")
         
-        # Resten av koden for visning...
+        logger.info(f"Viser {len(dagens_bestillinger)} aktive bestillinger")
         
     except Exception as e:
         logger.error(f"Feil i vis_dagens_bestillinger: {str(e)}", exc_info=True)
