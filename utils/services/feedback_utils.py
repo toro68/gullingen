@@ -1190,22 +1190,52 @@ def display_feedback_dashboard():
         logger.info("Starting display_feedback_dashboard")
         st.header("📬 Feedback Oversikt")
         
-        # Filtre
+        # Hent først all feedback for reactions statistikk
+        all_feedback = get_feedback(
+            start_date=get_current_time() - timedelta(days=7),
+            end_date=get_current_time(),
+            include_hidden=False
+        )
+        
+        # Vis statistikk i kolonner
         col1, col2, col3 = st.columns(3)
+        
         with col1:
+            st.subheader("🚜 Vedlikehold siste 7 dager")
+            # Filtrer for vedlikeholdsrelatert feedback
+            maintenance_data = all_feedback[
+                all_feedback['type'].str.contains('vedlikehold', case=False, na=False)
+            ].copy()
+            
+            if not maintenance_data.empty:
+                # Beregn og vis statistikk
+                daily_stats, _, _ = calculate_maintenance_stats(
+                    maintenance_data, 
+                    group_by='day', 
+                    days_back=7
+                )
+            else:
+                st.info("Ingen vedlikeholdsdata for perioden")
+        
+        # Fortsett med resten av dashbordet
+        st.write("---")  # Visuell separator
+        
+        # Filtre for hovedoversikt
+        filter_col1, filter_col2, filter_col3 = st.columns(3)
+        with filter_col1:
             start_date, end_date = get_date_range_input()
             
-        with col2:
+        with filter_col2:
             feedback_types = ["Alle"] + list(FEEDBACK_ICONS.keys())
             selected_type = st.selectbox("Type", feedback_types)
             
-        with col3:
+        with filter_col3:
             include_hidden = st.checkbox("Vis skjult", value=False)
             
-        # Hent og vis data
+        # Hent og vis filtrert data
         feedback_data = get_filtered_feedback(start_date, end_date, selected_type, include_hidden)
         
-        if feedback_data is not None and not feedback_data.empty:  # Sjekk at vi har data
+        if feedback_data is not None and not feedback_data.empty:
             display_feedback_table(feedback_data)
         else:
             st.info("Ingen feedback funnet i valgt periode")
