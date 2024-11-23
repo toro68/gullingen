@@ -1176,75 +1176,137 @@ def display_daily_maintenance_rating():
 def display_admin_dashboard():
     """
     Viser admin dashboard for feedback med omfattende oversikt, statistikk og rapporter.
+    Bruker eksisterende funksjoner fra feedback_utils.
     """
     try:
         st.title("📊 Feedback Dashboard")
+        logger.info("Starting display_admin_dashboard")
         
-        # Bruk den eksisterende date_inputs funksjonen for datovelgere
+        # Bruk den eksisterende datovelger-funksjonen
         start_date, end_date = get_date_range_input(
             default_days=DATE_VALIDATION["default_date_range"]
         )
         
         if start_date is None or end_date is None:
+            st.warning("Vennligst velg gyldig datoperiode")
             return
             
         # Konverter til datetime med tidssone
         start_datetime = combine_date_with_tz(start_date)
         end_datetime = combine_date_with_tz(end_date, datetime.max.time())
+        logger.debug(f"Valgt periode: {start_datetime} til {end_datetime}")
         
         # Hovedtabs for ulike visninger
         tab1, tab2, tab3 = st.tabs([
-            "🔍 Oversikt og Statistikk", 
+            "🔍 Oversikt og Feedback", 
             "🚜 Vedlikeholdsanalyse", 
             "📝 Rapporter"
         ])
         
-        # Hent data én gang for alle tabs
+        # Hent feedback data én gang
         feedback_data = get_feedback(
             start_date=start_datetime,
             end_date=end_datetime,
             include_hidden=True
         )
         
+        # === Tab 1: Oversikt og Feedback ===
         with tab1:
-            st.subheader("📊 Statistikk og Analyse")
-            
+            st.subheader("📊 Statistikk og Feedback")
             if feedback_data.empty:
                 st.info("Ingen feedback-data tilgjengelig for valgt periode")
             else:
-                # Vis generell statistikk
+                # Bruk eksisterende get_feedback_statistics
                 stats = get_feedback_statistics(start_datetime, end_datetime)
                 if stats:
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("Totalt antall", stats["total_count"])
+                        st.metric(
+                            "Totalt antall", 
+                            stats["total_count"],
+                            help="Totalt antall tilbakemeldinger i perioden"
+                        )
                     with col2:
-                        st.metric("Unike innsendere", 
-                                 len(feedback_data['customer_id'].unique()))
+                        st.metric(
+                            "Unike innsendere", 
+                            len(feedback_data['customer_id'].unique()),
+                            help="Antall unike hytter som har gitt tilbakemelding"
+                        )
                     with col3:
-                        st.metric("Åpne saker", 
-                                 len(feedback_data[feedback_data['status']=='Ny']))
-                                 
-                # Vis reaksjonsstatistikk
-                display_reaction_statistics(feedback_data)
-            
+                        new_cases = len(feedback_data[feedback_data['status']=='Ny'])
+                        st.metric(
+                            "Åpne saker", 
+                            new_cases,
+                            help="Antall ubehandlede tilbakemeldinger"
+                        )
+                
+                # Vis feedback oversikt med eksisterende funksjon
+                display_feedback_overview(feedback_data)
+                
+        # === Tab 2: Vedlikeholdsanalyse ===
         with tab2:
             st.subheader("🚜 Vedlikeholdsanalyse")
+            # Bruk eksisterende display_maintenance_report
+            reactions_df = display_maintenance_feedback()
             
-            if feedback_data.empty:
-                st.info("Ingen vedlikeholdsdata tilgjengelig for valgt periode")
+            if reactions_df is not None and not reactions_df.empty:
+                # Bruk eksisterende funksjoner for å vise statistikk
+                daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(
+                    reactions_df,
+                    group_by='day'
+                )
+                
+                if not daily_stats.empty:
+                    # Vis vedlikeholdssammendrag med eksisterende funksjon
+                    display_maintenance_summary(
+                        daily_stats,
+                        daily_stats_pct,
+                        daily_score,
+                        'day'
+                    )
+                    
+                    # Vis detaljer med eksisterende funksjon
+                    st.subheader("Detaljert vedlikeholdsstatistikk")
+                    display_reaction_statistics(reactions_df)
+                    
+                    # Vis reaksjonsrapport med eksisterende funksjon
+                    display_reaction_report(reactions_df)
             else:
-                display_maintenance_tab(feedback_data)
-            
+                st.info("Ingen vedlikeholdsdata tilgjengelig for valgt periode")
+        
+        # === Tab 3: Rapporter ===
         with tab3:
             st.subheader("📝 Rapporter og Detaljer")
             
-            if feedback_data.empty:
-                st.info("Ingen rapportdata tilgjengelig for valgt periode")
-            else:
-                # Vis nedlastingsknapper og feedback-oversikt
-                display_feedback_overview(feedback_data)
+            if not feedback_data.empty:
+                # La brukeren filtrere på type
+                feedback_types = ["Alle"] + list(FEEDBACK_ICONS.keys())
+                selected_type = st.selectbox("Filtrer på type:", feedback_types)
                 
+                # Filtrer data hvis nødvendig
+                filtered_data = feedback_data
+                if selected_type != "Alle":
+                    filtered_data = feedback_data[feedback_data['type'] == selected_type]
+                
+                # Vis filtrert data med eksisterende funksjon
+                display_feedback_overview(filtered_data)
+                
+                # Generer og vis rapport med eksisterende funksjon
+                report = generate_feedback_report(start_datetime, end_datetime)
+                if report:
+                    st.download_button(
+                        "Last ned rapport",
+                        report,
+                        "feedback_report.txt",
+                        "text/plain"
+                    )
+            else:
+                st.info("Ingen rapportdata tilgjengelig for valgt periode")
+                
+        # Legg til daglig vedlikeholdsvurdering nederst
+        st.write("---")
+        display_daily_maintenance_rating()
+        
     except Exception as e:
         logger.error(f"Feil i display_admin_dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av feedback-dashboard")
