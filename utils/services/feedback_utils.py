@@ -1133,60 +1133,74 @@ def display_admin_dashboard():
         
         logger.debug(f"Hentet {len(feedback_data)} feedback-rader totalt")
         
+        # Vedlikeholdsstatistikk øverst
+        st.subheader("🚜 Vedlikehold siste 7 dager")
+        
+        # Filtrer for vedlikeholdsrelatert feedback og logg resultater
+        maintenance_mask = feedback_data['type'].str.contains('vedlikehold', case=False, na=False)
+        maintenance_data = feedback_data[maintenance_mask].copy()
+        
+        logger.debug(f"Filtrert til {len(maintenance_data)} vedlikeholdsrelaterte rader")
+        
+        # Konverter datetime-kolonner til timezone-naive
+        maintenance_data['datetime'] = pd.to_datetime(maintenance_data['datetime']).dt.tz_localize(None)
+        
+        # Opprett dataframe med alle dager
+        date_range = pd.date_range(
+            start=start_date.replace(tzinfo=None),
+            end=end_date.replace(tzinfo=None),
+            freq='D'
+        )
+        
+        daily_stats = pd.DataFrame(index=date_range)
+        daily_stats.index.name = 'Dato'
+        daily_stats['Fornøyd'] = 0
+        daily_stats['Nøytral'] = 0
+        
+        # Oppdater med faktiske tall og logg hver oppdatering
+        for _, row in maintenance_data.iterrows():
+            date = row['datetime'].date()
+            logger.debug(f"Prosesserer rad for dato {date}: {row['comment']}")
+            
+            if date in daily_stats.index:
+                if '😊' in str(row['comment']):
+                    daily_stats.loc[date, 'Fornøyd'] += 1
+                    logger.debug(f"La til fornøyd reaksjon for {date}")
+                elif '😐' in str(row['comment']):
+                    daily_stats.loc[date, 'Nøytral'] += 1
+                    logger.debug(f"La til nøytral reaksjon for {date}")
+        
+        logger.debug(f"Daglig statistikk:\n{daily_stats}")
+        
+        # Vis statistikk
+        display_df = daily_stats.reset_index()
+        display_df['Dato'] = display_df['Dato'].dt.strftime(DATE_FORMATS['display']['date'])
+        
+        # Sjekk om vi har noen ikke-null verdier
+        if display_df[['Fornøyd', 'Nøytral']].sum().sum() == 0:
+            st.info("Ingen vedlikeholdsreaksjoner funnet i perioden")
+        
+        st.dataframe(
+            display_df,
+            hide_index=True,
+            use_container_width=True
+        )
+        
+        # Opprett tabs etter statistikken
+        tab1, tab2, tab3 = st.tabs([
+            "📊 Feedback Oversikt",
+            "🚜 Vedlikehold",
+            "📈 Statistikk"
+        ])
+        
         with tab1:
-            st.subheader("🚜 Vedlikehold siste 7 dager")
+            display_feedback_overview(feedback_data)
             
-            # Filtrer for vedlikeholdsrelatert feedback og logg resultater
-            maintenance_mask = feedback_data['type'].str.contains('vedlikehold', case=False, na=False)
-            maintenance_data = feedback_data[maintenance_mask].copy()
-            
-            logger.debug(f"Filtrert til {len(maintenance_data)} vedlikeholdsrelaterte rader")
-            
-            # Konverter datetime-kolonner til timezone-naive
-            maintenance_data['datetime'] = pd.to_datetime(maintenance_data['datetime']).dt.tz_localize(None)
-            
-            # Opprett dataframe med alle dager
-            date_range = pd.date_range(
-                start=start_date.replace(tzinfo=None),
-                end=end_date.replace(tzinfo=None),
-                freq='D'
-            )
-            
-            daily_stats = pd.DataFrame(index=date_range)
-            daily_stats.index.name = 'Dato'
-            daily_stats['Fornøyd'] = 0
-            daily_stats['Nøytral'] = 0
-            
-            # Oppdater med faktiske tall og logg hver oppdatering
-            for _, row in maintenance_data.iterrows():
-                date = row['datetime'].date()
-                logger.debug(f"Prosesserer rad for dato {date}: {row['comment']}")
+        with tab2:
+            display_maintenance_tab(feedback_data)
                 
-                if date in daily_stats.index:
-                    if '😊' in str(row['comment']):
-                        daily_stats.loc[date, 'Fornøyd'] += 1
-                        logger.debug(f"La til fornøyd reaksjon for {date}")
-                    elif '😐' in str(row['comment']):
-                        daily_stats.loc[date, 'Nøytral'] += 1
-                        logger.debug(f"La til nøytral reaksjon for {date}")
-            
-            logger.debug(f"Daglig statistikk:\n{daily_stats}")
-            
-            # Vis statistikk
-            display_df = daily_stats.reset_index()
-            display_df['Dato'] = display_df['Dato'].dt.strftime(DATE_FORMATS['display']['date'])
-            
-            # Sjekk om vi har noen ikke-null verdier
-            if display_df[['Fornøyd', 'Nøytral']].sum().sum() == 0:
-                st.info("Ingen vedlikeholdsreaksjoner funnet i perioden")
-            
-            st.dataframe(
-                display_df,
-                hide_index=True,
-                use_container_width=True
-            )
-            
-            # Resten av koden...
+        with tab3:
+            display_reaction_statistics(feedback_data)
 
     except Exception as e:
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
