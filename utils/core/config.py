@@ -25,6 +25,14 @@ DATABASE_PATH.mkdir(parents=True, exist_ok=True)
 # Logging konfigurasjon
 logger.info(f"Database path set to: {DATABASE_PATH}")
 
+# Legg til cloud-spesifikk konfigurasjon her
+CLOUD_SPECIFIC_CONFIG = {
+    'backup_enabled': True,
+    'backup_path': '/mount/src/gullingen/backup',
+    'verify_persistence': True,
+    'auto_recovery': True
+}
+
 # Tidssone konfigurasjon
 TZ = ZoneInfo("Europe/Oslo")
 # Dato- og tidsformater

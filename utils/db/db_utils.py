@@ -88,6 +88,25 @@ def create_tables():
         return False
 
 
+def verify_database_files():
+    """Verifiserer at alle databasefiler eksisterer og er skrivbare"""
+    logger.info("=== VERIFYING DATABASE FILES ===")
+    for db_name in DB_CONFIG:
+        db_path = Path(DB_CONFIG[db_name]["path"])
+        logger.info(f"Checking database: {db_path}")
+        
+        if not db_path.exists():
+            logger.error(f"Database file does not exist: {db_path}")
+            continue
+            
+        try:
+            # Test skrivetilgang
+            with open(db_path, 'ab') as f:
+                pass
+            logger.info(f"Database {db_path} exists and is writable")
+        except Exception as e:
+            logger.error(f"Cannot write to database {db_path}: {str(e)}")
+
 def initialize_database_system() -> bool:
     """
     Initialiserer hele databasesystemet inkludert tabeller, migrasjoner 
@@ -109,6 +128,11 @@ def initialize_database_system() -> bool:
         # 3. Verifiser skjemaene
         if not verify_database_schemas():
             logger.error("Failed to verify schemas")
+            return False
+            
+        # Legg til denne nye sjekken her:
+        if not verify_data_persistence():
+            logger.error("Failed to verify data persistence")
             return False
             
         # 4. Sjekk og importer kundedata hvis nødvendig
@@ -521,4 +545,52 @@ def verify_tunbroyting_database() -> bool:
             
     except Exception as e:
         logger.error(f"Feil ved verifisering av tunbrøyting database: {str(e)}", exc_info=True)
+        return False
+
+@retry_on_db_error(retries=3)
+def verify_data_persistence():
+    """Verifiserer at databasen kan lagre og hente data persistent"""
+    logger.info("=== VERIFYING DATA PERSISTENCE ===")
+    try:
+        with get_db_connection("tunbroyting") as conn:
+            cursor = conn.cursor()
+            
+            # Sjekk antall rader før
+            cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
+            count_before = cursor.fetchone()[0]
+            logger.info(f"Antall rader før test: {count_before}")
+            
+            # Test innsetting
+            test_data = {
+                'customer_id': 'TEST',
+                'ankomst_dato': '2024-01-01',
+                'avreise_dato': '2024-01-02',
+                'abonnement_type': 'test'
+            }
+            
+            cursor.execute("""
+                INSERT INTO tunbroyting_bestillinger 
+                (customer_id, ankomst_dato, avreise_dato, abonnement_type)
+                VALUES (?, ?, ?, ?)
+            """, (
+                test_data['customer_id'],
+                test_data['ankomst_dato'],
+                test_data['avreise_dato'],
+                test_data['abonnement_type']
+            ))
+            conn.commit()
+            
+            # Verifiser innsetting
+            cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
+            count_after = cursor.fetchone()[0]
+            logger.info(f"Antall rader etter test: {count_after}")
+            
+            # Fjern testdata
+            cursor.execute("DELETE FROM tunbroyting_bestillinger WHERE customer_id = 'TEST'")
+            conn.commit()
+            
+            return count_after > count_before
+            
+    except Exception as e:
+        logger.error(f"Feil i verify_data_persistence: {str(e)}")
         return False

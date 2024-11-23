@@ -8,16 +8,20 @@ import streamlit as st
 current_dir = Path(__file__).parent.absolute()
 sys.path.append(str(current_dir))
 
-# For Streamlit Cloud
+# Importer config først
+from utils.core.config import DATABASE_PATH, TZ, get_current_time
+
+# Deretter endre arbeidsmappe
 if os.path.exists("/mount/gullingen"):
     os.chdir("/mount/gullingen")
+    logger.info(f"Changed working directory to: {os.getcwd()}")
+    logger.info(f"Database path is: {DATABASE_PATH}")
 
 from utils.core.logging_config import get_logger, setup_logging
 
 setup_logging()
 logger = get_logger(__name__)
 
-from utils.core.config import TZ, get_current_time
 from utils.core.menu_utils import create_menu
 from utils.services.customer_utils import handle_customers
 

@@ -135,6 +135,9 @@ def initialize_app():
     """Initialiserer applikasjonen"""
     try:
         logger.info("=== Starting app initialization ===")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Database path: {DATABASE_PATH}")
+        logger.info(f"Database files exist: {[f.name for f in DATABASE_PATH.glob('*.db')]}")
         
         # Kjør migrasjoner først
         migrations = [
@@ -171,8 +174,9 @@ def initialize_app():
 
 def initialize_session_state():
     """Initialiserer session state variabler"""
-    # Tving reinitialisering
-    st.session_state.app_initialized = False
+    # Fjernet tvungen reinitialisering
+    if "app_initialized" not in st.session_state:
+        st.session_state.app_initialized = False
     
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
