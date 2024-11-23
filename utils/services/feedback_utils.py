@@ -89,99 +89,60 @@ def get_feedback(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     feedback_type: Optional[str] = None,
-    include_hidden: bool = False,
-    customer_id: Optional[str] = None
+    include_hidden: bool = False
 ) -> pd.DataFrame:
     """
-    Henter feedback fra databasen med garanterte kolonner.
-    
-    Args:
-        start_date: Start dato for filtrering
-        end_date: Slutt dato for filtrering
-        feedback_type: Type feedback å filtrere på
-        include_hidden: Om skjulte tilbakemeldinger skal inkluderes
-        customer_id: Spesifikk kunde-ID å filtrere på
-        
-    Returns:
-        pd.DataFrame med garanterte kolonner fra databaseskjemaet
+    Henter feedback fra databasen
     """
     try:
         logger.debug("Starting get_feedback")
         
-        # Definer forventede kolonner basert på databaseskjemaet
-        expected_columns = [
-            'id', 'type', 'customer_id', 'datetime', 'comment', 
-            'status', 'status_changed_by', 'status_changed_at', 
-            'hidden', 'is_alert', 'display_on_weather', 
-            'expiry_date', 'target_group'
-        ]
-        
         # Bygg spørring
-        query = f"""
-        SELECT {', '.join(expected_columns)}
+        query = """
+        SELECT *
         FROM feedback
         WHERE 1=1
         """
         params = []
         
-        # Legg til datofilter hvis spesifisert
         if start_date:
             query += " AND datetime >= ?"
-            params.append(start_date.isoformat())
+            params.append(format_date(start_date, "database", "datetime"))
         if end_date:
             query += " AND datetime <= ?"
-            params.append(end_date.isoformat())
+            params.append(format_date(end_date, "database", "datetime"))
             
-        # Legg til typefilter hvis spesifisert
         if feedback_type:
             query += " AND type = ?"
             params.append(feedback_type)
             
-        # Filtrer skjulte hvis ikke inkludert
         if not include_hidden:
             query += " AND (hidden = 0 OR hidden IS NULL)"
             
-        # Legg til kundefilter hvis spesifisert
-        if customer_id:
-            query += " AND customer_id = ?"
-            params.append(customer_id)
-            
-        query += " ORDER BY datetime DESC"
-        
         # Hent data
         feedback_data = fetch_data("feedback", query, params)
         
         # Konverter til DataFrame
-        if isinstance(feedback_data, list):
-            df = pd.DataFrame(feedback_data, columns=expected_columns)
-        else:
-            # Hvis vi ikke fikk data, lag en tom DataFrame med riktige kolonner
-            df = pd.DataFrame(columns=expected_columns)
-            
-        # Sikre riktige datatyper
+        df = pd.DataFrame(feedback_data)
+        
         if not df.empty:
-            # Konverter datetime-kolonner
+            # Konverter datetime-kolonner med riktig format
             date_columns = ['datetime', 'status_changed_at']
             for col in date_columns:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col])
-                    # Legg til tidssone hvis mangler
-                    if df[col].dt.tz is None:
-                        df[col] = df[col].dt.tz_localize(TZ)
-                        
-            # Konverter numeriske kolonner
-            numeric_columns = ['hidden', 'is_alert', 'display_on_weather']
-            for col in numeric_columns:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-                    
-        logger.debug(f"Retrieved {len(df)} feedback entries")
+                    df[col] = pd.to_datetime(
+                        df[col], 
+                        format=DATE_FORMATS["database"]["datetime"],
+                        errors='coerce'
+                    )
+                    df[col] = df[col].dt.tz_localize(TZ)
+        
+        logger.debug(f"Retrieved {len(df) if not df.empty else 0} feedback entries")
         return df
         
     except Exception as e:
         logger.error(f"Error fetching feedback: {str(e)}", exc_info=True)
-        # Returner tom DataFrame med riktige kolonner ved feil
-        return pd.DataFrame(columns=expected_columns)
+        return pd.DataFrame()
 
 def update_feedback_status(feedback_id, new_status, changed_by, new_expiry=None, new_display=None, new_target=None):
     """
