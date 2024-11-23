@@ -1145,7 +1145,7 @@ def display_admin_dashboard():
             'Dato': date_range,
             'Fornøyd': 0,
             'Nøytral': 0,
-            'Misfornøyd': 0  # Lagt til misfornøyd
+            'Misfornøyd': 0
         })
         
         # Hvis vi har vedlikeholdsdata, oppdater statistikken
@@ -1154,10 +1154,8 @@ def display_admin_dashboard():
                 feedback_data['type'].str.contains('vedlikehold', case=False, na=False)
             ].copy()
             
-            # Konverter til date for matching
             maintenance_data['date'] = pd.to_datetime(maintenance_data['datetime']).dt.date
             
-            # Tell reaksjoner per dag
             for idx, row in daily_stats.iterrows():
                 current_date = row['Dato'].date()
                 day_data = maintenance_data[maintenance_data['date'] == current_date]
@@ -1165,12 +1163,38 @@ def display_admin_dashboard():
                 if not day_data.empty:
                     daily_stats.loc[idx, 'Fornøyd'] = day_data['comment'].str.count('😊').sum()
                     daily_stats.loc[idx, 'Nøytral'] = day_data['comment'].str.count('😐').sum()
-                    daily_stats.loc[idx, 'Misfornøyd'] = day_data['comment'].str.count('😡').sum()  # Lagt til telling av misfornøyd
+                    daily_stats.loc[idx, 'Misfornøyd'] = day_data['comment'].str.count('😡').sum()
         
         # Formater datoer for visning
         daily_stats['Dato'] = daily_stats['Dato'].dt.strftime(DATE_FORMATS['display']['date'])
         
-        # Vis dataframe med Streamlit
+        # Vis dataframe og nedlastingsknapper
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            csv = daily_stats.to_csv(index=False)
+            st.download_button(
+                "📥 Last ned CSV",
+                csv,
+                "vedlikehold_statistikk.csv",
+                "text/csv",
+                use_container_width=True
+            )
+            
+        with col2:
+            # Excel nedlasting
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                daily_stats.to_excel(writer, index=False, sheet_name="Vedlikehold")
+            st.download_button(
+                "📊 Last ned Excel",
+                buffer.getvalue(),
+                "vedlikehold_statistikk.xlsx",
+                "application/vnd.ms-excel",
+                use_container_width=True
+            )
+        
+        # Vis dataframe
         st.dataframe(
             data=daily_stats,
             column_config={
@@ -1186,7 +1210,7 @@ def display_admin_dashboard():
                     "😐 Nøytral",
                     format="%d"
                 ),
-                "Misfornøyd": st.column_config.NumberColumn(  # Lagt til kolonnekonfigurasjon for misfornøyd
+                "Misfornøyd": st.column_config.NumberColumn(
                     "😡 Misfornøyd",
                     format="%d"
                 )
