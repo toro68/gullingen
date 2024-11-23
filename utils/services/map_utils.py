@@ -10,8 +10,7 @@ import streamlit as st
 # Local imports
 from utils.core.config import (
     safe_to_datetime,
-    format_date,
-    get_current_time
+    format_date
 )
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import get_marker_properties
@@ -41,37 +40,8 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             st.error("Kunne ikke laste koordinater for hyttene")
             return None
             
-        # Konverter datokolonner til datetime med tidssone
-        for col in ['ankomst_dato', 'avreise_dato']:
-            if col in bestillinger.columns:
-                bestillinger[col] = pd.to_datetime(bestillinger[col]).dt.tz_localize(TZ)
-        
-        # Filtrer aktive bestillinger for dagens dato
-        dagens_dato = get_current_time()
-        aktive_bestillinger = bestillinger[
-            # Årsabonnement som er aktive i dag
-            (
-                (bestillinger['abonnement_type'] == 'Årsabonnement') &
-                (bestillinger['ankomst_dato'].dt.date <= dagens_dato.date()) &
-                (
-                    bestillinger['avreise_dato'].isna() |
-                    (bestillinger['avreise_dato'].dt.date >= dagens_dato.date())
-                )
-            ) |
-            # Ukentlige bestillinger som er aktive i dag
-            (
-                (bestillinger['abonnement_type'] != 'Årsabonnement') &
-                (bestillinger['ankomst_dato'].dt.date <= dagens_dato.date()) &
-                (
-                    bestillinger['avreise_dato'].isna() |
-                    (bestillinger['avreise_dato'].dt.date >= dagens_dato.date())
-                )
-            )
-        ]
-        
         # Debug logging
-        logger.info(f"Filtrerte bestillinger for {dagens_dato.date()}:")
-        logger.info(f"Antall funnet: {len(aktive_bestillinger)}")
+        debug_map_data(bestillinger)
         
         # Opprett kartet med grupperte markører
         fig = go.Figure()
@@ -101,9 +71,9 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
         ))
         
         # Grupper aktive bestillinger etter type
-        if not aktive_bestillinger.empty:
-            yearly_bookings = aktive_bestillinger[aktive_bestillinger['abonnement_type'] == 'Årsabonnement']
-            weekly_bookings = aktive_bestillinger[aktive_bestillinger['abonnement_type'] != 'Årsabonnement']
+        if not bestillinger.empty:
+            yearly_bookings = bestillinger[bestillinger['abonnement_type'] == 'Årsabonnement']
+            weekly_bookings = bestillinger[bestillinger['abonnement_type'] != 'Årsabonnement']
             
             # Legg til årsabonnement
             if not yearly_bookings.empty:
@@ -187,10 +157,10 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
         st.plotly_chart(fig, use_container_width=True, key="tunkart_map")
         
         # Vis informasjonstekst om antall bestillinger
-        if aktive_bestillinger.empty:
+        if bestillinger.empty:
             st.info("Ingen aktive bestillinger i dag.")
         else:
-            st.success(f"Viser {len(aktive_bestillinger)} aktive bestillinger.")
+            st.success(f"Viser {len(bestillinger)} aktive bestillinger.")
             
         return fig
         
