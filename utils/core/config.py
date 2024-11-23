@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 import pandas as pd
+import streamlit as st
 
 # Få logger instans direkte
 logger = logging.getLogger(__name__)
@@ -143,6 +144,12 @@ MAX_ATTEMPTS = 5
 LOCKOUT_PERIOD = timedelta(minutes=15)
 SESSION_TIMEOUT = 3600  # 1 time i sekunder
 
+# Flytt denne konstanten opp med andre konfigurasjoner
+DATE_INPUT_CONFIG = {
+    "error_message": "Fra-dato kan ikke være senere enn til-dato",
+    "start_label": "Fra dato",
+    "end_label": "Til dato"
+}
 
 # === DATO FUNKSJONER ===
 def safe_to_datetime(date_string: Optional[str]) -> Optional[datetime]:
@@ -245,13 +252,18 @@ def get_current_time() -> datetime:
     """Returnerer nåværende tid i riktig tidssone"""
     return datetime.now(TZ)
 
-def get_default_date_range() -> tuple[datetime, datetime]:
-    """Returnerer standard datoperiode"""
-    now = get_current_time()
-    return (
-        now,
-        now + timedelta(days=DATE_VALIDATION["default_date_range"])
-    )
+def get_date_range_defaults(default_days: int = DATE_VALIDATION["default_date_range"]) -> tuple[datetime, datetime]:
+    """
+    Returnerer standardverdier for datoperiode
+    
+    Args:
+        default_days: Antall dager i perioden
+        
+    Returns:
+        tuple[datetime, datetime]: (start_date, end_date)
+    """
+    today = get_current_time().date()
+    return (today - timedelta(days=default_days), today)
 
 def get_date_format(format_type: str, format_name: str) -> Optional[str]:
     """

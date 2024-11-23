@@ -23,8 +23,12 @@ from utils.core.config import (
     get_date_format,
     get_current_time,
     combine_date_with_tz,
-    DATE_VALIDATION
+    format_date,
+    save_to_excel,
+    DATE_VALIDATION,
+    DATE_INPUT_CONFIG
 )
+from utils.ui.date_inputs import get_date_range_input
 from utils.core.logging_config import get_logger
 from utils.db.db_utils import execute_query, fetch_data, get_db_connection
 from utils.services.stroing_utils import log_stroing_activity
@@ -39,51 +43,7 @@ FEEDBACK_ICONS = {
 }
 
 # hjelpefunksjoner
-def safe_to_datetime(date_string):
-    if date_string in [None, "", "None", "1"]:
-        return None
-    try:
-        return pd.to_datetime(date_string)
-    except ValueError:
-        logger.error(f"Ugyldig datostreng: '{date_string}'")
-        return None
 
-def format_date(date_obj):
-    if date_obj is None:
-        return "Ikke satt"
-    return date_obj.strftime("%d.%m.%Y %H:%M")
-
-def get_date_range_input(default_days=DATE_VALIDATION["default_date_range"]):
-    """Felles funksjon for datovelgere"""
-    try:
-        logger.debug("Starting get_date_range_input")
-        today = get_current_time().date()
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input(
-                "Fra dato", 
-                value=today - timedelta(days=default_days),
-                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
-            )
-        with col2:
-            end_date = st.date_input(
-                "Til dato",
-                value=today,
-                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD"),
-                max_value=today
-            )
-            
-        if start_date > end_date:
-            st.error("Fra-dato kan ikke være senere enn til-dato")
-            return None, None
-            
-        logger.debug(f"Valgt periode: {start_date} til {end_date}")
-        return start_date, end_date
-        
-    except Exception as e:
-        logger.error(f"Feil i get_date_range_input: {str(e)}", exc_info=True)
-        return None, None
 # crud-operasjoner
 def save_feedback(feedback_type, datetime_str, comment, customer_id, hidden):
     """
@@ -607,38 +567,30 @@ def display_maintenance_feedback():
     try:
         logger.debug("Starting display_maintenance_feedback")
         
-        # Bruk felles datovelger-funksjon
-        start_date, end_date = get_date_range_input(default_days=7)
+        # Bruk den nye felles datovelger-funksjonen
+        start_date, end_date = get_date_range_input()
         if start_date is None or end_date is None:
+            st.warning("Vennligst velg gyldig datoperiode")
             return
 
         # Konverter til datetime med tidssone
-        start_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=TZ)
-        end_datetime = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=TZ)
+        start_datetime = combine_date_with_tz(start_date)
+        end_datetime = combine_date_with_tz(end_date, datetime.max.time())
         
         logger.debug(f"Henter data for periode: {start_datetime} til {end_datetime}")
         
-        # Bruk eksisterende funksjon for å hente reaksjoner
+        # Hent reaksjoner
         reactions_df = get_maintenance_reactions(start_datetime, end_datetime)
         
-        logger.debug(f"Retrieved {len(reactions_df)} rows")
-        logger.debug(f"DataFrame columns: {reactions_df.columns.tolist()}")
-        logger.debug(f"First row: {reactions_df.iloc[0].to_dict() if not reactions_df.empty else 'Empty DataFrame'}")
-
         if reactions_df.empty:
             st.info("Ingen tilbakemeldinger funnet i valgt periode")
-            return
-            
-        if 'comment' not in reactions_df.columns:
-            logger.error(f"Mangler comment-kolonne. Tilgjengelige kolonner: {reactions_df.columns.tolist()}")
-            st.error("Feil i dataformat - mangler kommentarfelt")
             return
             
         return reactions_df
         
     except Exception as e:
         logger.error(f"Feil ved henting av vedlikeholdsreaksjoner: {str(e)}", exc_info=True)
-        return pd.DataFrame(columns=['datetime', 'comment', 'customer_id'])
+        return pd.DataFrame()
 
 
 def create_maintenance_chart(daily_stats, daily_stats_pct, daily_score, group_by):
@@ -824,7 +776,7 @@ def calculate_maintenance_stats(reactions_df, group_by='day', days_back=7):
                     format='%d'
                 ),
                 'Misfornøyd': st.column_config.NumberColumn(
-                    '😡',
+                    '��',
                     help='Antall misfornøyde tilbakemeldinger',
                     format='%d'
                 ),
