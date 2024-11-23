@@ -759,20 +759,12 @@ def display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, group
         st.error("Kunne ikke vise vedlikeholdsoppsummering")
 
 def calculate_maintenance_stats(reactions_df, group_by='day', days_back=7):
-    """
-    Beregner statistikk for vedlikeholdsreaksjoner.
-    
-    Args:
-        reactions_df (pd.DataFrame): DataFrame med reaksjoner
-        group_by (str): Gruppering ('day', 'week', 'month')
-        days_back (int): Antall dager bakover i tid (default 7)
-    """
+    """Beregner vedlikeholdsstatistikk med fargekodet visning"""
     try:
-        logger.debug(f"Calculating maintenance stats grouped by: {group_by}")
-        logger.debug(f"Input DataFrame shape: {reactions_df.shape}")
+        logger.debug(f"Calculating maintenance stats for last {days_back} days")
         
         if reactions_df.empty:
-            logger.warning("Tomt reactions_df datasett")
+            st.info("Ingen vedlikeholdsdata tilgjengelig")
             return pd.DataFrame(), pd.DataFrame(), pd.Series()
             
         # Filtrer for siste X dager
@@ -785,50 +777,70 @@ def calculate_maintenance_stats(reactions_df, group_by='day', days_back=7):
         reactions_df = reactions_df[mask]
         
         if reactions_df.empty:
-            logger.warning(f"Ingen data for siste {days_back} dager")
+            st.info(f"Ingen data for siste {days_back} dager")
             return pd.DataFrame(), pd.DataFrame(), pd.Series()
             
-        # Definer grupperingsfunksjon
-        if group_by == 'week':
-            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-W%V')
-        elif group_by == 'month':
-            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-%m')
-        else:  # default to day
-            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-%m-%d')
-            
-        # Tell reaksjoner
-        stats = pd.DataFrame({
-            '😊 Fornøyd': reactions_df['comment'].str.count('😊'),
-            '😐 Nøytral': reactions_df['comment'].str.count('😐'),
-            '😡 Misfornøyd': reactions_df['comment'].str.count('😡')
-        })
+        # Grupper etter dato
+        reactions_df['date'] = reactions_df['datetime'].dt.date
         
-        # Grupper etter valgt periode
-        daily_stats = stats.groupby(reactions_df['group']).sum()
+        # Tell reaksjoner per dag
+        daily_stats = pd.DataFrame({
+            'Dato': pd.date_range(start=start_date.date(), end=end_date.date()),
+            'Fornøyd': 0,
+            'Nøytral': 0,
+            'Misfornøyd': 0
+        }).set_index('Dato')
         
-        # Beregn prosenter
-        daily_total = daily_stats.sum(axis=1)
-        daily_stats_pct = daily_stats.div(daily_total, axis=0) * 100
+        # Oppdater med faktiske tall
+        for date, group in reactions_df.groupby('date'):
+            daily_stats.loc[date, 'Fornøyd'] = group['comment'].str.count('😊').sum()
+            daily_stats.loc[date, 'Nøytral'] = group['comment'].str.count('😐').sum()
+            daily_stats.loc[date, 'Misfornøyd'] = group['comment'].str.count('😡').sum()
         
-        # Beregn score
-        daily_score = (
-            daily_stats['😊 Fornøyd'] * 1.0 + 
-            daily_stats['😐 Nøytral'] * 0.5
-        ) / daily_total
+        # Beregn totaler og score
+        daily_stats['Total'] = daily_stats.sum(axis=1)
+        daily_stats['Score'] = (
+            (daily_stats['Fornøyd'] * 1.0 + daily_stats['Nøytral'] * 0.5) / 
+            daily_stats['Total']
+        ).fillna(0)
         
-        # Vis statistikk i dataframe
-        st.subheader("Statistikk oversikt")
-        summary_df = pd.DataFrame({
-            'Dato': daily_stats.index,
-            'Fornøyd': daily_stats['😊 Fornøyd'],
-            'Nøytral': daily_stats['😐 Nøytral'],
-            'Misfornøyd': daily_stats['😡 Misfornøyd'],
-            'Total': daily_total,
-            'Score': daily_score.round(2)
-        })
-        st.dataframe(summary_df, use_container_width=True)
+        # Formater datoer for visning
+        display_df = daily_stats.reset_index()
+        display_df['Dato'] = display_df['Dato'].dt.strftime('%d.%m')
         
-        return daily_stats, daily_stats_pct, daily_score
+        # Vis statistikk med fargeformatering
+        st.dataframe(
+            display_df,
+            column_config={
+                'Dato': st.column_config.TextColumn('Dato'),
+                'Fornøyd': st.column_config.NumberColumn(
+                    '😊',
+                    help='Antall fornøyde tilbakemeldinger',
+                    format='%d'
+                ),
+                'Nøytral': st.column_config.NumberColumn(
+                    '😐',
+                    help='Antall nøytrale tilbakemeldinger',
+                    format='%d'
+                ),
+                'Misfornøyd': st.column_config.NumberColumn(
+                    '😡',
+                    help='Antall misfornøyde tilbakemeldinger',
+                    format='%d'
+                ),
+                'Score': st.column_config.ProgressColumn(
+                    'Score',
+                    help='Score (0-1)',
+                    format='%.2f',
+                    min_value=0,
+                    max_value=1
+                )
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        return daily_stats, daily_stats / daily_stats['Total'].values.reshape(-1, 1), daily_stats['Score']
         
     except Exception as e:
         logger.error(f"Feil ved beregning av vedlikeholdsstatistikk: {str(e)}", exc_info=True)
