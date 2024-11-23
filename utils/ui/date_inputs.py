@@ -39,14 +39,15 @@ def get_date_range_input(
                 DATE_INPUT_CONFIG["start_label"],
                 value=start_default,
                 format=date_format,
-                key=f"date_input_start_{id(start_default)}"
+                key=f"{id(start_default)}_start_date"
             )
         
         with col2:
             end_date = st.date_input(
                 DATE_INPUT_CONFIG["end_label"],
                 value=end_default,
-                format=date_format
+                format=date_format,
+                key=f"{id(end_default)}_end_date"  # Lagt til key
             )
             
         if start_date > end_date:
@@ -58,4 +59,5 @@ def get_date_range_input(
         
     except Exception as e:
         logger.error(f"Error in date range input: {str(e)}", exc_info=True)
-        return None, None 
+        return None, None
+    

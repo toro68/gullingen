@@ -949,16 +949,17 @@ def display_feedback_overview(feedback_data):
             
         with col2:
             buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                export_data.to_excel(writer, sheet_name="Feedback", index=False)
-            
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                feedback_data.to_excel(writer, sheet_name="Feedback", index=False)
+            excel_data = output.getvalue()
             st.download_button(
-                label="📊 Last ned som Excel",
-                data=buffer.getvalue(),
-                file_name="feedback_oversikt.xlsx",
-                mime="application/vnd.ms-excel"
+                label="📊 Last ned Excel",
+                data=excel_data,
+                file_name="feedback.xlsx",
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                key=f"download_excel_{id(excel_data)}"
             )
-        
+    
         # Vis feedback i expanders - bruker original data for visning
         st.subheader("Feedback oversikt")
         for _, row in feedback_data.iterrows():
