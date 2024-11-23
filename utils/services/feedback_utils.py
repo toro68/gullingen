@@ -722,16 +722,11 @@ def create_maintenance_chart(daily_stats, daily_stats_pct, daily_score, group_by
 
 
 def display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, group_by='day'):
-    """Viser oppsummering av vedlikeholdsstatistikk
-    
-    Args:
-        daily_stats (pd.DataFrame): Daglig statistikk
-        daily_stats_pct (pd.DataFrame): Prosentvis statistikk
-        daily_score (pd.Series): Score per dag
-        group_by (str, optional): Gruppering ('day', 'week', 'month'). Default 'day'
-    """
+    """Viser oppsummering av vedlikeholdsstatistikk"""
     try:
         logger.info("Starting display_maintenance_summary")
+        logger.debug(f"daily_stats shape: {daily_stats.shape if not daily_stats.empty else 'Empty'}")
+        logger.debug(f"group_by: {group_by}")
         
         if daily_stats.empty:
             st.info("Ingen vedlikeholdsdata tilgjengelig")
@@ -746,12 +741,74 @@ def display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, group
         
         st.subheader(f"📊 Statistikk for {periode}")
         
-        # Vis statistikk...
-        # ... resten av funksjonen ...
+        # Vis total statistikk
+        total_reactions = daily_stats.sum().sum()
+        st.write(f"Totalt antall reaksjoner: {total_reactions}")
         
+        # Vis prosentvis fordeling
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("😊 Fornøyd", f"{daily_stats_pct['😊 Fornøyd'].mean():.1f}%")
+        with col2:
+            st.metric("😐 Nøytral", f"{daily_stats_pct['😐 Nøytral'].mean():.1f}%")
+        with col3:
+            st.metric("😡 Misfornøyd", f"{daily_stats_pct['😡 Misfornøyd'].mean():.1f}%")
+            
     except Exception as e:
         logger.error(f"Error in display_maintenance_summary: {str(e)}", exc_info=True)
         st.error("Kunne ikke vise vedlikeholdsoppsummering")
+
+def calculate_maintenance_stats(reactions_df, group_by='day'):
+    """Beregner statistikk for vedlikeholdsreaksjoner"""
+    try:
+        logger.debug(f"Calculating maintenance stats grouped by: {group_by}")
+        logger.debug(f"Input DataFrame shape: {reactions_df.shape}")
+        
+        if reactions_df.empty:
+            logger.warning("Tomt reactions_df datasett")
+            return pd.DataFrame(), pd.DataFrame(), pd.Series()
+        
+        # Konverter datetime til riktig format
+        reactions_df = reactions_df.copy()
+        reactions_df['datetime'] = pd.to_datetime(reactions_df['datetime'])
+        
+        # Definer grupperingsfunksjon
+        if group_by == 'week':
+            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-W%V')
+        elif group_by == 'month':
+            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-%m')
+        else:  # default to day
+            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-%m-%d')
+            
+        # Tell reaksjoner
+        stats = pd.DataFrame({
+            '😊 Fornøyd': reactions_df['comment'].str.count('😊'),
+            '😐 Nøytral': reactions_df['comment'].str.count('😐'),
+            '😡 Misfornøyd': reactions_df['comment'].str.count('😡')
+        })
+        
+        logger.debug(f"Stats shape before grouping: {stats.shape}")
+        
+        # Grupper etter valgt periode
+        daily_stats = stats.groupby(reactions_df['group']).sum()
+        
+        logger.debug(f"Daily stats shape after grouping: {daily_stats.shape}")
+        
+        # Beregn prosenter
+        daily_total = daily_stats.sum(axis=1)
+        daily_stats_pct = daily_stats.div(daily_total, axis=0) * 100
+        
+        # Beregn score (1.0 for fornøyd, 0.5 for nøytral, 0.0 for misfornøyd)
+        daily_score = (
+            daily_stats['😊 Fornøyd'] * 1.0 + 
+            daily_stats['😐 Nøytral'] * 0.5
+        ) / daily_total
+        
+        return daily_stats, daily_stats_pct, daily_score
+        
+    except Exception as e:
+        logger.error(f"Feil ved beregning av vedlikeholdsstatistikk: {str(e)}", exc_info=True)
+        return pd.DataFrame(), pd.DataFrame(), pd.Series()
 
 def display_reaction_statistics(feedback_data):
     try:
@@ -917,7 +974,12 @@ def calculate_maintenance_stats(reactions_df, group_by='day'):
         logger.debug(f"Calculating maintenance stats grouped by: {group_by}")
         logger.debug(f"Input DataFrame shape: {reactions_df.shape}")
         
+        if reactions_df.empty:
+            logger.warning("Tomt reactions_df datasett")
+            return pd.DataFrame(), pd.DataFrame(), pd.Series()
+        
         # Konverter datetime til riktig format
+        reactions_df = reactions_df.copy()
         reactions_df['datetime'] = pd.to_datetime(reactions_df['datetime'])
         
         # Definer grupperingsfunksjon
@@ -935,8 +997,12 @@ def calculate_maintenance_stats(reactions_df, group_by='day'):
             '😡 Misfornøyd': reactions_df['comment'].str.count('😡')
         })
         
+        logger.debug(f"Stats shape before grouping: {stats.shape}")
+        
         # Grupper etter valgt periode
         daily_stats = stats.groupby(reactions_df['group']).sum()
+        
+        logger.debug(f"Daily stats shape after grouping: {daily_stats.shape}")
         
         # Beregn prosenter
         daily_total = daily_stats.sum(axis=1)
@@ -948,7 +1014,6 @@ def calculate_maintenance_stats(reactions_df, group_by='day'):
             daily_stats['😐 Nøytral'] * 0.5
         ) / daily_total
         
-        logger.debug(f"Calculated stats for {len(daily_stats)} periods")
         return daily_stats, daily_stats_pct, daily_score
         
     except Exception as e:
