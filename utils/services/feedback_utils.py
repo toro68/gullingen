@@ -97,9 +97,17 @@ def get_feedback(
     try:
         logger.debug("Starting get_feedback")
         
-        # Bygg spørring
+        # Bygg spørring med spesifikke kolonner
         query = """
-        SELECT *
+        SELECT 
+            id,
+            type,
+            customer_id,
+            datetime,
+            comment,
+            status,
+            status_changed_at,
+            hidden
         FROM feedback
         WHERE 1=1
         """
@@ -122,27 +130,25 @@ def get_feedback(
         # Hent data
         feedback_data = fetch_data("feedback", query, params)
         
-        # Konverter til DataFrame
-        df = pd.DataFrame(feedback_data)
+        # Konverter til DataFrame med spesifikke kolonnenavn
+        columns = ['id', 'type', 'customer_id', 'datetime', 'comment', 'status', 'status_changed_at', 'hidden']
+        df = pd.DataFrame(feedback_data, columns=columns)
         
         if not df.empty:
-            # Konverter datetime-kolonner med riktig format
+            # Konverter datetime-kolonner
             date_columns = ['datetime', 'status_changed_at']
             for col in date_columns:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(
-                        df[col], 
-                        format=DATE_FORMATS["database"]["datetime"],
-                        errors='coerce'
-                    )
+                    df[col] = pd.to_datetime(df[col], format=DATE_FORMATS["database"]["datetime"])
                     df[col] = df[col].dt.tz_localize(TZ)
         
         logger.debug(f"Retrieved {len(df) if not df.empty else 0} feedback entries")
+        logger.debug(f"Columns in DataFrame: {df.columns.tolist()}")
         return df
         
     except Exception as e:
         logger.error(f"Error fetching feedback: {str(e)}", exc_info=True)
-        return pd.DataFrame()
+        return pd.DataFrame(columns=['id', 'type', 'customer_id', 'datetime', 'comment', 'status', 'status_changed_at', 'hidden'])
 
 def update_feedback_status(feedback_id, new_status, changed_by, new_expiry=None, new_display=None, new_target=None):
     """
