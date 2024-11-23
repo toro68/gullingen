@@ -439,22 +439,89 @@ def display_recent_feedback():
         logger.error(f"Feil i display_recent_feedback: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av nylige rapporter")
 
-def get_feedback_statistics(start_date, end_date):
-    feedback_data = get_feedback(start_date, end_date)
-
-    if feedback_data.empty:
-        return None
-
-    stats = {
-        "total_count": len(feedback_data),
-        "type_distribution": feedback_data["type"].value_counts().to_dict(),
-        "status_distribution": feedback_data["status"].value_counts().to_dict(),
-        "daily_counts": feedback_data.groupby(feedback_data["datetime"].dt.date)
-        .size()
-        .to_dict(),
-    }
-
-    return stats
+def get_feedback_statistics(start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> dict:
+    """
+    Henter statistikk for feedback i gitt periode.
+    
+    Args:
+        start_date: Start dato for filtrering
+        end_date: Slutt dato for filtrering
+        
+    Returns:
+        dict: Statistikk for feedback
+    """
+    try:
+        logger.debug(f"Getting feedback statistics from {start_date} to {end_date}")
+        
+        # Hent feedback data
+        feedback_data = get_feedback(start_date, end_date)
+        
+        if feedback_data.empty:
+            logger.warning("No feedback data found for statistics")
+            return {
+                "total_count": 0,
+                "type_distribution": {},
+                "status_distribution": {},
+                "daily_counts": {},
+                "average_per_day": 0
+            }
+            
+        # Sjekk og standardiser kolonnenavn
+        expected_columns = ['type', 'status', 'datetime']
+        for col in expected_columns:
+            if col not in feedback_data.columns:
+                logger.error(f"Missing required column: {col}")
+                logger.debug(f"Available columns: {feedback_data.columns.tolist()}")
+                return {
+                    "total_count": len(feedback_data),
+                    "type_distribution": {},
+                    "status_distribution": {},
+                    "daily_counts": {},
+                    "average_per_day": 0
+                }
+        
+        # Beregn statistikk
+        stats = {
+            "total_count": len(feedback_data),
+            "type_distribution": (
+                feedback_data["type"].value_counts().to_dict() 
+                if "type" in feedback_data.columns else {}
+            ),
+            "status_distribution": (
+                feedback_data["status"].value_counts().to_dict()
+                if "status" in feedback_data.columns else {}
+            )
+        }
+        
+        # Beregn daglig statistikk
+        if "datetime" in feedback_data.columns:
+            daily_counts = (
+                feedback_data.set_index("datetime")
+                .resample("D")
+                .size()
+                .fillna(0)
+            )
+            stats["daily_counts"] = daily_counts.to_dict()
+            
+            # Beregn gjennomsnitt per dag
+            date_range = (end_date - start_date).days + 1
+            stats["average_per_day"] = len(feedback_data) / max(date_range, 1)
+        else:
+            stats["daily_counts"] = {}
+            stats["average_per_day"] = 0
+            
+        logger.debug(f"Calculated statistics: {stats}")
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Error calculating feedback statistics: {str(e)}", exc_info=True)
+        return {
+            "total_count": 0,
+            "type_distribution": {},
+            "status_distribution": {},
+            "daily_counts": {},
+            "average_per_day": 0
+        }
 
 
 def generate_feedback_report(start_date, end_date):
