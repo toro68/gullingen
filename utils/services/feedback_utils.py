@@ -1151,26 +1151,39 @@ def display_admin_dashboard():
                 include_hidden=True
             )
             
+            # Sjekk om vi har gyldig data før vi prøver å vise statistikk
             if feedback_data is not None and not feedback_data.empty:
                 st.subheader("📊 Statistikk og Feedback")
-                # Vis statistikk
+                
+                # Vis statistikk hvis vi har data
                 stats = get_feedback_statistics(start_date, end_date)
                 if stats:
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.metric(
                             "Totalt antall", 
-                            stats["total_count"],
+                            stats.get("total_count", 0),
                             help="Totalt antall tilbakemeldinger i perioden"
                         )
                     with col2:
+                        # Sjekk om customer_id kolonnen eksisterer før vi bruker den
+                        unique_customers = (
+                            len(feedback_data['customer_id'].unique())
+                            if 'customer_id' in feedback_data.columns
+                            else 0
+                        )
                         st.metric(
                             "Unike innsendere", 
-                            len(feedback_data['customer_id'].unique()),
+                            unique_customers,
                             help="Antall unike hytter som har gitt tilbakemelding"
                         )
                     with col3:
-                        new_cases = len(feedback_data[feedback_data['status']=='Ny'])
+                        # Sjekk om status kolonnen eksisterer før vi bruker den
+                        new_cases = (
+                            len(feedback_data[feedback_data['status']=='Ny'])
+                            if 'status' in feedback_data.columns
+                            else 0
+                        )
                         st.metric(
                             "Åpne saker", 
                             new_cases,
@@ -1234,10 +1247,12 @@ def display_admin_dashboard():
                         key="report_type"
                     )
                     
-                    # Filtrer data
+                    # Filtrer data hvis nødvendig
                     filtered_data = feedback_data
                     if selected_type != "Alle":
-                        filtered_data = feedback_data[feedback_data['type'] == selected_type]
+                        filtered_data = feedback_data[
+                            feedback_data['type'].str.contains(selected_type, na=False)
+                        ]
                     
                     # Generer og vis rapport
                     report = generate_feedback_report(start_datetime, end_datetime)
@@ -1249,6 +1264,9 @@ def display_admin_dashboard():
                             "text/plain",
                             key="download_report"
                         )
+                        
+                    # Vis detaljert oversikt
+                    display_feedback_overview(filtered_data)
                 else:
                     st.info("Ingen rapportdata tilgjengelig for valgt periode")
             else:
