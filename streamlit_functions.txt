@@ -1,0 +1,41 @@
+py:                            st
+py:                        "rode": st
+py:                        st
+py:                    "ankomst_dato": st
+py:                    "avreise_dato": st
+py:                    f"Beklager, fristen for å bestille tunbrøyting for {ankomst_dato
+py:                    st
+py:                    value=ankomst
+py:                    with st
+py:                ankomst_dato = st
+py:                avreise_dato = st
+py:                col1, col2 = st
+py:                nye_data["abonnement_type"] = st
+py:                nye_data["ankomst_dato"] = st
+py:                nye_data["avreise_dato"] = st
+py:                st
+py:                submitted = st
+py:                with st
+py:            end_date = st
+py:            f"Merk: Frist for bestilling er kl
+py:            mapbox_token = st
+py:            st
+py:            start_date = st
+py:            with st
+py:        abonnement_type = st
+py:        bestilling_id = st
+py:        col1, col2 = st
+py:        customer_id = st
+py:        end_date = st
+py:        if not st
+py:        if st
+py:        st
+py:        start_date = st
+py:    col1, col2 = st
+py:    col1, col2, col3 = st
+py:    if st
+py:    slett_id = st
+py:    sort_column = st
+py:    sort_order = st
+py:    st
+py:    with st

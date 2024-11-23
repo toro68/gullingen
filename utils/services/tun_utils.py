@@ -380,54 +380,6 @@ def hent_bestillinger_for_periode(start_date, end_date):
         logger.error(f"Error i hent_bestillinger_for_periode: {str(e)}", exc_info=True)
         return pd.DataFrame()
 
-
-def hent_statistikk_data(bestillinger: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Henter grunnleggende statistikkdata for tunbrøytingsbestillinger.
-
-    Args:
-        bestillinger (pd.DataFrame): DataFrame med alle bestillinger
-
-    Returns:
-        Dict[str, Any]: En dictionary med grunnleggende statistikkdata
-    """
-    if bestillinger.empty:
-        return {}
-
-    bestillinger["ankomst_dato"] = pd.to_datetime(
-        bestillinger["ankomst_dato"], errors="coerce"
-    ).dt.date
-
-    return {
-        "bestillinger": bestillinger,
-        "total_bestillinger": len(bestillinger),
-        "unike_brukere": bestillinger["customer_id"].nunique(),
-        "abonnement_counts": bestillinger["abonnement_type"].value_counts().to_dict(),
-        "rode_counts": (
-            bestillinger["rode"].value_counts().to_dict()
-            if "rode" in bestillinger.columns
-            else {}
-        ),
-    }
-
-
-def hent_aktive_bestillinger():
-    today = datetime.now(TZ).date()
-    with get_db_connection("tunbroyting") as conn:
-        query = """
-        SELECT id, customer_id, ankomst_dato, avreise_dato, abonnement_type
-        FROM tunbroyting_bestillinger 
-        WHERE date(ankomst_dato) >= ? OR (date(ankomst_dato) <= ? AND date(avreise_dato) >= ?)
-        OR (abonnement_type = 'Årsabonnement')
-        """
-        df = pd.read_sql_query(query, conn, params=(today, today, today))
-
-    df["ankomst_dato"] = pd.to_datetime(df["ankomst_dato"])
-    df["avreise_dato"] = pd.to_datetime(df["avreise_dato"])
-
-    return df
-
-
 def hent_bestilling(bestilling_id):
     try:
         with get_db_connection("tunbroyting") as conn:
@@ -459,19 +411,6 @@ def hent_bestilling(bestilling_id):
             exc_info=True
         )
         return None
-
-
-def get_max_bestilling_id():
-    try:
-        with get_db_connection("tunbroyting") as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT MAX(id) FROM tunbroyting_bestillinger")
-            max_id = cursor.fetchone()[0]
-            return max_id if max_id is not None else 0
-    except Exception as e:
-        logger.error("Feil ved henting av maksimum bestillings-ID: %s", str(e))
-        return 0
-
 
 # update
 def oppdater_bestilling(bestilling_id: int, nye_data: Dict[str, Any]) -> bool:
@@ -673,69 +612,6 @@ def hent_aktive_bestillinger_for_dag(dato):
         logger.error(f"Feil i hent_aktive_bestillinger_for_dag: {str(e)}")
         return pd.DataFrame()
 # filtrerer bestillinger i bestill_tunbroyting
-def filter_tunbroyting_bestillinger(bestillinger: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
-    filtered = bestillinger.copy()
-    
-    # Standardiser kolonnenavn
-    if 'ankomst' in filtered.columns:
-        filtered = filtered.rename(columns={
-            'ankomst': 'ankomst_dato',
-            'avreise': 'avreise_dato'
-        })
-    
-    current_date = datetime.now(TZ).date()
-    
-    if filters.get("vis_type") == "today":
-        filtered = filtered[
-            (filtered["abonnement_type"] == "Årsabonnement") |
-            (
-                (filtered["abonnement_type"] == "Ukentlig ved bestilling") &
-                (
-                    (filtered["ankomst_dato"].dt.date <= current_date) &
-                    (
-                        (filtered["avreise_dato"].isnull()) |
-                        (filtered["avreise_dato"].dt.date >= current_date)
-                    )
-                )
-            )
-        ]
-    elif filters.get("vis_type") == "active":
-        end_date = current_date + timedelta(days=7)
-        filtered = filtered[
-            (filtered["abonnement_type"] == "Årsabonnement")
-            | (
-                (filtered["abonnement_type"] == "Ukentlig ved bestilling")
-                & (
-                    (filtered["ankomst_dato"].dt.date <= end_date)
-                    & (
-                        (filtered["avreise_dato"].isnull())
-                        | (filtered["avreise_dato"].dt.date >= current_date)
-                    )
-                )
-            )
-        ]
-    else:
-        if filters.get("start_date"):
-            filtered = filtered[
-                (filtered["ankomst_dato"].dt.date >= filters["start_date"])
-                | (
-                    (filtered["ankomst_dato"].dt.date < filters["start_date"])
-                    & (
-                        (filtered["avreise_dato"].isnull())
-                        | (filtered["avreise_dato"].dt.date >= filters["start_date"])
-                    )
-                )
-            ]
-        if filters.get("end_date"):
-            filtered = filtered[filtered["ankomst_dato"].dt.date <= filters["end_date"]]
-
-    if filters.get("abonnement_type"):
-        filtered = filtered[
-            filtered["abonnement_type"].isin(filters["abonnement_type"])
-        ]
-
-    return filtered
-
 def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
     """Filtrerer bestillinger for å finne aktive bestillinger for dagens dato."""
     try:
@@ -881,104 +757,7 @@ def vis_tunbroyting_statistikk(bookings_func=None):
         logger.error(f"Feil i vis_tunbroyting_statistikk: {str(e)}", exc_info=True)
         st.error("Kunne ikke vise statistikk for tunbrøyting")
 
-
-# tun_utils.py
 # Kategori: View Functions
-
-def vis_tunbestillinger_for_periode():
-    """Viser tunbrøytingsbestillinger for valgt periode med formatert visning"""
-    st.subheader("Tunbrøyting i valgt periode")
-    
-    # Hent standardperiode fra config
-    default_start, default_end = get_default_date_range()
-    
-    # Datovelgere
-    col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input(
-            "Fra dato", 
-            value=default_start.date(),
-            min_value=datetime.now(TZ).date() - timedelta(days=DATE_VALIDATION["default_date_range"]),
-            max_value=datetime.now(TZ).date() + timedelta(days=DATE_VALIDATION["max_future_booking"]),
-            format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
-        )
-    with col2:
-        end_date = st.date_input(
-            "Til dato", 
-            value=default_end.date(),
-            min_value=start_date,
-            max_value=start_date + timedelta(days=DATE_VALIDATION["max_future_booking"]),
-            format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
-        )
-        
-    if start_date <= end_date:
-        # Konverter datoer til datetime med tidssone
-        periode_start = combine_date_with_tz(start_date)
-        periode_slutt = combine_date_with_tz(end_date)
-        
-        bestillinger = hent_bestillinger_for_periode(periode_start, periode_slutt)
-        
-        if not bestillinger.empty:
-            try:
-                # Konverter datokolonner til riktig format
-                for col in ['ankomst_dato', 'avreise_dato']:
-                    if col in bestillinger.columns:
-                        bestillinger[col] = bestillinger[col].apply(safe_to_datetime)
-                
-                # Lag visnings-DataFrame
-                visnings_df = pd.DataFrame({
-                    "rode": bestillinger["customer_id"].apply(get_rode),
-                    "Hytte": bestillinger["customer_id"],
-                    "Type": bestillinger["abonnement_type"],
-                    "Ankomst": bestillinger["ankomst_dato"].apply(
-                        lambda x: format_date(x, "display", "date")
-                    ),
-                    "Avreise": bestillinger["avreise_dato"].apply(
-                        lambda x: format_date(x, "display", "date") if pd.notnull(x) else "Ikke satt"
-                    )
-                })
-                
-                # Sorter og vis
-                visnings_df = visnings_df.sort_values(["rode", "Hytte"])
-                
-                # Vis statistikk
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Antall bestillinger", len(visnings_df))
-                with col2:
-                    st.metric("Antall unike hytter", visnings_df["Hytte"].nunique())
-                
-                
-                # Vis dataframe
-                st.dataframe(
-                    visnings_df,
-                    column_config={
-                        "rode": st.column_config.NumberColumn("Rode", format="%d"),
-                        "Hytte": "Hytte",
-                        "Type": "Type",
-                        "Ankomst": "Ankomst",
-                        "Avreise": "Avreise"
-                    },
-                    hide_index=True
-                )
-                
-                # Last ned som CSV
-                periode_str = f"{format_date(periode_start, 'api', 'date')}_{format_date(periode_slutt, 'api', 'date')}"
-                csv = visnings_df.to_csv(index=False)
-                st.download_button(
-                    label="Last ned som CSV",
-                    data=csv,
-                    file_name=f"tunbroyting_bestillinger_{periode_str}.csv",
-                    mime="text/csv",
-                    help="Last ned bestillingene som CSV-fil"
-                )
-                
-            except Exception as e:
-                logger.error(f"Feil ved visning av bestillinger: {str(e)}", exc_info=True)
-                st.error("Kunne ikke vise bestillingene. Vennligst prøv igjen senere.")
-        else:
-            st.info("Ingen bestillinger funnet for valgt periode")
-
 # liste for tunkart-siden
 def vis_dagens_bestillinger():
     """Viser dagens aktive bestillinger i en tabell"""
@@ -1027,20 +806,7 @@ def vis_dagens_bestillinger():
         logger.error(f"Feil i vis_dagens_bestillinger: {str(e)}", exc_info=True)
         st.error("Kunne ikke vise dagens bestillinger. Vennligst prøv igjen senere.")
 
-
-def print_dataframe_info(df, name):
-    print(f"\n--- {name} ---")
-    print(f"Shape: {df.shape}")
-    print(f"Columns: {df.columns.tolist()}")
-    print(f"Data types:\n{df.dtypes}")
-    print(f"First few rows:\n{df.head()}")
-    print("---\n")
-
-
-# File: app.py
 # Category: View Functions
-
-
 def vis_tunbroyting_oversikt():
     """
     Viser oversikt over tunbrøytingsbestillinger med kart og lister.
@@ -1073,35 +839,29 @@ def vis_tunbroyting_oversikt():
         current_time = get_current_time()
         dagens_bestillinger = filter_todays_bookings(bestillinger)
         
-        # Legg til kartvisning her
+        # Fjern duplikat kartvisning og bruk unike nøkler
         st.subheader(f"Tunbrøytingskart for {format_date(current_time, 'display', 'date')}")
-        vis_dagens_tunkart(
-            dagens_bestillinger,
-            mapbox_token=mapbox_token,
-            title=f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
-        )
         
-        if not dagens_bestillinger.empty:
-            st.subheader(f"Kart over tunbrøytinger {format_date(current_time, 'display', 'date')}")
+        # Verifiser kartkonfigurasjon
+        is_valid, error_msg = verify_map_configuration(dagens_bestillinger, mapbox_token)
+        
+        if is_valid:
+            debug_map_data(dagens_bestillinger)
             
-            # Verifiser kartkonfigurasjon
-            is_valid, error_msg = verify_map_configuration(dagens_bestillinger, mapbox_token)
+            fig = vis_dagens_tunkart(
+                dagens_bestillinger,
+                mapbox_token=mapbox_token,
+                title=f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
+            )
             
-            if is_valid:
-                debug_map_data(dagens_bestillinger)  # Logger debug info
-                
-                fig_today = vis_dagens_tunkart(
-                    dagens_bestillinger, 
-                    mapbox_token, 
-                    f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
-                )
-                
-                if fig_today:
-                    st.plotly_chart(fig_today, use_container_width=True, key="fig_today")
-                else:
-                    st.warning("Kunne ikke generere kart for dagens tunbrøytinger")
+            if fig:
+                # Bruk timestamp som unik nøkkel
+                unique_key = f"tunkart_{datetime.now().timestamp()}"
+                st.plotly_chart(fig, use_container_width=True, key=unique_key)
             else:
-                st.warning(f"Kunne ikke vise kart: {error_msg}")
+                st.warning("Kunne ikke generere kart for dagens tunbrøytinger")
+        else:
+            st.warning(f"Kunne ikke vise kart: {error_msg}")
         
         # --- Vis dagens bestillinger som liste ---
         st.subheader(f"Tunbrøytinger {format_date(current_time, 'display', 'date')}")
@@ -1169,159 +929,6 @@ def vis_tunbroyting_oversikt():
     except Exception as e:
         logger.error(f"Feil i vis_tunbroyting_oversikt: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av tunbrøytingsoversikten")
-
-def vis_aktive_bestillinger():
-    st.subheader("Aktive tunbestillinger")
-
-    # Hent alle bestillinger
-    bestillinger = get_bookings()
-
-    # Filtreringsmuligheter
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        start_date = st.date_input(
-            "Fra dato", value=datetime.now(TZ).date(), key="active_start_date"
-        )
-    with col2:
-        end_date = st.date_input(
-            "Til dato",
-            value=datetime.now(TZ).date() + timedelta(days=30),
-            key="active_end_date",
-        )
-    with col3:
-        abonnement_type = st.multiselect(
-            "Abonnement type",
-            options=bestillinger["abonnement_type"].unique(),
-            key="active_abonnement_type",
-        )
-
-    # Filtrer bestillinger
-    mask = (pd.to_datetime(bestillinger["ankomst_dato"]).dt.date >= start_date) & (
-        pd.to_datetime(bestillinger["ankomst_dato"]).dt.date <= end_date
-    )
-    if abonnement_type:
-        mask &= bestillinger["abonnement_type"].isin(abonnement_type)
-
-    filtered_bestillinger = bestillinger[mask]
-
-    # Sorter bestillinger
-    sort_column = st.selectbox(
-        "Sorter etter",
-        options=["ankomst_dato", "customer_id", "abonnement_type"],
-        key="active_sort_column",
-    )
-    sort_order = st.radio(
-        "Sorteringsrekkefølge",
-        options=["Stigende", "Synkende"],
-        key="active_sort_order",
-    )
-
-    filtered_bestillinger = filtered_bestillinger.sort_values(
-        by=sort_column, ascending=(sort_order == "Stigende")
-    )
-
-    # Vis dataframe
-    st.dataframe(filtered_bestillinger)
-
-    # Vis statistikk
-    st.subheader("Statistikk")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Totalt antall aktive bestillinger", len(filtered_bestillinger))
-    with col2:
-        st.metric(
-            "Antall årsabonnementer",
-            len(
-                filtered_bestillinger[
-                    filtered_bestillinger["abonnement_type"] == "Årsabonnement"
-                ]
-            ),
-        )
-    with col3:
-        st.metric(
-            "Antall ukentlige bestillinger",
-            len(
-                filtered_bestillinger[
-                    filtered_bestillinger["abonnement_type"]
-                    == "Ukentlig ved bestilling"
-                ]
-            ),
-        )
-
-    # Vis kart over aktive bestillinger
-    if not filtered_bestillinger.empty:
-        st.subheader("Kart over aktive bestillinger")
-        customer_db = load_customer_database()
-
-        # Merge bestillinger with customer data
-        merged_data = pd.merge(
-            filtered_bestillinger,
-            customer_db,
-            left_on="customer_id",
-            right_on="Id",
-            how="left",
-        )
-
-        # Create the map
-        fig = go.Figure(
-            go.Scattermapbox(
-                lat=merged_data["Latitude"],
-                lon=merged_data["Longitude"],
-                mode="markers",
-                marker=go.scattermapbox.Marker(size=10),
-                text=merged_data["Id"],
-                hoverinfo="text",
-            )
-        )
-
-        fig.update_layout(
-            mapbox_style="open-street-map",
-            mapbox=dict(
-                center=go.layout.mapbox.Center(
-                    lat=merged_data["Latitude"].mean(),
-                    lon=merged_data["Longitude"].mean(),
-                ),
-                zoom=13,
-            ),
-            showlegend=False,
-            height=600,
-        )
-
-        st.plotly_chart(fig)
-    else:
-        st.info("Ingen aktive bestillinger å vise på kartet.")
-
-
-# Viser bestillinger for en bruker i Bestill tunbrøyting
-def display_bookings(customer_id):
-    """Viser brukerens tunbrøytingsbestillinger"""
-    try:
-        bruker_bestillinger = get_bookings()
-        if not bruker_bestillinger.empty:
-            # Filtrer på bruker_id
-            bruker_bestillinger = bruker_bestillinger[
-                bruker_bestillinger["customer_id"].astype(str) == str(customer_id)
-            ].sort_values("ankomst", ascending=False)
-
-            for _, bestilling in bruker_bestillinger.iterrows():
-                with st.expander(
-                    f"Bestilling - {bestilling['ankomst'].strftime('%d.%m.%Y')}"
-                ):
-                    st.write(
-                        f"Ankomst: {bestilling['ankomst'].strftime('%d.%m.%Y %H:%M')}"
-                    )
-                    if pd.notna(bestilling["avreise"]):
-                        st.write(
-                            f"Avreise: {bestilling['avreise'].strftime('%d.%m.%Y %H:%M')}"
-                        )
-                    st.write(f"Type: {bestilling['abonnement_type']}")
-        else:
-            st.info("Du har ingen tidligere bestillinger.")
-
-    except Exception as e:
-        logger.error(f"Feil ved visning av bestillinger: {str(e)}")
-        st.error("Kunne ikke vise dine bestillinger. Vennligst prøv igjen senere.")
-
 
 def vis_hyttegrend_aktivitet():
     try:
