@@ -85,19 +85,35 @@ def save_feedback(feedback_type, datetime_str, comment, customer_id, hidden):
         return False
 
 
-def get_feedback(start_date=None, end_date=None) -> pd.DataFrame:
+def get_feedback(start_date=None, end_date=None, include_hidden=False) -> pd.DataFrame:
+    """
+    Henter feedback fra databasen
+    
+    Args:
+        start_date: Valgfri start dato for filtrering
+        end_date: Valgfri slutt dato for filtrering
+        include_hidden: Om skjulte tilbakemeldinger skal inkluderes
+        
+    Returns:
+        pd.DataFrame: DataFrame med feedback data
+    """
     try:
         with get_db_connection("feedback") as conn:
             query = """
                 SELECT *
                 FROM feedback
+                WHERE 1=1
                 """
             params = []
+            
+            if not include_hidden:
+                query += " AND (hidden IS NULL OR hidden = 0)"
+                
             if start_date:
-                query += " WHERE datetime >= ?"
+                query += " AND datetime >= ?"
                 params.append(start_date)
             if end_date:
-                query += " AND datetime <= ?" if start_date else " WHERE datetime <= ?"
+                query += " AND datetime <= ?"
                 params.append(end_date)
 
             df = pd.read_sql_query(query, conn, params=params)
