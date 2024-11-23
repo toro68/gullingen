@@ -1051,31 +1051,30 @@ def display_admin_dashboard():
         st.exception(e)
 
 def display_feedback_dashboard():
-    """Viser generell feedback-oversikt"""
     try:
         logger.info("Starting display_feedback_dashboard")
         st.header("📬 Feedback Oversikt")
         
         # Filtre
-        logger.debug("Setting up filters")
         col1, col2, col3 = st.columns(3)
         with col1:
             start_date, end_date = get_date_range_input()
-            logger.debug(f"Date range selected: {start_date} to {end_date}")
             
         with col2:
             feedback_types = ["Alle"] + list(FEEDBACK_ICONS.keys())
             selected_type = st.selectbox("Type", feedback_types)
-            logger.debug(f"Selected type: {selected_type}")
             
         with col3:
             include_hidden = st.checkbox("Vis skjult", value=False)
-            logger.debug(f"Include hidden: {include_hidden}")
             
         # Hent og vis data
         feedback_data = get_filtered_feedback(start_date, end_date, selected_type, include_hidden)
-        display_feedback_table(feedback_data)
         
+        if feedback_data is not None and not feedback_data.empty:  # Sjekk at vi har data
+            display_feedback_table(feedback_data)
+        else:
+            st.info("Ingen feedback funnet i valgt periode")
+            
     except Exception as e:
         logger.error(f"Feil i feedback oversikt: {str(e)}")
         st.error("Kunne ikke vise feedback oversikt")
