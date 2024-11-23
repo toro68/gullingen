@@ -24,7 +24,6 @@ from utils.core.config import (
     get_current_time,
     combine_date_with_tz,
     format_date,
-    save_to_excel,
     DATE_VALIDATION,
     DATE_INPUT_CONFIG
 )
@@ -1446,7 +1445,7 @@ def display_feedback_table(feedback_data):
             use_container_width=True
         )
         
-        # Nedlastingsknapper
+        # Nedlastingsknapper bruker pandas direkte
         col1, col2 = st.columns(2)
         with col1:
             csv = display_data.to_csv(index=False)
@@ -1470,7 +1469,6 @@ def display_feedback_table(feedback_data):
     except Exception as e:
         logger.error(f"Feil ved visning av feedback-tabell: {str(e)}")
         st.error("Kunne ikke vise feedback-oversikt")
-
 def display_maintenance_chart(data):
     """Viser vedlikeholdsgraf"""
     try:
