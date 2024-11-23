@@ -1086,14 +1086,16 @@ def get_filtered_feedback(start_date, end_date, feedback_type, include_hidden):
         start_datetime = combine_date_with_tz(start_date)
         end_datetime = combine_date_with_tz(end_date, datetime.max.time())
         
+        # Hent data og lag en eksplisitt kopi
         feedback_data = get_feedback(
             start_date=start_datetime,
             end_date=end_datetime,
             include_hidden=include_hidden
-        )
+        ).copy()
         
         if feedback_type != "Alle":
-            feedback_data = feedback_data[feedback_data['type'] == feedback_type]
+            # Bruk .loc for å unngå SettingWithCopyWarning
+            feedback_data = feedback_data.loc[feedback_data['type'] == feedback_type]
             
         return feedback_data
         
@@ -1103,39 +1105,52 @@ def get_filtered_feedback(start_date, end_date, feedback_type, include_hidden):
 
 def display_feedback_table(feedback_data):
     """Viser feedback-tabell med nedlastingsmuligheter"""
-    if feedback_data.empty:
-        st.info("Ingen feedback funnet i valgt periode")
-        return
+    try:
+        if feedback_data.empty:
+            st.info("Ingen feedback funnet i valgt periode")
+            return
+            
+        # Lag en kopi for visning og eksport
+        display_data = feedback_data.copy()
         
-    # Vis tabell
-    st.dataframe(
-        feedback_data[[
-            'datetime', 'type', 'comment', 'status', 
-            'customer_id', 'status_changed_at'
-        ]],
-        use_container_width=True
-    )
-    
-    # Nedlastingsknapper
-    col1, col2 = st.columns(2)
-    with col1:
-        csv = feedback_data.to_csv(index=False)
-        st.download_button(
-            "📥 Last ned CSV",
-            csv,
-            "feedback.csv",
-            "text/csv"
+        # Konverter datetime-kolonner til timezone-naive
+        datetime_columns = display_data.select_dtypes(include=['datetime64[ns, UTC]']).columns
+        for col in datetime_columns:
+            display_data[col] = pd.to_datetime(display_data[col]).dt.tz_localize(None)
+        
+        # Vis tabell
+        st.dataframe(
+            display_data[[
+                'datetime', 'type', 'comment', 'status', 
+                'customer_id', 'status_changed_at'
+            ]],
+            use_container_width=True
         )
-    with col2:
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-            feedback_data.to_excel(writer, index=False)
-        st.download_button(
-            "📊 Last ned Excel",
-            buffer.getvalue(),
-            "feedback.xlsx",
-            "application/vnd.ms-excel"
-        )
+        
+        # Nedlastingsknapper
+        col1, col2 = st.columns(2)
+        with col1:
+            csv = display_data.to_csv(index=False)
+            st.download_button(
+                "📥 Last ned CSV",
+                csv,
+                "feedback.csv",
+                "text/csv"
+            )
+        with col2:
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                display_data.to_excel(writer, index=False)
+            st.download_button(
+                "📊 Last ned Excel",
+                buffer.getvalue(),
+                "feedback.xlsx",
+                "application/vnd.ms-excel"
+            )
+            
+    except Exception as e:
+        logger.error(f"Feil ved visning av feedback-tabell: {str(e)}")
+        st.error("Kunne ikke vise feedback-oversikt")
 
 def display_maintenance_chart(data):
     """Viser vedlikeholdsgraf"""
