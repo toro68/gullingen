@@ -436,33 +436,6 @@ def display_recent_feedback():
         logger.error(f"Feil i display_recent_feedback: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av nylige rapporter")
 
-
-def batch_insert_feedback(feedback_list):
-    query = """
-    INSERT INTO feedback (type, datetime, comment, customer_id, status, hidden)
-    VALUES (?, ?, ?, ?, ?, ?)
-    """
-    params = [
-        (f["type"], f["datetime"], f["comment"], f["customer_id"], "Ny", 0)
-        for f in feedback_list
-    ]
-
-    execute_query("feedback", query, params, many=True)
-
-    logger.info(f"Batch inserted {len(feedback_list)} feedback entries")
-
-
-def hide_feedback(feedback_id):
-    try:
-        query = "UPDATE feedback SET hidden = 1 WHERE id = ?"
-        execute_query("feedback", query, (feedback_id,))
-        logger.info(f"Skjulte feedback med id: {feedback_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Feil ved skjuling av feedback: {str(e)}")
-        return False
-
-
 def get_feedback_statistics(start_date, end_date):
     feedback_data = get_feedback(start_date, end_date)
 
@@ -516,35 +489,10 @@ def generate_feedback_report(start_date, end_date):
 
     return report
 
-
-# Helper function to get feedback counts by type
-def get_feedback_counts_by_type(start_date, end_date):
-    feedback_data = get_feedback(start_date, end_date)
-    return feedback_data["type"].value_counts().to_dict()
-
-
-# Helper function to get feedback counts by status
-def get_feedback_counts_by_status(start_date, end_date):
-    feedback_data = get_feedback(start_date, end_date)
-    return feedback_data["status"].value_counts().to_dict()
-
-
 # Helper function to get daily feedback counts
 def get_daily_feedback_counts(start_date, end_date):
     feedback_data = get_feedback(start_date, end_date)
     return feedback_data.groupby(feedback_data["datetime"].dt.date).size().to_dict()
-
-
-# Function to analyze feedback trends
-def analyze_feedback_trends(start_date, end_date, window=7):
-    daily_counts = get_daily_feedback_counts(start_date, end_date)
-    df = pd.DataFrame(list(daily_counts.items()), columns=["date", "count"])
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date")
-    df["rolling_avg"] = df["count"].rolling(window=window).mean()
-
-    return df
-
 
 # Function to categorize feedback automatically
 def categorize_feedback(feedback_text):
@@ -887,25 +835,6 @@ def display_maintenance_summary(daily_stats, daily_score, group_by):
         logger.error(f"Error in display_maintenance_summary: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av statistikken")
         raise
-
-
-def handle_stroing_feedback(feedback_data: dict) -> bool:
-    """Håndterer feedback relatert til strøing"""
-    try:
-        if feedback_data.get("type") == "Strøing":
-            # Logg feedback
-            log_stroing_activity(
-                "feedback_received",
-                feedback_data.get("customer_id"),
-                {"comment": feedback_data.get("comment")},
-            )
-
-        return True
-
-    except Exception as e:
-        logger.error(f"Feil ved håndtering av strøing-feedback: {str(e)}")
-        return False
-
 
 def display_reaction_statistics(feedback_data):
     try:
@@ -1292,56 +1221,6 @@ def display_feedback_table(feedback_data):
             "application/vnd.ms-excel"
         )
 
-def get_maintenance_data(period):
-    """Henter vedlikeholdsdata for valgt periode"""
-    try:
-        logger.info(f"Henter vedlikeholdsdata for periode: {period}")
-        # Implementer logikk for å hente data
-        return pd.DataFrame()  # Returner tom DataFrame hvis ingen data
-    except Exception as e:
-        logger.error(f"Feil ved henting av vedlikeholdsdata: {str(e)}")
-        return pd.DataFrame()
-
-def get_today_maintenance_stats():
-    """Henter dagens vedlikeholdsstatistikk"""
-    try:
-        logger.info("Henter dagens vedlikeholdsstatistikk")
-        # Implementer logikk for å hente statistikk
-        return {
-            "happy": 0,
-            "neutral": 0,
-            "sad": 0
-        }
-    except Exception as e:
-        logger.error(f"Feil ved henting av vedlikeholdsstatistikk: {str(e)}")
-        return None
-
-def display_satisfaction_metrics(data):
-    """Viser tilfredshetsmålinger"""
-    try:
-        if data.empty:
-            st.info("Ingen data tilgjengelig for valgt periode")
-            return
-            
-        # Implementer visning av målinger
-        st.metric("😊 Fornøyde", 0)
-        st.metric("😐 Nøytrale", 0)
-        st.metric("😡 Misfornøyde", 0)
-    except Exception as e:
-        logger.error(f"Feil ved visning av tilfredshetsmålinger: {str(e)}")
-
-def display_response_time_metrics(data):
-    """Viser responstidsmålinger"""
-    try:
-        if data.empty:
-            st.info("Ingen data tilgjengelig for valgt periode")
-            return
-            
-        # Implementer visning av responstider
-        st.metric("Gjennomsnittlig responstid", "N/A")
-    except Exception as e:
-        logger.error(f"Feil ved visning av responstidsmålinger: {str(e)}")
-
 def display_maintenance_chart(data):
     """Viser vedlikeholdsgraf"""
     try:
@@ -1353,25 +1232,3 @@ def display_maintenance_chart(data):
         st.line_chart(data)
     except Exception as e:
         logger.error(f"Feil ved visning av vedlikeholdsgraf: {str(e)}")
-
-def display_time_based_stats():
-    """Viser tidsbasert statistikk"""
-    try:
-        st.info("Tidsbasert statistikk kommer snart")
-    except Exception as e:
-        logger.error(f"Feil ved visning av tidsbasert statistikk: {str(e)}")
-
-def display_cabin_based_stats():
-    """Viser hyttebasert statistikk"""
-    try:
-        st.info("Hyttebasert statistikk kommer snart")
-    except Exception as e:
-        logger.error(f"Feil ved visning av hyttebasert statistikk: {str(e)}")
-
-def display_response_time_stats():
-    """Viser responstidsstatistikk"""
-    try:
-        st.info("Responstidsstatistikk kommer snart")
-    except Exception as e:
-        logger.error(f"Feil ved visning av responstidsstatistikk: {str(e)}")
-
