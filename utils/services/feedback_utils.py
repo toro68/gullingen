@@ -1066,9 +1066,8 @@ def display_daily_maintenance_rating():
         st.error("Det oppstod en feil ved visning av tilbakemeldingsskjema")
 
 def display_admin_dashboard():
+    """Viser admin dashboard med feedback oversikt"""
     try:
-        logger.info("=== Starting display_admin_dashboard ===")
-        
         st.title("🎛️ Feedback Dashboard")
         
         tab1, tab2, tab3 = st.tabs([
@@ -1078,49 +1077,78 @@ def display_admin_dashboard():
         ])
         
         with tab1:
-            display_feedback_dashboard()
+            display_feedback_overview()
             
         with tab2:
-            try:
-                # Hent data først
-                start_date = get_current_time().date() - timedelta(days=30)
-                end_date = get_current_time().date()
-                
-                feedback_data = get_feedback(
-                    start_date=start_date,
-                    end_date=end_date,
-                    include_hidden=True
-                )
-                
-                # Sikre at vi har data før vi fortsetter
-                if feedback_data is not None and not feedback_data.empty:
-                    maintenance_data = feedback_data[feedback_data['type'] == 'Vintervedlikehold'].copy()
-                    
-                    if not maintenance_data.empty:
-                        col1, col2 = st.columns([2, 1])
-                        with col1:
-                            daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(maintenance_data)
-                            if not daily_stats.empty:
-                                display_maintenance_summary(daily_stats, daily_stats_pct, daily_score)
-                            else:
-                                st.info("Ingen vedlikeholdsstatistikk tilgjengelig")
-                        with col2:
-                            display_daily_maintenance_rating()
-                    else:
-                        st.info("Ingen vedlikeholdsdata funnet i valgt periode")
-                else:
-                    st.info("Ingen data tilgjengelig")
-                    
-            except Exception as e:
-                logger.error(f"Feil i vedlikeholdsfanen: {str(e)}", exc_info=True)
-                st.error("Kunne ikke vise vedlikeholdsdata")
+            display_maintenance_tab()
                 
         with tab3:
-            display_reaction_statistics(feedback_data)
+            display_reaction_statistics()
 
     except Exception as e:
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av dashboardet")
+
+def display_maintenance_tab():
+    """Viser vedlikeholdsfanen med statistikk og oversikt"""
+    try:
+        # Hent data for siste 30 dager
+        start_date = get_current_time().date() - timedelta(days=30)
+        end_date = get_current_time().date()
+        
+        # Hent feedback data
+        feedback_data = get_feedback(
+            start_date=start_date,
+            end_date=end_date,
+            include_hidden=True
+        )
+        
+        # Filtrer vedlikeholdsdata
+        maintenance_data = feedback_data[
+            feedback_data['type'] == 'Vintervedlikehold'
+        ].copy() if feedback_data is not None else pd.DataFrame()
+        
+        if maintenance_data.empty:
+            st.info("Ingen vedlikeholdsdata funnet i valgt periode")
+            return
+            
+        # Beregn statistikk
+        daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(maintenance_data)
+        
+        # Vis statistikk i to kolonner
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            if not daily_stats.empty:
+                display_maintenance_summary(daily_stats, daily_stats_pct, daily_score)
+            else:
+                st.info("Ingen vedlikeholdsstatistikk tilgjengelig")
+                
+        with col2:
+            st.subheader("Oppsummering")
+            
+            # Vis totalt antall tilbakemeldinger
+            total_feedback = len(maintenance_data)
+            st.metric("Totalt antall", str(total_feedback))
+            
+            # Vis gjennomsnittlig score hvis tilgjengelig
+            if not daily_score.empty:
+                avg_score = daily_score.mean()
+                st.metric("Gjennomsnittlig score", f"{avg_score:.2f}")
+                
+            # Vis fordeling av reaksjoner
+            reactions = maintenance_data['comment'].str.count('😊').sum()
+            st.metric("Antall fornøyde", str(reactions))
+            
+            neutral = maintenance_data['comment'].str.count('😐').sum()
+            st.metric("Antall nøytrale", str(neutral))
+            
+            unhappy = maintenance_data['comment'].str.count('😡').sum()
+            st.metric("Antall misfornøyde", str(unhappy))
+            
+    except Exception as e:
+        logger.error(f"Feil i vedlikeholdsfanen: {str(e)}", exc_info=True)
+        st.error("Kunne ikke vise vedlikeholdsdata")
 
 def display_feedback_dashboard():
     try:
