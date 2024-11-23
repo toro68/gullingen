@@ -1068,7 +1068,18 @@ def display_daily_maintenance_rating():
 def display_admin_dashboard():
     """Viser admin dashboard med feedback oversikt"""
     try:
+        logger.info("Starting display_admin_dashboard")
         st.title("🎛️ Feedback Dashboard")
+        
+        # Hent data først
+        start_date = get_current_time().date() - timedelta(days=30)
+        end_date = get_current_time().date()
+        
+        feedback_data = get_feedback(
+            start_date=start_date,
+            end_date=end_date,
+            include_hidden=True
+        )
         
         tab1, tab2, tab3 = st.tabs([
             "📊 Feedback Oversikt",
@@ -1077,17 +1088,18 @@ def display_admin_dashboard():
         ])
         
         with tab1:
-            display_feedback_overview()
+            display_feedback_overview(feedback_data)  # Send med data
             
         with tab2:
             display_maintenance_tab()
                 
         with tab3:
-            display_reaction_statistics()
+            display_reaction_statistics(feedback_data)  # Send med data her også
 
     except Exception as e:
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av dashboardet")
+        
 def display_maintenance_tab():
     """Viser vedlikeholdsfanen med statistikk og oversikt"""
     try:
