@@ -1160,117 +1160,78 @@ def display_daily_maintenance_rating():
         logger.error(f"Error in display_daily_maintenance_rating: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av tilbakemeldingsskjema")
 
+# feedback_utils.py
+
 def display_admin_dashboard():
-    """Viser admin dashboard med feedback oversikt"""
+    """
+    Viser admin dashboard for feedback med omfattende oversikt, statistikk og rapporter.
+    Bruker eksisterende funksjoner for å vise data på en strukturert måte.
+    """
     try:
-        st.title("🎛️ Feedback Dashboard")
+        st.title("📊 Feedback Dashboard")
         
-        # Hent data for siste 7 dager
-        end_date = get_current_time()
-        start_date = end_date - timedelta(days=DATE_VALIDATION["default_date_range"])
+        # Hovedtabs for ulike visninger
+        tab1, tab2, tab3 = st.tabs([
+            "🔍 Oversikt og Statistikk", 
+            "🚜 Vedlikeholdsanalyse", 
+            "📝 Rapporter"
+        ])
         
-        logger.debug(f"Henter feedback fra {start_date} til {end_date}")
-        
-        # Hent all feedback først
+        # Hent datofilter som brukes på tvers av tabs
+        start_date, end_date = get_date_range_input()
+        if not start_date or not end_date:
+            st.warning("Vennligst velg gyldig datoperiode")
+            return
+            
+        # Hent data én gang for alle tabs
         feedback_data = get_feedback(
             start_date=start_date,
             end_date=end_date,
             include_hidden=True
         )
         
-        # Vedlikeholdsstatistikk øverst
-        st.subheader("🚜 Vedlikehold siste 7 dager")
-        
-        # Opprett dataframe med alle dager først
-        date_range = pd.date_range(
-            start=start_date.date(),
-            end=end_date.date(),
-            freq='D'
-        )
-        
-        daily_stats = pd.DataFrame({
-            'Dato': date_range,
-            'Fornøyd': 0,
-            'Nøytral': 0,
-            'Misfornøyd': 0
-        })
-        
-        # Hvis vi har vedlikeholdsdata, oppdater statistikken
-        if not feedback_data.empty:
-            maintenance_data = feedback_data[
-                feedback_data['type'].str.contains('vedlikehold', case=False, na=False)
-            ].copy()
+        with tab1:
+            st.subheader("📊 Statistikk og Analyse")
             
-            maintenance_data['date'] = pd.to_datetime(maintenance_data['datetime']).dt.date
+            # Vis generell statistikk
+            stats = get_feedback_statistics(start_date, end_date)
+            if stats:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Totalt antall", stats["total_count"])
+                with col2:
+                    st.metric("Unike innsendere", 
+                             len(feedback_data['customer_id'].unique()))
+                with col3:
+                    st.metric("Åpne saker", 
+                             len(feedback_data[feedback_data['status']=='Ny']))
+                             
+            # Vis reaksjonsstatistikk
+            display_reaction_statistics(feedback_data)
             
-            for idx, row in daily_stats.iterrows():
-                current_date = row['Dato'].date()
-                day_data = maintenance_data[maintenance_data['date'] == current_date]
-                
-                if not day_data.empty:
-                    daily_stats.loc[idx, 'Fornøyd'] = day_data['comment'].str.count('😊').sum()
-                    daily_stats.loc[idx, 'Nøytral'] = day_data['comment'].str.count('😐').sum()
-                    daily_stats.loc[idx, 'Misfornøyd'] = day_data['comment'].str.count('😡').sum()
-        
-        # Formater datoer for visning
-        daily_stats['Dato'] = daily_stats['Dato'].dt.strftime(DATE_FORMATS['display']['date'])
-        
-        # Vis dataframe og nedlastingsknapper
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            csv = daily_stats.to_csv(index=False)
-            st.download_button(
-                "📥 Last ned CSV",
-                csv,
-                "vedlikehold_statistikk.csv",
-                "text/csv",
-                use_container_width=True
-            )
+        with tab2:
+            st.subheader("🚜 Vedlikeholdsanalyse")
+            # Bruker eksisterende funksjon
+            display_maintenance_tab(feedback_data)
             
-        with col2:
-            # Excel nedlasting
-            buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                daily_stats.to_excel(writer, index=False, sheet_name="Vedlikehold")
-            st.download_button(
-                "📊 Last ned Excel",
-                buffer.getvalue(),
-                "vedlikehold_statistikk.xlsx",
-                "application/vnd.ms-excel",
-                use_container_width=True
-            )
-        
-        # Vis dataframe
-        st.dataframe(
-            data=daily_stats,
-            column_config={
-                "Dato": st.column_config.TextColumn(
-                    "Dato",
-                    width="medium"
-                ),
-                "Fornøyd": st.column_config.NumberColumn(
-                    "😊 Fornøyd",
-                    format="%d"
-                ),
-                "Nøytral": st.column_config.NumberColumn(
-                    "😐 Nøytral",
-                    format="%d"
-                ),
-                "Misfornøyd": st.column_config.NumberColumn(
-                    "😡 Misfornøyd",
-                    format="%d"
+        with tab3:
+            st.subheader("📝 Rapporter og Detaljer")
+            # Bruker eksisterende funksjon
+            display_feedback_overview(feedback_data)
+            
+            # Legg til rapportgenerering
+            if st.button("📥 Generer detaljert rapport"):
+                report = generate_feedback_report(start_date, end_date)
+                st.download_button(
+                    "Last ned rapport",
+                    report,
+                    "feedback_rapport.txt",
+                    "text/plain"
                 )
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-        
-        # Resten av koden med tabs...
-
+                
     except Exception as e:
-        logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
-        st.error("Det oppstod en feil ved lasting av dashboardet")
+        logger.error(f"Feil i display_admin_dashboard: {str(e)}", exc_info=True)
+        st.error("Det oppstod en feil ved visning av feedback-dashboard")
         
 def display_maintenance_tab(feedback_data):
     """Viser vedlikeholdsfanen med statistikk og oversikt"""
