@@ -84,55 +84,76 @@ def save_feedback(feedback_type, datetime_str, comment, customer_id, hidden):
         return False
 
 
-def get_feedback(start_date=None, end_date=None, include_hidden=False, customer_id=None):
+def get_feedback(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    feedback_type: Optional[str] = None,
+    include_hidden: bool = False
+) -> Optional[pd.DataFrame]:
     """
-    Henter feedback fra databasen med tidssonebehandling
+    Henter feedback fra databasen.
+    
+    Args:
+        start_date: Start dato for filtrering
+        end_date: Slutt dato for filtrering
+        feedback_type: Type feedback å filtrere på
+        include_hidden: Om skjulte tilbakemeldinger skal inkluderes
+        
+    Returns:
+        pd.DataFrame eller None ved feil
     """
     try:
-        conditions = []
+        logger.debug("Starting get_feedback")
+        
+        # Bygg spørring
+        query = """
+        SELECT id, type, datetime, comment, customer_id, status, 
+               status_changed_by, status_changed_at, hidden
+        FROM feedback
+        WHERE 1=1
+        """
         params = []
         
+        # Legg til datofilter hvis spesifisert
         if start_date:
-            start_datetime = combine_date_with_tz(start_date)
-            conditions.append("datetime >= ?")
-            params.append(start_datetime.isoformat())
-            
+            query += " AND datetime >= ?"
+            params.append(start_date.isoformat())
         if end_date:
-            end_datetime = combine_date_with_tz(end_date, datetime.max.time())
-            conditions.append("datetime <= ?")
-            params.append(end_datetime.isoformat())
+            query += " AND datetime <= ?"
+            params.append(end_date.isoformat())
             
+        # Legg til typefilter hvis spesifisert
+        if feedback_type:
+            query += " AND type = ?"
+            params.append(feedback_type)
+            
+        # Filtrer skjulte hvis ikke inkludert
         if not include_hidden:
-            conditions.append("hidden = 0")
+            query += " AND (hidden = 0 OR hidden IS NULL)"
             
-        if customer_id:
-            conditions.append("customer_id = ?")
-            params.append(customer_id)
+        query += " ORDER BY datetime DESC"
+        
+        # Hent data
+        feedback_data = fetch_data("feedback", query, params)
+        
+        # Konverter til DataFrame hvis vi fikk liste
+        if isinstance(feedback_data, list):
+            feedback_data = pd.DataFrame(feedback_data)
             
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
-        
-        query = f"""
-        SELECT id, type, datetime, comment, customer_id, 
-               status, status_changed_by, status_changed_at, hidden
-        FROM feedback 
-        WHERE {where_clause}
-        ORDER BY datetime DESC
-        """
-        
-        feedback_data = fetch_data("feedback", query, params=tuple(params))
-        
+        # Hvis vi har data, konverter datokolonner
         if not feedback_data.empty:
             # Konverter datetime-kolonner
-            datetime_columns = ['datetime', 'status_changed_at']
-            for col in datetime_columns:
+            date_columns = ['datetime', 'status_changed_at']
+            for col in date_columns:
                 if col in feedback_data.columns:
                     feedback_data[col] = pd.to_datetime(feedback_data[col]).dt.tz_localize(TZ)
                     
+        logger.debug(f"Retrieved {len(feedback_data) if not feedback_data.empty else 0} feedback entries")
         return feedback_data
         
     except Exception as e:
         logger.error(f"Error fetching feedback: {str(e)}", exc_info=True)
-        return pd.DataFrame()
+        return pd.DataFrame()  # Returner tom DataFrame ved feil
 
 
 def update_feedback_status(feedback_id, new_status, changed_by, new_expiry=None, new_display=None, new_target=None):
