@@ -1291,7 +1291,7 @@ def display_admin_dashboard():
                     filtered_data = feedback_data[feedback_data['type'] == selected_type]
                 
                 # Vis filtrert data med eksisterende funksjon
-                display_feedback_overview(filtered_data)
+                #display_feedback_overview(filtered_data)
                 
                 # Generer og vis rapport med eksisterende funksjon
                 report = generate_feedback_report(start_datetime, end_datetime)
