@@ -1118,10 +1118,13 @@ def display_admin_dashboard():
     try:
         st.title("🎛️ Feedback Dashboard")
         
-        # Hent data først
+        # Hent data for siste 7 dager
+        end_date = get_current_time()
+        start_date = end_date - timedelta(days=DATE_VALIDATION["default_date_range"])
+        
         feedback_data = get_feedback(
-            start_date=get_current_time() - timedelta(days=7),
-            end_date=get_current_time(),
+            start_date=start_date,
+            end_date=end_date,
             include_hidden=True
         )
         
@@ -1141,41 +1144,46 @@ def display_admin_dashboard():
                 feedback_data['type'].str.contains('vedlikehold', case=False, na=False)
             ].copy()
             
-            if not maintenance_data.empty:
-                # Beregn daglig statistikk
-                maintenance_data['date'] = pd.to_datetime(maintenance_data['datetime']).dt.date
-                
-                # Opprett dataframe med alle dager
-                date_range = pd.date_range(
-                    start=get_current_time().date() - timedelta(days=7),
-                    end=get_current_time().date(),
-                    freq='D'
-                )
-                
-                daily_stats = pd.DataFrame(index=date_range)
-                daily_stats.index.name = 'Dato'
-                daily_stats['Fornøyd'] = 0
-                daily_stats['Nøytral'] = 0
-                
-                # Oppdater med faktiske tall
-                for date, group in maintenance_data.groupby('date'):
-                    if date in daily_stats.index:
-                        daily_stats.loc[date, 'Fornøyd'] = group['comment'].str.count('😊').sum()
-                        daily_stats.loc[date, 'Nøytral'] = group['comment'].str.count('😐').sum()
-                
-                # Vis statistikk
-                display_df = daily_stats.reset_index()
-                display_df['Dato'] = display_df['Dato'].dt.strftime('%d.%m')
-                st.dataframe(
-                    display_df,
-                    hide_index=True,
-                    use_container_width=True
-                )
-            else:
-                st.info("Ingen vedlikeholdsdata for perioden")
+            # Konverter datetime-kolonner til timezone-naive
+            maintenance_data['datetime'] = pd.to_datetime(maintenance_data['datetime']).dt.tz_localize(None)
             
-            # Vis resten av feedback oversikten
-            display_feedback_overview(feedback_data)
+            # Opprett dataframe med alle dager
+            date_range = pd.date_range(
+                start=start_date.replace(tzinfo=None),
+                end=end_date.replace(tzinfo=None),
+                freq='D'
+            )
+            
+            daily_stats = pd.DataFrame(index=date_range)
+            daily_stats.index.name = 'Dato'
+            daily_stats['Fornøyd'] = 0
+            daily_stats['Nøytral'] = 0
+            
+            # Oppdater med faktiske tall
+            for _, row in maintenance_data.iterrows():
+                date = row['datetime'].date()
+                if date in daily_stats.index:
+                    if '😊' in str(row['comment']):
+                        daily_stats.loc[date, 'Fornøyd'] += 1
+                    elif '😐' in str(row['comment']):
+                        daily_stats.loc[date, 'Nøytral'] += 1
+            
+            # Vis statistikk
+            display_df = daily_stats.reset_index()
+            display_df['Dato'] = display_df['Dato'].dt.strftime(DATE_FORMATS['display']['date'])
+            st.dataframe(
+                display_df,
+                hide_index=True,
+                use_container_width=True
+            )
+            
+            # Fjern timezone info før Excel-eksport
+            feedback_data_naive = feedback_data.copy()
+            datetime_cols = feedback_data_naive.select_dtypes(include=['datetime64[ns, UTC]']).columns
+            for col in datetime_cols:
+                feedback_data_naive[col] = feedback_data_naive[col].dt.tz_localize(None)
+            
+            display_feedback_overview(feedback_data_naive)
             
         with tab2:
             display_maintenance_tab(feedback_data)
