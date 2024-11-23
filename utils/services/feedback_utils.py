@@ -1090,66 +1090,52 @@ def display_admin_dashboard():
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av dashboardet")
         
-def display_maintenance_tab():
+def display_maintenance_tab(feedback_data):
     """Viser vedlikeholdsfanen med statistikk og oversikt"""
     try:
-        # Hent data for siste 30 dager
-        start_date = get_current_time().date() - timedelta(days=30)
-        end_date = get_current_time().date()
+        logger.debug("Starting display_maintenance_tab")
+        st.subheader("Vedlikehold")
         
-        # Hent feedback data
-        feedback_data = get_feedback(
-            start_date=start_date,
-            end_date=end_date,
-            include_hidden=True
-        )
-        
-        # Filtrer vedlikeholdsdata
+        # Filtrer for vedlikeholdsrelatert feedback
         maintenance_data = feedback_data[
-            feedback_data['type'] == 'Vintervedlikehold'
-        ].copy() if feedback_data is not None else pd.DataFrame()
+            feedback_data['type'].str.contains('vedlikehold', case=False, na=False)
+        ].copy()
         
         if maintenance_data.empty:
-            st.info("Ingen vedlikeholdsdata funnet i valgt periode")
+            st.info("Ingen vedlikeholdsrelatert feedback funnet")
             return
             
-        # Beregn statistikk
-        daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(maintenance_data)
+        # Vis statistikk
+        tab1, tab2 = st.tabs(["📊 Statistikk", "📝 Detaljer"])
         
-        # Vis statistikk i to kolonner
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
+        with tab1:
+            # Gruppering-selector
+            group_by = st.selectbox(
+                "Gruppér etter",
+                options=['day', 'week', 'month'],
+                format_func=lambda x: {'day': 'Dag', 'week': 'Uke', 'month': 'Måned'}[x],
+                index=0
+            )
+            
+            daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(maintenance_data, group_by)
             if not daily_stats.empty:
-                display_maintenance_summary(daily_stats, daily_stats_pct, daily_score)
-            else:
-                st.info("Ingen vedlikeholdsstatistikk tilgjengelig")
+                fig = create_maintenance_chart(daily_stats, daily_stats_pct, daily_score, group_by)
+                st.plotly_chart(fig, use_container_width=True)
                 
-        with col2:
-            st.subheader("Oppsummering")
-            
-            # Vis totalt antall tilbakemeldinger
-            total_feedback = len(maintenance_data)
-            st.metric("Totalt antall", str(total_feedback))
-            
-            # Vis gjennomsnittlig score hvis tilgjengelig
-            if not daily_score.empty:
-                avg_score = daily_score.mean()
-                st.metric("Gjennomsnittlig score", f"{avg_score:.2f}")
+                display_maintenance_summary(daily_stats, daily_score, group_by)
                 
-            # Vis fordeling av reaksjoner
-            reactions = maintenance_data['comment'].str.count('😊').sum()
-            st.metric("Antall fornøyde", str(reactions))
-            
-            neutral = maintenance_data['comment'].str.count('😐').sum()
-            st.metric("Antall nøytrale", str(neutral))
-            
-            unhappy = maintenance_data['comment'].str.count('😡').sum()
-            st.metric("Antall misfornøyde", str(unhappy))
-            
+        with tab2:
+            # Vis detaljert feedback
+            for _, row in maintenance_data.iterrows():
+                date_str = row['datetime'].strftime(DATE_FORMATS['display']['datetime']) if pd.notnull(row['datetime']) else "Ukjent dato"
+                
+                with st.expander(f"{date_str} - Hytte {row['customer_id']}"):
+                    st.write(f"**Kommentar:** {row['comment']}")
+                    st.write(f"**Status:** {row['status']}")
+                    
     except Exception as e:
-        logger.error(f"Feil i vedlikeholdsfanen: {str(e)}", exc_info=True)
-        st.error("Kunne ikke vise vedlikeholdsdata")
+        logger.error(f"Feil i display_maintenance_tab: {str(e)}", exc_info=True)
+        st.error("Kunne ikke vise vedlikeholdsfanen")
 
 def display_feedback_dashboard():
     try:
