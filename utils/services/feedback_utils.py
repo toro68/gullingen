@@ -85,77 +85,34 @@ def save_feedback(feedback_type, datetime_str, comment, customer_id, hidden):
         return False
 
 
-def get_feedback(
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    feedback_type: Optional[str] = None,
-    include_hidden: bool = False,
-    customer_id: Optional[str] = None
-) -> pd.DataFrame:
-    """
-    Henter feedback fra databasen
-    
-    Args:
-        start_date: Start dato for filtrering
-        end_date: Slutt dato for filtrering
-        feedback_type: Type feedback å filtrere på
-        include_hidden: Inkluder skjult feedback
-        customer_id: Filtrer på spesifikk kunde
-        
-    Returns:
-        pd.DataFrame: Feedback data
-    """
+def get_feedback(start_date=None, end_date=None) -> pd.DataFrame:
     try:
-        logger.debug("Starting get_feedback")
-        
-        query = """
-        SELECT 
-            id,
-            type,
-            customer_id,
-            datetime,
-            comment,
-            status,
-            status_changed_at,
-            hidden
-        FROM feedback
-        WHERE 1=1
-        """
-        params = []
-        
-        if start_date:
-            query += " AND datetime >= ?"
-            params.append(format_date(start_date, "database", "datetime"))
-        if end_date:
-            query += " AND datetime <= ?"
-            params.append(format_date(end_date, "database", "datetime"))
-        if feedback_type:
-            query += " AND type = ?"
-            params.append(feedback_type)
-        if not include_hidden:
-            query += " AND (hidden = 0 OR hidden IS NULL)"
-        if customer_id:
-            query += " AND customer_id = ?"
-            params.append(customer_id)
+        with get_db_connection("feedback") as conn:
+            query = """
+                SELECT *
+                FROM feedback
+                """
+            params = []
+            if start_date:
+                query += " WHERE datetime >= ?"
+                params.append(start_date)
+            if end_date:
+                query += " AND datetime <= ?" if start_date else " WHERE datetime <= ?"
+                params.append(end_date)
+
+            df = pd.read_sql_query(query, conn, params=params)
             
-        feedback_data = fetch_data("feedback", query, params)
-        
-        columns = ['id', 'type', 'customer_id', 'datetime', 'comment', 'status', 'status_changed_at', 'hidden']
-        df = pd.DataFrame(feedback_data, columns=columns)
-        
-        if not df.empty:
+            # Konverter datokolonner med mer fleksibel parsing
             date_columns = ['datetime', 'status_changed_at']
             for col in date_columns:
                 if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], format=DATE_FORMATS["database"]["datetime"])
-                    df[col] = df[col].dt.tz_localize(TZ)
-        
-        logger.debug(f"Retrieved {len(df) if not df.empty else 0} feedback entries")
-        return df
-        
+                    df[col] = pd.to_datetime(df[col], format='mixed', utc=True).dt.tz_convert(TZ)
+            
+            return df
+
     except Exception as e:
         logger.error(f"Error fetching feedback: {str(e)}", exc_info=True)
-        return pd.DataFrame(columns=['id', 'type', 'customer_id', 'datetime', 'comment', 'status', 'status_changed_at', 'hidden'])
+        return pd.DataFrame()
 
 def update_feedback_status(feedback_id, new_status, changed_by, new_expiry=None, new_display=None, new_target=None):
     """
@@ -840,7 +797,7 @@ def display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, group
         with col3:
             st.metric(
                 "😡 Misfornøyd", 
-                f"{avg_stats['�� Misfornøyd']:.1f}%",
+                f"{avg_stats[' Misfornøyd']:.1f}%",
                 delta=None,
                 delta_color="inverse"
             )
