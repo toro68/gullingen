@@ -314,18 +314,23 @@ def ensure_tz_datetime(dt) -> Optional[datetime]:
         if dt is None:
             return None
             
+        # Konverter til pandas Timestamp først for bedre tidssone-støtte
         if isinstance(dt, str):
             dt = pd.to_datetime(dt)
-            
-        if not isinstance(dt, datetime):
+        elif isinstance(dt, datetime):
+            dt = pd.Timestamp(dt)
+        else:
             dt = pd.to_datetime(dt)
             
+        # Håndter tidssoner
         if dt.tzinfo is None:
             dt = dt.tz_localize(TZ)
         else:
             dt = dt.tz_convert(TZ)
             
-        return dt
+        # Konverter tilbake til datetime
+        return dt.to_pydatetime()
+        
     except Exception as e:
         logger.error(f"Feil i ensure_tz_datetime: {str(e)}")
         return None

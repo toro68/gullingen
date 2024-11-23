@@ -24,6 +24,8 @@ from utils.core.config import (
     get_current_time,
     combine_date_with_tz,
     format_date,
+    ensure_tz_datetime,
+    get_date_range_defaults,
     DATE_VALIDATION,
     DATE_INPUT_CONFIG
 )
@@ -795,94 +797,6 @@ def display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, group
     except Exception as e:
         logger.error(f"Error in display_maintenance_summary: {str(e)}", exc_info=True)
         st.error("Kunne ikke vise vedlikeholdsoppsummering")
-
-def calculate_maintenance_stats(reactions_df, group_by='day', days_back=7):
-    """Beregner vedlikeholdsstatistikk med fargekodet visning"""
-    try:
-        logger.debug(f"Calculating maintenance stats for last {days_back} days")
-        
-        if reactions_df.empty:
-            st.info("Ingen vedlikeholdsdata tilgjengelig")
-            return pd.DataFrame(), pd.DataFrame(), pd.Series()
-            
-        # Filtrer for siste X dager
-        end_date = get_current_time()
-        start_date = end_date - timedelta(days=days_back)
-        
-        reactions_df = reactions_df.copy()
-        reactions_df['datetime'] = pd.to_datetime(reactions_df['datetime'])
-        mask = (reactions_df['datetime'] >= start_date) & (reactions_df['datetime'] <= end_date)
-        reactions_df = reactions_df[mask]
-        
-        if reactions_df.empty:
-            st.info(f"Ingen data for siste {days_back} dager")
-            return pd.DataFrame(), pd.DataFrame(), pd.Series()
-            
-        # Grupper etter dato
-        reactions_df['date'] = reactions_df['datetime'].dt.date
-        
-        # Tell reaksjoner per dag
-        daily_stats = pd.DataFrame({
-            'Dato': pd.date_range(start=start_date.date(), end=end_date.date()),
-            'Fornøyd': 0,
-            'Nøytral': 0,
-            'Misfornøyd': 0
-        }).set_index('Dato')
-        
-        # Oppdater med faktiske tall
-        for date, group in reactions_df.groupby('date'):
-            daily_stats.loc[date, 'Fornøyd'] = group['comment'].str.count('😊').sum()
-            daily_stats.loc[date, 'Nøytral'] = group['comment'].str.count('😐').sum()
-            daily_stats.loc[date, 'Misfornøyd'] = group['comment'].str.count('😡').sum()
-        
-        # Beregn totaler og score
-        daily_stats['Total'] = daily_stats.sum(axis=1)
-        daily_stats['Score'] = (
-            (daily_stats['Fornøyd'] * 1.0 + daily_stats['Nøytral'] * 0.5) / 
-            daily_stats['Total']
-        ).fillna(0)
-        
-        # Formater datoer for visning
-        display_df = daily_stats.reset_index()
-        display_df['Dato'] = display_df['Dato'].dt.strftime('%d.%m')
-        
-        # Vis statistikk med fargeformatering
-        st.dataframe(
-            display_df,
-            column_config={
-                'Dato': st.column_config.TextColumn('Dato'),
-                'Fornøyd': st.column_config.NumberColumn(
-                    '😊',
-                    help='Antall fornøyde tilbakemeldinger',
-                    format='%d'
-                ),
-                'Nøytral': st.column_config.NumberColumn(
-                    '😐',
-                    help='Antall nøytrale tilbakemeldinger',
-                    format='%d'
-                ),
-                'Misfornøyd': st.column_config.NumberColumn(
-                    '😡',
-                    help='Antall misfornøyde tilbakemeldinger',
-                    format='%d'
-                ),
-                'Score': st.column_config.ProgressColumn(
-                    'Score',
-                    help='Score (0-1)',
-                    format='%.2f',
-                    min_value=0,
-                    max_value=1
-                )
-            },
-            use_container_width=True,
-            hide_index=True
-        )
-        
-        return daily_stats, daily_stats / daily_stats['Total'].values.reshape(-1, 1), daily_stats['Score']
-        
-    except Exception as e:
-        logger.error(f"Feil ved beregning av vedlikeholdsstatistikk: {str(e)}", exc_info=True)
-        return pd.DataFrame(), pd.DataFrame(), pd.Series()
 
 def display_reaction_statistics(feedback_data):
     try:
