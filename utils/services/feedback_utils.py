@@ -854,18 +854,41 @@ def display_feedback_overview(feedback_data):
             st.info("Ingen feedback å vise")
             return
             
+        # Konverter datetime-kolonner til timezone-naive
+        feedback_data['datetime'] = pd.to_datetime(feedback_data['datetime'])
+        
         # Sorter etter dato
         feedback_data = feedback_data.sort_values('datetime', ascending=False)
+        
+        # Legg til nedlastingsknapper
+        st.subheader("Last ned data")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            csv = feedback_data.to_csv(index=False)
+            st.download_button(
+                label="📥 Last ned som CSV",
+                data=csv,
+                file_name="feedback_oversikt.csv",
+                mime="text/csv",
+            )
+            
+        with col2:
+            buffer = BytesIO()
+            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+                feedback_data.to_excel(writer, sheet_name="Feedback", index=False)
+                
+            st.download_button(
+                label="📊 Last ned som Excel",
+                data=buffer.getvalue(),
+                file_name="feedback_oversikt.xlsx",
+                mime="application/vnd.ms-excel",
+            )
         
         # Vis feedback i expanders
         st.subheader("Feedback oversikt")
         for _, row in feedback_data.iterrows():
-            # Bruk format_date fra config.py for å håndtere datoer
-            date_str = format_date(
-                row['datetime'], 
-                format_type="display", 
-                date_type="datetime"
-            ) or "Ukjent dato"
+            date_str = row['datetime'].strftime(DATE_FORMATS['display']['datetime']) if pd.notnull(row['datetime']) else "Ukjent dato"
             
             with st.expander(
                 f"{row['type']} - {date_str} - Status: {row['status']}"
@@ -874,14 +897,9 @@ def display_feedback_overview(feedback_data):
                 st.write(f"**Innsender:** {row['customer_id']}")
                 st.write(f"**Type:** {row['type']}")
                 
-                # Bruk format_date for status_changed_at også
                 if pd.notnull(row['status_changed_at']):
-                    status_date = format_date(
-                        row['status_changed_at'],
-                        format_type="display",
-                        date_type="datetime"
-                    )
-                    st.write(f"**Sist oppdatert:** {status_date}")
+                    changed_date = pd.to_datetime(row['status_changed_at']).strftime(DATE_FORMATS['display']['datetime'])
+                    st.write(f"**Sist oppdatert:** {changed_date}")
                     if pd.notnull(row['status_changed_by']):
                         st.write(f"**Oppdatert av:** {row['status_changed_by']}")
                         
