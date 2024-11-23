@@ -1249,66 +1249,37 @@ def display_admin_dashboard():
         logger.error(f"Error in display_admin_dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av feedback-dashboard")
         
-def display_feedback_overview(feedback_data: pd.DataFrame, title: str = "Feedback Oversikt", section_id: str = None):
-    """
-    Viser oversikt over feedback
-    
-    Args:
-        feedback_data: DataFrame med feedback
-        title: Tittel på seksjonen
-        section_id: Unik ID for seksjonen (brukes for å lage unike widget-keys)
-    """
+def display_feedback_overview(feedback_data: pd.DataFrame, section_title: str):
+    """Viser oversikt over feedback"""
     try:
-        st.subheader(title)
-        
         if feedback_data.empty:
-            st.info("Ingen feedback å vise")
+            st.info("Ingen tilbakemeldinger å vise")
             return
             
-        # Sikre at vi har alle nødvendige kolonner
-        required_columns = ['id', 'type', 'datetime', 'status']
-        missing_columns = [col for col in required_columns if col not in feedback_data.columns]
-        if missing_columns:
-            logger.error(f"Mangler påkrevde kolonner: {missing_columns}")
-            st.error("Kunne ikke vise feedback - mangler nødvendige data")
-            return
+        with st.expander(
+            f"{section_title} ({len(feedback_data)} stk)",
+            expanded=True
+        ):
+            # Vis feedback data i en tabell
+            st.dataframe(
+                feedback_data,
+                use_container_width=True,
+                hide_index=True
+            )
             
-        # Generer unik key for denne seksjonen
-        unique_key = f"feedback_{section_id or title.lower().replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
-        
-        # Formater datoer for visning
-        try:
-            date_str = feedback_data['datetime'].dt.strftime('%Y-%m-%d %H:%M').fillna('Ukjent dato')
-        except Exception as e:
-            logger.warning(f"Kunne ikke formatere dato: {str(e)}")
-            date_str = pd.Series(['Ukjent dato'] * len(feedback_data))
-        
-        # Vis feedback som liste
-        for idx, row in feedback_data.iterrows():
-            with st.expander(
-                f"{row.get('type', 'Ukjent type')} - {date_str.iloc[idx]} - Status: {row.get('status', 'Ukjent status')}",
-                key=f"{unique_key}_expander_{idx}"
-            ):
-                st.write(f"ID: {row.get('id', 'Ukjent')}")
-                st.write(f"Type: {row.get('type', 'Ukjent type')}")
-                st.write(f"Status: {row.get('status', 'Ukjent status')}")
-                st.write(f"Dato: {date_str.iloc[idx]}")
-                if 'comment' in row and pd.notna(row['comment']):
-                    st.write(f"Kommentar: {row['comment']}")
-                    
-        # Last ned knapp med unik key
-        csv_data = feedback_data.to_csv(index=False)
-        st.download_button(
-            "Last ned som CSV",
-            csv_data,
-            "feedback_data.csv",
-            "text/csv",
-            key=unique_key
-        )
-        
+            # Last ned-knapp hvis det finnes data
+            if not feedback_data.empty:
+                csv = feedback_data.to_csv(index=False)
+                st.download_button(
+                    "Last ned som CSV",
+                    csv,
+                    "feedback.csv",
+                    "text/csv"
+                )
+                
     except Exception as e:
-        logger.error(f"Feil i display_feedback_overview: {str(e)}", exc_info=True)
-        st.error("Kunne ikke vise feedback oversikt")
+        logger.error(f"Feil i display_feedback_overview: {str(e)}")
+        st.error("Kunne ikke vise feedback-oversikt")
 
 def display_maintenance_tab(feedback_data):
     """Viser vedlikeholdsfanen med statistikk og oversikt"""
