@@ -12,7 +12,7 @@ from utils.core.config import (
     DATE_FORMATS,
     get_date_format,
     get_current_time,
-    get_default_date_range,
+    get_date_range_defaults,
     DATE_VALIDATION,
     safe_to_datetime,
     format_date,
@@ -960,7 +960,7 @@ def vis_hyttegrend_aktivitet():
             if col in alle_bestillinger.columns:
                 alle_bestillinger[col] = alle_bestillinger[col].apply(safe_to_datetime)
         
-        start_date, end_date = get_default_date_range()
+        start_date, end_date = get_date_range_defaults()
         dato_range = pd.date_range(
             start=normalize_datetime(start_date),
             end=normalize_datetime(end_date),
