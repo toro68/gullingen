@@ -1304,10 +1304,6 @@ def display_admin_dashboard():
                     )
             else:
                 st.info("Ingen rapportdata tilgjengelig for valgt periode")
-                
-        # Legg til daglig vedlikeholdsvurdering nederst
-        st.write("---")
-        display_daily_maintenance_rating()
         
     except Exception as e:
         logger.error(f"Feil i display_admin_dashboard: {str(e)}", exc_info=True)
