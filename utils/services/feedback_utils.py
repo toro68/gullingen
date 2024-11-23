@@ -1143,6 +1143,9 @@ def display_feedback_overview(feedback_data: pd.DataFrame, section_title: str):
         ]
         
         display_data = feedback_data[display_columns].copy()
+        
+        # Sorter etter datetime, nyeste først
+        display_data = display_data.sort_values('datetime', ascending=False)
             
         with st.expander(
             f"{section_title} ({len(display_data)} stk)",
