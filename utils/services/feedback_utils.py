@@ -196,6 +196,12 @@ def delete_feedback(feedback_id):
 def handle_user_feedback(feedback_data: pd.DataFrame = None) -> pd.DataFrame:
     """
     Håndterer bruker-feedback data i samsvar med databaseskjema.
+    
+    Args:
+        feedback_data (pd.DataFrame, optional): Eksisterende feedback data
+        
+    Returns:
+        pd.DataFrame: Behandlet feedback data
     """
     try:
         if feedback_data is None:
@@ -225,10 +231,11 @@ def handle_user_feedback(feedback_data: pd.DataFrame = None) -> pd.DataFrame:
         # Sorter etter datetime
         feedback_data = feedback_data.sort_values('datetime', ascending=False)
         
+        logger.debug(f"Processed {len(feedback_data)} feedback entries")
         return feedback_data
         
     except Exception as e:
-        logger.error(f"Feil i handle_user_feedback: {str(e)}", exc_info=True)
+        logger.error(f"Error in handle_user_feedback: {str(e)}", exc_info=True)
         return pd.DataFrame()
 
 
@@ -463,7 +470,7 @@ def categorize_feedback(feedback_text):
         "brøyt": "Brøyterelatert",
         "parkering": "Parkering",
         "vei": "Veirelatert",
-        "støy": "Støyrelatert",
+        "sty": "Støyrelatert",
     }
 
     feedback_text = feedback_text.lower()
@@ -674,7 +681,15 @@ def create_maintenance_chart(daily_stats, daily_stats_pct, daily_score, group_by
 
 
 def display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, group_by='day'):
-    """Viser oppsummering av vedlikeholdsstatistikk"""
+    """
+    Viser oppsummering av vedlikeholdsstatistikk
+    
+    Args:
+        daily_stats (pd.DataFrame): Daglig statistikk
+        daily_stats_pct (pd.DataFrame): Prosentvis fordeling
+        daily_score (pd.Series): Score per dag
+        group_by (str): Grupperingsperiode ('day', 'week', 'month')
+    """
     try:
         logger.info("Starting display_maintenance_summary")
         logger.debug(f"daily_stats shape: {daily_stats.shape if not daily_stats.empty else 'Empty'}")
@@ -697,14 +712,73 @@ def display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, group
         total_reactions = daily_stats.sum().sum()
         st.write(f"Totalt antall reaksjoner: {total_reactions}")
         
-        # Vis prosentvis fordeling
+        # Beregn gjennomsnittlige prosenter
+        avg_stats = daily_stats_pct.mean()
+        
+        # Vis prosentvis fordeling i kolonner med fargekodet metrikk
         col1, col2, col3 = st.columns(3)
+        
         with col1:
-            st.metric("😊 Fornøyd", f"{daily_stats_pct['😊 Fornøyd'].mean():.1f}%")
+            st.metric(
+                "😊 Fornøyd", 
+                f"{avg_stats['😊 Fornøyd']:.1f}%",
+                delta=None,
+                delta_color="normal"
+            )
+            
         with col2:
-            st.metric("😐 Nøytral", f"{daily_stats_pct['😐 Nøytral'].mean():.1f}%")
+            st.metric(
+                "😐 Nøytral", 
+                f"{avg_stats['😐 Nøytral']:.1f}%",
+                delta=None,
+                delta_color="normal"
+            )
+            
         with col3:
-            st.metric("😡 Misfornøyd", f"{daily_stats_pct['😡 Misfornøyd'].mean():.1f}%")
+            st.metric(
+                "😡 Misfornøyd", 
+                f"{avg_stats['😡 Misfornøyd']:.1f}%",
+                delta=None,
+                delta_color="inverse"
+            )
+            
+        # Vis gjennomsnittlig score
+        st.metric(
+            "Gjennomsnittlig score",
+            f"{daily_score.mean():.2f}",
+            delta=None,
+            delta_color="normal"
+        )
+        
+        # Vis detaljert statistikk i en tabell
+        st.subheader("Detaljert statistikk")
+        summary_df = pd.DataFrame({
+            'Dato': daily_stats.index,
+            'Fornøyd': daily_stats['😊 Fornøyd'],
+            'Nøytral': daily_stats['😐 Nøytral'],
+            'Misfornøyd': daily_stats['😡 Misfornøyd'],
+            'Total': daily_stats.sum(axis=1),
+            'Score': daily_score.round(2)
+        })
+        
+        st.dataframe(
+            summary_df,
+            column_config={
+                'Dato': st.column_config.TextColumn('Dato'),
+                'Fornøyd': st.column_config.NumberColumn('😊', format="%d"),
+                'Nøytral': st.column_config.NumberColumn('😐', format="%d"),
+                'Misfornøyd': st.column_config.NumberColumn('😡', format="%d"),
+                'Score': st.column_config.ProgressColumn(
+                    'Score',
+                    help='Score (0-1)',
+                    format="%.2f",
+                    min_value=0,
+                    max_value=1
+                )
+            },
+            use_container_width=True,
+            hide_index=True
+        )
             
     except Exception as e:
         logger.error(f"Error in display_maintenance_summary: {str(e)}", exc_info=True)
@@ -915,7 +989,14 @@ def display_reaction_report(feedback_data):
             index=0
         )
         
-        daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(reactions, group_by)
+        # Beregn statistikk med standard periode
+        default_start, default_end = get_date_range_defaults(DATE_VALIDATION["default_date_range"])
+        daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(
+            reactions, 
+            group_by=group_by,
+            days_back=DATE_VALIDATION["default_date_range"]
+        )
+        
         if not daily_stats.empty:
             fig = create_maintenance_chart(daily_stats, daily_stats_pct, daily_score, group_by)
             st.plotly_chart(fig, use_container_width=True)
@@ -923,9 +1004,14 @@ def display_reaction_report(feedback_data):
         # Datofilter under grafen
         start_date, end_date = get_date_range_input()
         if start_date is None or end_date is None:
+            st.warning("Vennligst velg gyldig datoperiode")
             return
             
-        mask = (reactions['datetime'].dt.date >= start_date) & (reactions['datetime'].dt.date <= end_date)
+        # Konverter datoer og filtrer data
+        start_datetime = combine_date_with_tz(start_date)
+        end_datetime = combine_date_with_tz(end_date, datetime.max.time())
+        
+        mask = (reactions['datetime'] >= start_datetime) & (reactions['datetime'] <= end_datetime)
         filtered_reactions = reactions[mask]
         
         if filtered_reactions.empty:
@@ -944,14 +1030,17 @@ def display_reaction_report(feedback_data):
         st.error("Kunne ikke vise reaksjonsrapport")
 
 
-def calculate_maintenance_stats(reactions_df, group_by='day', days_back=7):
+def calculate_maintenance_stats(reactions_df, group_by='day', days_back=DATE_VALIDATION["default_date_range"]):
     """
     Beregner statistikk for vedlikeholdsreaksjoner.
     
     Args:
         reactions_df (pd.DataFrame): DataFrame med reaksjoner
         group_by (str): Gruppering ('day', 'week', 'month')
-        days_back (int): Antall dager bakover i tid (default 7)
+        days_back (int): Antall dager bakover i tid
+        
+    Returns:
+        tuple[pd.DataFrame, pd.DataFrame, pd.Series]: (daily_stats, daily_stats_pct, daily_score)
     """
     try:
         logger.debug(f"Calculating maintenance stats grouped by: {group_by}")
@@ -967,6 +1056,13 @@ def calculate_maintenance_stats(reactions_df, group_by='day', days_back=7):
         
         reactions_df = reactions_df.copy()
         reactions_df['datetime'] = pd.to_datetime(reactions_df['datetime'])
+        
+        # Sikre at datetime har riktig tidssone
+        if reactions_df['datetime'].dt.tz is None:
+            reactions_df['datetime'] = reactions_df['datetime'].dt.tz_localize(TZ)
+        else:
+            reactions_df['datetime'] = reactions_df['datetime'].dt.tz_convert(TZ)
+            
         mask = (reactions_df['datetime'] >= start_date) & (reactions_df['datetime'] <= end_date)
         reactions_df = reactions_df[mask]
         
@@ -974,13 +1070,13 @@ def calculate_maintenance_stats(reactions_df, group_by='day', days_back=7):
             logger.warning(f"Ingen data for siste {days_back} dager")
             return pd.DataFrame(), pd.DataFrame(), pd.Series()
             
-        # Definer grupperingsfunksjon
+        # Definer grupperingsfunksjon basert på group_by
         if group_by == 'week':
             reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-W%V')
         elif group_by == 'month':
             reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-%m')
         else:  # default to day
-            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-%m-%d')
+            reactions_df['group'] = reactions_df['datetime'].dt.strftime(DATE_FORMATS['database']['date'])
             
         # Tell reaksjoner
         stats = pd.DataFrame({
@@ -1289,8 +1385,22 @@ def display_feedback_dashboard():
 
 # Hjelpefunksjoner
 def get_filtered_feedback(start_date, end_date, feedback_type, include_hidden):
-    """Henter filtrert feedback fra databasen"""
+    """
+    Henter filtrert feedback fra databasen
+    
+    Args:
+        start_date (date): Startdato for filtrering
+        end_date (date): Sluttdato for filtrering
+        feedback_type (str): Type feedback å filtrere på
+        include_hidden (bool): Om skjulte elementer skal inkluderes
+        
+    Returns:
+        pd.DataFrame: Filtrert feedback data
+    """
     try:
+        logger.debug(f"Getting filtered feedback for period: {start_date} to {end_date}")
+        
+        # Konverter datoer til datetime med tidssone
         start_datetime = combine_date_with_tz(start_date)
         end_datetime = combine_date_with_tz(end_date, datetime.max.time())
         
@@ -1305,10 +1415,11 @@ def get_filtered_feedback(start_date, end_date, feedback_type, include_hidden):
             # Bruk .loc for å unngå SettingWithCopyWarning
             feedback_data = feedback_data.loc[feedback_data['type'] == feedback_type]
             
+        logger.debug(f"Retrieved {len(feedback_data)} feedback entries")
         return feedback_data
         
     except Exception as e:
-        logger.error(f"Feil ved henting av feedback: {str(e)}")
+        logger.error(f"Error in get_filtered_feedback: {str(e)}", exc_info=True)
         return pd.DataFrame()
 
 def display_feedback_table(feedback_data):
