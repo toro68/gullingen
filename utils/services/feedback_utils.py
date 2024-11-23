@@ -1069,33 +1069,55 @@ def display_admin_dashboard():
     try:
         logger.info("=== Starting display_admin_dashboard ===")
         
-        # Hent data først
-        start_date = get_current_time().date() - timedelta(days=30)  # Siste 30 dager som standard
-        end_date = get_current_time().date()
+        st.title("🎛️ Feedback Dashboard")
         
-        # Hent all feedback data
-        feedback_data = get_feedback(
-            start_date=start_date,
-            end_date=end_date,
-            include_hidden=True
-        )
+        tab1, tab2, tab3 = st.tabs([
+            "📊 Feedback Oversikt",
+            "🚜 Vedlikehold",
+            "📈 Statistikk"
+        ])
         
-        # Filtrer for vedlikeholdsdata
-        maintenance_data = feedback_data[feedback_data['type'] == 'Vintervedlikehold'].copy()
-        
-        logger.debug(f"Maintenance data shape: {maintenance_data.shape}")
-        logger.debug(f"Maintenance data columns: {maintenance_data.columns.tolist()}")
-        logger.debug(f"Sample maintenance data: {maintenance_data.head(1).to_dict('records') if not maintenance_data.empty else 'Empty'}")
-        
-        # Beregn statistikk
-        daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(maintenance_data)
-        
-        logger.debug(f"Daily stats shape: {daily_stats.shape}")
-        logger.debug(f"Daily stats content: {daily_stats.head().to_dict() if not daily_stats.empty else 'Empty'}")
-        
-        # Vis statistikk
-        display_maintenance_summary(daily_stats, daily_stats_pct, daily_score)
-        
+        with tab1:
+            display_feedback_dashboard()
+            
+        with tab2:
+            try:
+                # Hent data først
+                start_date = get_current_time().date() - timedelta(days=30)
+                end_date = get_current_time().date()
+                
+                feedback_data = get_feedback(
+                    start_date=start_date,
+                    end_date=end_date,
+                    include_hidden=True
+                )
+                
+                # Sikre at vi har data før vi fortsetter
+                if feedback_data is not None and not feedback_data.empty:
+                    maintenance_data = feedback_data[feedback_data['type'] == 'Vintervedlikehold'].copy()
+                    
+                    if not maintenance_data.empty:
+                        col1, col2 = st.columns([2, 1])
+                        with col1:
+                            daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(maintenance_data)
+                            if not daily_stats.empty:
+                                display_maintenance_summary(daily_stats, daily_stats_pct, daily_score)
+                            else:
+                                st.info("Ingen vedlikeholdsstatistikk tilgjengelig")
+                        with col2:
+                            display_daily_maintenance_rating()
+                    else:
+                        st.info("Ingen vedlikeholdsdata funnet i valgt periode")
+                else:
+                    st.info("Ingen data tilgjengelig")
+                    
+            except Exception as e:
+                logger.error(f"Feil i vedlikeholdsfanen: {str(e)}", exc_info=True)
+                st.error("Kunne ikke vise vedlikeholdsdata")
+                
+        with tab3:
+            display_reaction_statistics(feedback_data)
+
     except Exception as e:
         logger.error(f"Feil i admin dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av dashboardet")
