@@ -769,7 +769,31 @@ def vis_dagens_bestillinger():
     logger.info(f"Viser bestillinger for dato: {dagens_dato}")
     
     try:
-        dagens_bestillinger = hent_aktive_bestillinger_for_dag(dagens_dato)
+        # Hent alle bestillinger
+        bestillinger = get_bookings()
+        if bestillinger.empty:
+            st.info("Ingen bestillinger funnet.")
+            return
+
+        # Konverter datokolonner til datetime med tidssone
+        for col in ['ankomst_dato', 'avreise_dato']:
+            if col in bestillinger.columns:
+                bestillinger[col] = pd.to_datetime(bestillinger[col]).dt.tz_localize(TZ)
+
+        # Filtrer dagens aktive bestillinger
+        dagens_bestillinger = bestillinger[
+            # Årsabonnement
+            (bestillinger['abonnement_type'] == 'Årsabonnement') |
+            # Enkeltbestillinger som er aktive i dag
+            (
+                # Ankomst er i dag eller tidligere
+                (bestillinger['ankomst_dato'].dt.date <= dagens_dato) &
+                # Og enten ingen avreisedato eller avreise er i dag eller senere
+                ((bestillinger['avreise_dato'].isna()) | 
+                 (bestillinger['avreise_dato'].dt.date >= dagens_dato))
+            )
+        ]
+
         logger.info(f"Dagens aktive bestillinger: {dagens_bestillinger.to_string()}")
 
         if not dagens_bestillinger.empty:
@@ -784,13 +808,13 @@ def vis_dagens_bestillinger():
             visnings_df["abonnement_type"] = dagens_bestillinger["abonnement_type"]
             
             # Formater dato og tid
-            # Formater dato og tid
             visnings_df["ankomst"] = dagens_bestillinger["ankomst_dato"].apply(
-                lambda x: format_date(x, "display", "datetime")
+                lambda x: format_date(x, "display", "date")
             )
             visnings_df["avreise"] = dagens_bestillinger["avreise_dato"].apply(
-                lambda x: format_date(x, "display", "datetime") if pd.notnull(x) else "Ikke satt"
+                lambda x: format_date(x, "display", "date") if pd.notnull(x) else "Ikke satt"
             )
+            
             # Vis DataFrame
             st.dataframe(
                 visnings_df,

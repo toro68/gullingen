@@ -296,7 +296,7 @@ def convert_for_db(value: Any, column_type: str, table: str) -> Any:
 # Dato parsing og formatering funksjoner
 def get_current_time() -> datetime:
     """Returnerer nåværende tid i riktig tidssone"""
-    return datetime.now(TZ)
+    return normalize_datetime(datetime.now(TZ))
 
 def get_date_range_defaults(default_days: int = DATE_VALIDATION["default_date_range"]) -> tuple[date, date]:
     """
@@ -308,7 +308,7 @@ def get_date_range_defaults(default_days: int = DATE_VALIDATION["default_date_ra
     Returns:
         tuple[date, date]: (start_date, end_date)
     """
-    today = datetime.now(TZ).date()
+    today = get_current_time().date()
     return (today, today + timedelta(days=default_days))
 
 def get_date_format(format_type: str, format_name: str) -> Optional[str]:
