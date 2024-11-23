@@ -1068,24 +1068,20 @@ def display_daily_maintenance_rating():
 def display_admin_dashboard():
     """Viser admin dashboard med feedback oversikt"""
     try:
-        logger.info("Starting display_admin_dashboard")
         st.title("🎛️ Feedback Dashboard")
         
-        # Hent data først
-        start_date = get_current_time().date() - timedelta(days=30)
-        end_date = get_current_time().date()
-        
-        # Hent feedback og filtrer bort admin-varsler
+        # Hent data først - BARE bruker-feedback, ikke admin-varsler
         feedback_data = get_feedback(
-            start_date=start_date,
-            end_date=end_date,
+            start_date=get_current_time().date() - timedelta(days=30),
+            end_date=get_current_time().date(),
             include_hidden=True
         )
         
         # Filtrer bort admin-varsler
         feedback_data = feedback_data[
-            feedback_data['type'] != 'Admin varsel'
-        ].copy()
+            (feedback_data['is_alert'].isna()) | 
+            (feedback_data['is_alert'] == 0)
+        ]
         
         tab1, tab2, tab3 = st.tabs([
             "📊 Feedback Oversikt",
@@ -1097,7 +1093,7 @@ def display_admin_dashboard():
             display_feedback_overview(feedback_data)
             
         with tab2:
-            display_maintenance_tab()
+            display_maintenance_tab(feedback_data)
                 
         with tab3:
             display_reaction_statistics(feedback_data)
