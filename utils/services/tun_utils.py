@@ -613,36 +613,40 @@ def hent_aktive_bestillinger_for_dag(dato):
         return pd.DataFrame()
 # filtrerer bestillinger i bestill_tunbroyting
 def filter_todays_bookings(bookings_df: pd.DataFrame) -> pd.DataFrame:
-    """Filtrerer bestillinger for å finne aktive bestillinger for dagens dato."""
+    """
+    Filtrerer bestillinger for å finne dagens aktive bestillinger.
+    Inkluderer bestillinger der:
+    - ankomst_dato er i dag eller tidligere
+    - avreise_dato er i dag eller senere (eller er None/null)
+    """
     try:
         logger.info("Starter filtrering av dagens bestillinger")
+        
         if bookings_df.empty:
-            return pd.DataFrame()
+            return bookings_df
             
-        # Konverter datokolonner til datetime med tidssone
+        # Konverter dagens dato til tz-aware datetime ved midnatt
+        dagens_dato = normalize_datetime(datetime.now(TZ))
+        
+        # Konverter datokolonner til tz-aware datetime
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in bookings_df.columns:
-                bookings_df[col] = pd.to_datetime(bookings_df[col]).dt.date.apply(combine_date_with_tz)
-        
-        dagens_dato = get_current_time().replace(hour=0, minute=0, second=0, microsecond=0)
-        
+                bookings_df[col] = pd.to_datetime(bookings_df[col]).dt.tz_localize(TZ)
+
         # Filtrer bestillinger
-        dagens_bestillinger = bookings_df[
-            (bookings_df['abonnement_type'] == 'Årsabonnement') |
-            (
-                (bookings_df['ankomst_dato'] <= dagens_dato) &
-                (
-                    bookings_df['avreise_dato'].isna() |
-                    (bookings_df['avreise_dato'] >= dagens_dato)
-                )
-            )
-        ]
+        mask = (
+            (bookings_df['ankomst_dato'] <= dagens_dato) & 
+            ((bookings_df['avreise_dato'].isna()) | 
+             (bookings_df['avreise_dato'] >= dagens_dato))
+        )
         
-        logger.info(f"Filtrert DataFrame shape: {dagens_bestillinger.shape}")
-        return dagens_bestillinger
+        filtered_df = bookings_df[mask].copy()
+        
+        logger.info(f"Dagens aktive bestillinger: {filtered_df}")
+        return filtered_df
         
     except Exception as e:
-        logger.error(f"Feil i filter_todays_bookings: {str(e)}", exc_info=True)
+        logger.error(f"Feil i filter_todays_bookings: {str(e)}")
         return pd.DataFrame()
 
 
