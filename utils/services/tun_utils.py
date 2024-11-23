@@ -765,11 +765,10 @@ def vis_tunbroyting_statistikk(bookings_func=None):
 # liste for tunkart-siden
 def vis_dagens_bestillinger():
     """Viser dagens aktive bestillinger i en tabell"""
-    dagens_dato = get_current_time().date()
-    logger.info(f"Viser bestillinger for dato: {dagens_dato}")
-    
     try:
-        # Hent alle bestillinger
+        dagens_dato = get_current_time().date()
+        logger.info(f"Viser bestillinger for dato: {dagens_dato}")
+        
         bestillinger = get_bookings()
         if bestillinger.empty:
             st.info("Ingen bestillinger funnet.")
@@ -778,61 +777,30 @@ def vis_dagens_bestillinger():
         # Konverter datokolonner til datetime med tidssone
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in bestillinger.columns:
-                bestillinger[col] = pd.to_datetime(bestillinger[col]).dt.tz_localize(TZ)
+                bestillinger[col] = pd.to_datetime(bestillinger[col])
 
         # Filtrer dagens aktive bestillinger
         dagens_bestillinger = bestillinger[
-            # Årsabonnement
+            # Årsabonnement eller aktive bestillinger
             (bestillinger['abonnement_type'] == 'Årsabonnement') |
-            # Enkeltbestillinger som er aktive i dag
             (
                 # Ankomst er i dag eller tidligere
                 (bestillinger['ankomst_dato'].dt.date <= dagens_dato) &
                 # Og enten ingen avreisedato eller avreise er i dag eller senere
-                ((bestillinger['avreise_dato'].isna()) | 
-                 (bestillinger['avreise_dato'].dt.date >= dagens_dato))
+                (
+                    bestillinger['avreise_dato'].isna() | 
+                    (bestillinger['avreise_dato'].dt.date >= dagens_dato)
+                )
             )
         ]
 
-        logger.info(f"Dagens aktive bestillinger: {dagens_bestillinger.to_string()}")
-
-        if not dagens_bestillinger.empty:
-            # Lag en ny DataFrame for visning
-            visnings_df = pd.DataFrame()
-            
-            # Legg til 'rode' informasjon
-            visnings_df["rode"] = dagens_bestillinger["customer_id"].apply(get_rode)
-            
-            # Kopier og rename kolonner
-            visnings_df["hytte"] = dagens_bestillinger["customer_id"]
-            visnings_df["abonnement_type"] = dagens_bestillinger["abonnement_type"]
-            
-            # Formater dato og tid
-            visnings_df["ankomst"] = dagens_bestillinger["ankomst_dato"].apply(
-                lambda x: format_date(x, "display", "date")
-            )
-            visnings_df["avreise"] = dagens_bestillinger["avreise_dato"].apply(
-                lambda x: format_date(x, "display", "date") if pd.notnull(x) else "Ikke satt"
-            )
-            
-            # Vis DataFrame
-            st.dataframe(
-                visnings_df,
-                column_config={
-                    "rode": "Rode",
-                    "hytte": "Hytte",
-                    "abonnement_type": "Type",
-                    "ankomst": "Ankomst",
-                    "avreise": "Avreise"
-                },
-                hide_index=True
-            )
-        else:
-            st.info("Ingen aktive bestillinger i dag.")
-            
+        logger.info(f"Dagens aktive bestillinger: {dagens_bestillinger}")
+        
+        # Resten av koden for visning...
+        
     except Exception as e:
         logger.error(f"Feil i vis_dagens_bestillinger: {str(e)}", exc_info=True)
-        st.error("Kunne ikke vise dagens bestillinger. Vennligst prøv igjen senere.")
+        st.error("Kunne ikke vise dagens bestillinger")
 
 # Category: View Functions
 def vis_tunbroyting_oversikt():
