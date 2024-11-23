@@ -14,13 +14,15 @@ from utils.core.logging_config import get_logger
 logger = get_logger(__name__)
 
 def get_date_range_input(
-    default_days: int = DATE_VALIDATION["default_date_range"]
+    default_days: int = DATE_VALIDATION["default_date_range"],
+    key_prefix: str = ""
 ) -> Tuple[Optional[date], Optional[date]]:
     """
     Viser datovelgere for start- og sluttdato
     
     Args:
         default_days: Antall dager i standard periode
+        key_prefix: Prefiks for widget keys for å unngå duplikater
         
     Returns:
         Tuple[Optional[date], Optional[date]]: Valgt (start_dato, slutt_dato) eller (None, None) ved feil
@@ -45,7 +47,7 @@ def get_date_range_input(
                 DATE_INPUT_CONFIG["start_label"],
                 value=start_default,
                 format=date_format,
-                key=f"start_date_{default_days}"  # Mer beskrivende key
+                key=f"{key_prefix}start_date"
             )
         
         with col2:
@@ -53,7 +55,7 @@ def get_date_range_input(
                 DATE_INPUT_CONFIG["end_label"],
                 value=end_default,
                 format=date_format,
-                key=f"end_date_{default_days}"  # Mer beskrivende key
+                key=f"{key_prefix}end_date"
             )
             
         if start_date > end_date:

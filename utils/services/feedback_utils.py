@@ -921,81 +921,6 @@ def display_reaction_statistics(feedback_data):
 
 
 # feedback_utils.py
-
-def display_feedback_overview(feedback_data):
-    """
-    Viser feedback-oversikt med nedlastingsmuligheter.
-    Håndterer tidssoner korrekt for Excel-eksport.
-    """
-    try:
-        logger.debug("Starting display_feedback_overview")
-        
-        if feedback_data.empty:
-            st.info("Ingen feedback å vise")
-            return
-            
-        # Lag en kopi for eksport og visning
-        export_data = feedback_data.copy()
-        
-        # Konverter datetime-kolonner til timezone-naive for Excel
-        datetime_columns = ['datetime', 'status_changed_at', 'expiry_date']
-        for col in datetime_columns:
-            if col in export_data.columns:
-                # Sjekk om kolonnen er datetime og har tidssone
-                if pd.api.types.is_datetime64_any_dtype(export_data[col]):
-                    # Konverter til lokal tid og fjern tidssone
-                    export_data[col] = export_data[col].dt.tz_convert(TZ).dt.tz_localize(None)
-        
-        # Vis nedlastingsknapper
-        st.subheader("Last ned data")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            csv = export_data.to_csv(index=False)
-            st.download_button(
-                label="📥 Last ned som CSV",
-                data=csv,
-                file_name="feedback_oversikt.csv",
-                mime="text/csv",
-                key=f"download_csv_{id(csv)}"
-            )
-            
-        with col2:
-            buffer = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                feedback_data.to_excel(writer, sheet_name="Feedback", index=False)
-            excel_data = output.getvalue()
-            st.download_button(
-                label="📊 Last ned Excel",
-                data=excel_data,
-                file_name="feedback.xlsx",
-                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                key=f"download_excel_{id(excel_data)}"
-            )
-    
-        # Vis feedback i expanders - bruker original data for visning
-        st.subheader("Feedback oversikt")
-        for _, row in feedback_data.iterrows():
-            # Formatering av dato med tidssone
-            date_str = format_date(row['datetime'], DATE_FORMATS['display']['datetime']) if pd.notnull(row['datetime']) else "Ukjent dato"
-            
-            with st.expander(
-                f"{row['type']} - {date_str} - Status: {row['status']}"
-            ):
-                st.write(f"**Kommentar:** {row['comment']}")
-                st.write(f"**Innsender:** {row['customer_id']}")
-                st.write(f"**Type:** {row['type']}")
-                
-                if pd.notnull(row['status_changed_at']):
-                    changed_date = format_date(row['status_changed_at'], DATE_FORMATS['display']['datetime'])
-                    st.write(f"**Sist oppdatert:** {changed_date}")
-                    if pd.notnull(row['status_changed_by']):
-                        st.write(f"**Oppdatert av:** {row['status_changed_by']}")
-                        
-    except Exception as e:
-        logger.error(f"Feil i display_feedback_overview: {str(e)}", exc_info=True)
-        st.error("Kunne ikke vise feedback-oversikt")
-
 def display_reaction_report(feedback_data):
     try:
         logger.debug("Starting display_reaction_report")
@@ -1197,20 +1122,6 @@ def display_admin_dashboard():
         st.title("📊 Feedback Dashboard")
         logger.info("Starting display_admin_dashboard")
         
-        # Bruk den eksisterende datovelger-funksjonen
-        start_date, end_date = get_date_range_input(
-            default_days=DATE_VALIDATION["default_date_range"]
-        )
-        
-        if start_date is None or end_date is None:
-            st.warning("Vennligst velg gyldig datoperiode")
-            return
-            
-        # Konverter til datetime med tidssone
-        start_datetime = combine_date_with_tz(start_date)
-        end_datetime = combine_date_with_tz(end_date, datetime.max.time())
-        logger.debug(f"Valgt periode: {start_datetime} til {end_datetime}")
-        
         # Hovedtabs for ulike visninger
         tab1, tab2, tab3 = st.tabs([
             "🔍 Oversikt og Feedback", 
@@ -1218,21 +1129,29 @@ def display_admin_dashboard():
             "📝 Rapporter"
         ])
         
-        # Hent feedback data én gang
-        feedback_data = get_feedback(
-            start_date=start_datetime,
-            end_date=end_datetime,
-            include_hidden=True
-        )
-        
         # === Tab 1: Oversikt og Feedback ===
         with tab1:
-            st.subheader("📊 Statistikk og Feedback")
-            if feedback_data.empty:
-                st.info("Ingen feedback-data tilgjengelig for valgt periode")
-            else:
-                # Bruk eksisterende get_feedback_statistics
-                stats = get_feedback_statistics(start_datetime, end_datetime)
+            # Bruk key prefix for å unngå duplikate widget keys
+            start_date, end_date = get_date_range_input(key_prefix="overview_")
+            if not (start_date and end_date):
+                st.warning("Vennligst velg gyldig datoperiode")
+                return
+                
+            # Konverter til datetime med tidssone
+            start_datetime = combine_date_with_tz(start_date)
+            end_datetime = combine_date_with_tz(end_date, datetime.max.time())
+                
+            # Hent feedback data
+            feedback_data = get_feedback(
+                start_date=start_datetime,
+                end_date=end_datetime,
+                include_hidden=True
+            )
+            
+            if feedback_data is not None and not feedback_data.empty:
+                st.subheader("📊 Statistikk og Feedback")
+                # Vis statistikk
+                stats = get_feedback_statistics(start_date, end_date)
                 if stats:
                     col1, col2, col3 = st.columns(3)
                     with col1:
@@ -1255,24 +1174,24 @@ def display_admin_dashboard():
                             help="Antall ubehandlede tilbakemeldinger"
                         )
                 
-                # Vis feedback oversikt med eksisterende funksjon
+                # Vis feedback oversikt
                 display_feedback_overview(feedback_data)
+            else:
+                st.info("Ingen feedback-data tilgjengelig for valgt periode")
                 
         # === Tab 2: Vedlikeholdsanalyse ===
         with tab2:
             st.subheader("🚜 Vedlikeholdsanalyse")
-            # Bruk eksisterende display_maintenance_report
-            reactions_df = display_maintenance_feedback()
             
-            if reactions_df is not None and not reactions_df.empty:
-                # Bruk eksisterende funksjoner for å vise statistikk
+            maintenance_data = display_maintenance_feedback()  
+            if maintenance_data is not None and not maintenance_data.empty:
+                # Bruk eksisterende funksjoner for statistikk
                 daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(
-                    reactions_df,
+                    maintenance_data, 
                     group_by='day'
                 )
                 
                 if not daily_stats.empty:
-                    # Vis vedlikeholdssammendrag med eksisterende funksjon
                     display_maintenance_summary(
                         daily_stats,
                         daily_stats_pct,
@@ -1280,48 +1199,62 @@ def display_admin_dashboard():
                         'day'
                     )
                     
-                    # Vis detaljer med eksisterende funksjon
-                    st.subheader("Detaljert vedlikeholdsstatistikk")
-                    display_reaction_statistics(reactions_df)
-                    
-                    # Vis reaksjonsrapport med eksisterende funksjon
-                    display_reaction_report(reactions_df)
+                    # Vis reaksjonsrapport
+                    display_reaction_report(maintenance_data)
             else:
                 st.info("Ingen vedlikeholdsdata tilgjengelig for valgt periode")
-        
+                
         # === Tab 3: Rapporter ===
         with tab3:
             st.subheader("📝 Rapporter og Detaljer")
             
-            if not feedback_data.empty:
-                # La brukeren filtrere på type
-                feedback_types = ["Alle"] + list(FEEDBACK_ICONS.keys())
-                selected_type = st.selectbox("Filtrer på type:", feedback_types)
+            # Bruk unikt key prefix for denne tabben
+            start_date, end_date = get_date_range_input(key_prefix="report_")
+            if start_date and end_date:
+                # Konverter til datetime med tidssone
+                start_datetime = combine_date_with_tz(start_date)
+                end_datetime = combine_date_with_tz(end_date, datetime.max.time())
                 
-                # Filtrer data hvis nødvendig
-                filtered_data = feedback_data
-                if selected_type != "Alle":
-                    filtered_data = feedback_data[feedback_data['type'] == selected_type]
+                # Hent feedback data
+                feedback_data = get_feedback(
+                    start_date=start_datetime,
+                    end_date=end_datetime,
+                    include_hidden=True
+                )
                 
-                # Vis filtrert data med eksisterende funksjon
-                #display_feedback_overview(filtered_data)
-                
-                # Generer og vis rapport med eksisterende funksjon
-                report = generate_feedback_report(start_datetime, end_datetime)
-                if report:
-                    st.download_button(
-                        "Last ned rapport",
-                        report,
-                        "feedback_report.txt",
-                        "text/plain"
+                if feedback_data is not None and not feedback_data.empty:
+                    # Filtervalg for type
+                    feedback_types = ["Alle"] + list(FEEDBACK_ICONS.keys())
+                    selected_type = st.selectbox(
+                        "Filtrer på type:", 
+                        feedback_types,
+                        key="report_type"
                     )
+                    
+                    # Filtrer data
+                    filtered_data = feedback_data
+                    if selected_type != "Alle":
+                        filtered_data = feedback_data[feedback_data['type'] == selected_type]
+                    
+                    # Generer og vis rapport
+                    report = generate_feedback_report(start_datetime, end_datetime)
+                    if report:
+                        st.download_button(
+                            "Last ned rapport",
+                            report,
+                            "feedback_report.txt",
+                            "text/plain",
+                            key="download_report"
+                        )
+                else:
+                    st.info("Ingen rapportdata tilgjengelig for valgt periode")
             else:
-                st.info("Ingen rapportdata tilgjengelig for valgt periode")
-        
+                st.warning("Vennligst velg gyldig datoperiode")
+                
     except Exception as e:
-        logger.error(f"Feil i display_admin_dashboard: {str(e)}", exc_info=True)
+        logger.error(f"Error in display_admin_dashboard: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved visning av feedback-dashboard")
-
+        
 def display_feedback_overview(feedback_data):
     """
     Viser feedback-oversikt med nedlastingsmuligheter.
