@@ -263,7 +263,7 @@ def give_feedback():
         existing_feedback = get_feedback(
             start_date=datetime.now(TZ).date(),
             end_date=datetime.now(TZ).date(),
-            customer_id=customer_id
+            include_hidden=False
         )
         
         st.info(
@@ -359,9 +359,12 @@ def give_feedback():
             existing_feedback = get_feedback(
                 start_date=None,
                 end_date=None,
-                include_hidden=False,
-                customer_id=customer_id,
+                include_hidden=False
             )
+            # Filtrer på customer_id etter henting
+            existing_feedback = existing_feedback[
+                existing_feedback['customer_id'] == customer_id
+            ]
             if existing_feedback.empty:
                 st.info("Du har ingen tidligere feedback å vise.")
             else:
