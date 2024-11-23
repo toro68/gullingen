@@ -776,7 +776,7 @@ def calculate_maintenance_stats(reactions_df, group_by='day', days_back=7):
                     format='%d'
                 ),
                 'Misfornøyd': st.column_config.NumberColumn(
-                    '��',
+                    '😡',
                     help='Antall misfornøyde tilbakemeldinger',
                     format='%d'
                 ),
@@ -1229,10 +1229,13 @@ def display_feedback_dashboard():
         logger.info("Starting display_feedback_dashboard")
         st.header("📬 Feedback Oversikt")
         
+        # Hent standardperiode for siste 7 dager
+        default_start, default_end = get_date_range_defaults(7)
+        
         # Hent først all feedback for reactions statistikk
         all_feedback = get_feedback(
-            start_date=get_current_time() - timedelta(days=7),
-            end_date=get_current_time(),
+            start_date=combine_date_with_tz(default_start),
+            end_date=combine_date_with_tz(default_end, datetime.max.time()),
             include_hidden=False
         )
         
@@ -1241,13 +1244,11 @@ def display_feedback_dashboard():
         
         with col1:
             st.subheader("🚜 Vedlikehold siste 7 dager")
-            # Filtrer for vedlikeholdsrelatert feedback
             maintenance_data = all_feedback[
                 all_feedback['type'].str.contains('vedlikehold', case=False, na=False)
             ].copy()
             
             if not maintenance_data.empty:
-                # Beregn og vis statistikk
                 daily_stats, _, _ = calculate_maintenance_stats(
                     maintenance_data, 
                     group_by='day', 
@@ -1256,13 +1257,16 @@ def display_feedback_dashboard():
             else:
                 st.info("Ingen vedlikeholdsdata for perioden")
         
-        # Fortsett med resten av dashbordet
-        st.write("---")  # Visuell separator
+        st.write("---")
         
         # Filtre for hovedoversikt
         filter_col1, filter_col2, filter_col3 = st.columns(3)
+        
         with filter_col1:
             start_date, end_date = get_date_range_input()
+            if start_date is None or end_date is None:
+                st.warning("Vennligst velg gyldig datoperiode")
+                return
             
         with filter_col2:
             feedback_types = ["Alle"] + list(FEEDBACK_ICONS.keys())
