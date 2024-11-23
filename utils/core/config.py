@@ -255,13 +255,13 @@ def normalize_datetime(dt):
         if dt is None:
             return None
             
-        # Hvis dt er en date, konverter til datetime
+        # Hvis dt er en date, konverter til datetime først
         if isinstance(dt, date) and not isinstance(dt, datetime):
             dt = datetime.combine(dt, datetime.min.time())
             dt = dt.replace(tzinfo=TZ)
             return dt
             
-        # Håndter datetime
+        # Hvis dt er en datetime, normaliser tidssonen
         if isinstance(dt, datetime):
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=TZ)
@@ -269,12 +269,13 @@ def normalize_datetime(dt):
                 dt = dt.astimezone(TZ)
             return dt.replace(hour=0, minute=0, second=0, microsecond=0)
             
-        # Håndter strenger
+        # Hvis dt er en streng, parse den
         if isinstance(dt, str):
-            parsed_dt = parse_date(dt)
-            if parsed_dt:
-                return normalize_datetime(parsed_dt)
-                
+            parsed_dt = pd.to_datetime(dt)
+            if parsed_dt.tz is None:
+                parsed_dt = parsed_dt.tz_localize(TZ)
+            return parsed_dt.normalize().to_pydatetime()
+            
         return None
         
     except Exception as e:
