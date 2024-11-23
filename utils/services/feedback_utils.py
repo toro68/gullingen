@@ -840,7 +840,7 @@ def display_maintenance_summary(daily_stats, daily_stats_pct, daily_score, group
         with col3:
             st.metric(
                 "😡 Misfornøyd", 
-                f"{avg_stats['😡 Misfornøyd']:.1f}%",
+                f"{avg_stats['�� Misfornøyd']:.1f}%",
                 delta=None,
                 delta_color="inverse"
             )
@@ -1510,26 +1510,14 @@ def display_feedback_table(feedback_data):
             use_container_width=True
         )
         
-        # Nedlastingsknapper bruker pandas direkte
-        col1, col2 = st.columns(2)
-        with col1:
-            csv = display_data.to_csv(index=False)
-            st.download_button(
-                "📥 Last ned CSV",
-                csv,
-                "feedback.csv",
-                "text/csv"
-            )
-        with col2:
-            buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                display_data.to_excel(writer, index=False)
-            st.download_button(
-                "📊 Last ned Excel",
-                buffer.getvalue(),
-                "feedback.xlsx",
-                "application/vnd.ms-excel"
-            )
+        # Nedlastingsknapp for CSV
+        csv = display_data.to_csv(index=False)
+        st.download_button(
+            "📥 Last ned CSV",
+            csv,
+            "feedback.csv",
+            "text/csv"
+        )
             
     except Exception as e:
         logger.error(f"Feil ved visning av feedback-tabell: {str(e)}")

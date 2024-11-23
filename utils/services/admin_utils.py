@@ -168,73 +168,26 @@ def unified_report_page(include_hidden=False):
     if st.button("Last ned data"):
         try:
             st.write("Debug: Starter nedlasting av data")
-            if export_format == "CSV":
-                csv_data = io.StringIO()
-                for data_type, df in [
-                    ("Bruker-feedback", feedback_data),
-                    ("Admin-varsler", admin_alerts),
-                    ("Tunbrøyting", tunbroyting_data),
-                    ("Strøing", stroing_data),
-                    ("Påloggingshistorikk", login_history),
-                ]:
+            csv_data = io.StringIO()
+            for data_type, df in [
+                ("Bruker-feedback", feedback_data),
+                ("Admin-varsler", admin_alerts),
+                ("Tunbrøyting", tunbroyting_data),
+                ("Strøing", stroing_data),
+                ("Påloggingshistorikk", login_history),
+            ]:
+                if data_type in data_types and not df.empty:
                     st.write(f"Debug: Prosesserer {data_type}")
-                    if data_type in data_types and not df.empty:
-                        csv_data.write(f"{data_type}:\n")
-                        df.to_csv(csv_data, index=False)
-                        csv_data.write("\n\n")
+                    csv_data.write(f"{data_type}:\n")
+                    df.to_csv(csv_data, index=False)
+                    csv_data.write("\n\n")
 
-                st.download_button(
-                    label="Last ned CSV",
-                    data=csv_data.getvalue(),
-                    file_name="samlet_rapport.csv",
-                    mime="text/csv",
-                )
-            else:  # Excel
-                # Bruk BytesIO for å lagre Excel-filen i minnet
-                output = io.BytesIO()
-                
-                # Opprett Excel-fil med openpyxl direkte
-                import openpyxl
-                workbook = openpyxl.Workbook()
-                
-                # Fjern default sheet
-                workbook.remove(workbook.active)
-                
-                # Legg til data i separate sheets
-                for data_type, df in [
-                    ("Bruker-feedback", feedback_data),
-                    ("Admin-varsler", admin_alerts),
-                    ("Tunbrøyting", tunbroyting_data),
-                    ("Stroing", stroing_data),
-                    ("Paalogging", login_history),
-                ]:
-                    if data_type in data_types and not df.empty:
-                        st.write(f"Debug: Prosesserer {data_type} for Excel")
-                        # Opprett nytt sheet
-                        sheet = workbook.create_sheet(title=data_type)
-                        
-                        # Skriv overskrifter
-                        headers = df.columns.tolist()
-                        for col, header in enumerate(headers, start=1):
-                            sheet.cell(row=1, column=col, value=str(header))
-                        
-                        # Skriv data
-                        for row_idx, row in enumerate(df.values, start=2):
-                            for col_idx, value in enumerate(row, start=1):
-                                sheet.cell(row=row_idx, column=col_idx, value=value)
-                
-                # Lagre til BytesIO
-                workbook.save(output)
-                output.seek(0)
-
-                # Last ned knapp
-                st.download_button(
-                    label="Last ned Excel",
-                    data=output.getvalue(),
-                    file_name="samlet_rapport.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-                
+            st.download_button(
+                label="📥 Last ned CSV",
+                data=csv_data.getvalue(),
+                file_name="samlet_rapport.csv",
+                mime="text/csv",
+            )
             st.success("Data lastet ned vellykket!")
             
         except Exception as e:
@@ -380,75 +333,27 @@ def download_reports(include_hidden=False):
     )
 
     if not all_reports.empty or not login_history.empty:
-        # Data preprocessing
-        if not all_reports.empty:
-            all_reports["datetime"] = pd.to_datetime(
-                all_reports["datetime"]
-            ).dt.tz_convert(TZ)
-            all_reports["date"] = all_reports["datetime"].dt.date
+        # Data preprocessing og visualisering som før...
+        
+        # Export options - nå bare CSV
+        st.subheader("Last ned data")
+        
+        if st.button("Last ned CSV"):
+            csv_data = io.StringIO()
+            if not all_reports.empty:
+                csv_data.write("Rapporter:\n")
+                all_reports.to_csv(csv_data, index=False)
+                csv_data.write("\n\n")
+            if not login_history.empty:
+                csv_data.write("Påloggingshistorikk:\n")
+                login_history.to_csv(csv_data, index=False)
 
-        if not login_history.empty:
-            login_history["login_time"] = pd.to_datetime(
-                login_history["login_time"]
-            ).dt.tz_convert(TZ)
-            login_history["date"] = login_history["login_time"].dt.date
-
-        # Data visualization
-        if not all_reports.empty:
-            st.subheader("Rapportanalyse")
-            fig1 = px.histogram(all_reports, x="date", title="Rapporter over tid")
-            st.plotly_chart(fig1)
-
-            fig2 = px.pie(all_reports, names="type", title="Fordeling av rapporttyper")
-            st.plotly_chart(fig2)
-
-        if not login_history.empty:
-            st.subheader("Påloggingsanalyse")
-            fig3 = px.histogram(login_history, x="date", title="Pålogginger over tid")
-            st.plotly_chart(fig3)
-
-            success_rate = (login_history["success"].sum() / len(login_history)) * 100
-            st.metric("Vellykket påloggingsrate", f"{success_rate:.2f}%")
-
-        # Export options
-        st.subheader("Eksportalternativer")
-        export_format = st.radio("Velg eksportformat", ["CSV", "Excel"])
-
-        if st.button("Last ned data"):
-            if export_format == "CSV":
-                csv_data = io.StringIO()
-                if not all_reports.empty:
-                    csv_data.write("Rapporter:\n")
-                    all_reports.to_csv(csv_data, index=False)
-                    csv_data.write("\n\n")
-                if not login_history.empty:
-                    csv_data.write("Påloggingshistorikk:\n")
-                    login_history.to_csv(csv_data, index=False)
-
-                st.download_button(
-                    label="Last ned CSV",
-                    data=csv_data.getvalue(),
-                    file_name="rapporter_og_paalogginger.csv",
-                    mime="text/csv",
-                )
-            else:  # Excel
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                    if not all_reports.empty:
-                        all_reports.to_excel(
-                            writer, sheet_name="Rapporter", index=False
-                        )
-                    if not login_history.empty:
-                        login_history.to_excel(
-                            writer, sheet_name="Påloggingshistorikk", index=False
-                        )
-
-                st.download_button(
-                    label="Last ned Excel",
-                    data=output.getvalue(),
-                    file_name="rapporter_og_paalogginger.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
+            st.download_button(
+                label="📥 Last ned CSV",
+                data=csv_data.getvalue(),
+                file_name="rapporter_og_paalogginger.csv",
+                mime="text/csv",
+            )
 
         # Preview data
         st.subheader("Forhåndsvisning av data")

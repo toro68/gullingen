@@ -113,7 +113,6 @@ def get_passwords():
         logger.error(f"Error loading passwords: {str(e)}")
         return {}
 
-
 def is_active_booking(
     booking: Optional[pd.Series], current_date: datetime.date
 ) -> bool:
@@ -142,18 +141,3 @@ def is_active_booking(
             return ankomst <= current_date <= avreise
         else:
             return ankomst == current_date
-
-
-# Example usage:
-# toml_file_path = 'path/to/your/config.toml'
-# cabin_user_data = map_cabins_to_users(toml_file_path)
-# if cabin_user_data:
-#     for user, data in cabin_user_data.items():
-#         print(f"User: {user}")
-#         print(f"Cabin: {data['cabin_number']}")
-#         print(f"Coordinates: {data['latitude']}, {data['longitude']}")
-#         print(f"Rode: {data['rode']}")
-#         print(f"Icon: {data['icon']}")
-#         print("---")
-# else:
-#     print("Ingen data tilgjengelig eller feil i prosessering.")

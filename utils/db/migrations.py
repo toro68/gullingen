@@ -1,8 +1,10 @@
 import os
 
 from utils.core.logging_config import get_logger
-from utils.db.connection import get_db_connection
-
+from utils.db.connection import get_db_connection   
+from utils.db.table_utils import get_existing_tables
+from utils.db.db_utils import get_current_db_version
+from utils.core.config import DB_CONFIG
 logger = get_logger(__name__)
 
 def run_migrations():
@@ -431,6 +433,26 @@ def migrate_customer_table():
     except Exception as e:
         logger.error(f"Error migrating customer table: {str(e)}")
         return False
+
+def verify_migration_versions():
+    """Verifiser at migrasjonsversjoner matcher DB_CONFIG"""
+    for db_name, config in DB_CONFIG.items():
+        expected_version = config["version"]
+        current_version = get_current_db_version(db_name)
+        if expected_version != current_version:
+            logger.error(f"Versjonskonflikt i {db_name}: Forventet {expected_version}, fant {current_version}")
+            return False
+    return True
+
+def verify_all_schemas():
+    """Verifiser at alle databaseskjemaer matcher konfigurasjonen"""
+    for db_name, config in DB_CONFIG.items():
+        expected_tables = config["schema"]["tables"]
+        actual_tables = get_existing_tables(db_name)
+        if not set(expected_tables).issubset(set(actual_tables)):
+            logger.error(f"Manglende tabeller i {db_name}: {set(expected_tables) - set(actual_tables)}")
+            return False
+    return True
 
 MIGRATIONS = [
     {

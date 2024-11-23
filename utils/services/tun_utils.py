@@ -878,7 +878,7 @@ def vis_tunbroyting_oversikt():
         st.subheader("Tunbrøyting i valgt periode")
         
         # Bruk standardiserte datofunksjoner fra config
-        default_start, default_end = get_default_date_range()
+        default_start, default_end = get_date_range_defaults()
         
         col1, col2 = st.columns(2)
         with col1:

@@ -266,8 +266,13 @@ def create_map(bestillinger: pd.DataFrame, mapbox_token: str = None, title: str 
             # Bruk config.py for å generere popup tekst
             popup_text = get_booking_popup_text(booking)
             
-            # Legg til markør
-            marker_props = get_marker_properties(booking['abonnement_type'])
+            # Legg til markør med riktige argumentnavn
+            marker_props = get_marker_properties(
+                booking_type=booking['abonnement_type'],
+                is_active=booking.get('is_active', True),
+                ankomst_dato=booking.get('ankomst_dato')
+            )
+            
             fig.add_trace(
                 go.Scattermapbox(
                     lat=[coords['lat']],
@@ -319,28 +324,6 @@ def display_live_plowmap():
         height=600,
         scrolling=True,
     )
-
-
-def add_stroing_to_map(m):
-    """Legger til strøingsinformasjon på kartet"""
-    try:
-        # Hent aktive strøingsbestillinger
-        bestillinger = hent_stroing_bestillinger()
-        if not bestillinger.empty:
-            for col in ['dato', 'bestilt_dato']:  # anta disse kolonnene finnes
-                if col in bestillinger.columns:
-                    bestillinger[col] = bestillinger[col].apply(
-                        lambda x: safe_to_datetime(x)
-                    )
-            for _, row in bestillinger.iterrows():
-                # Legg til markør for hver bestilling
-                add_stroing_marker(m, row)
-
-        return True
-
-    except Exception as e:
-        logger.error(f"Feil ved visning av strøing på kart: {str(e)}")
-        return False
 
 def prepare_map_data(bestillinger: pd.DataFrame) -> pd.DataFrame:
     """Forbereder data for kartvisning"""

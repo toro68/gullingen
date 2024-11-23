@@ -326,45 +326,22 @@ def admin_stroing_page():
                 st.info(f"Ingen bestillinger funnet for perioden {start_date} til {end_date}")
                 return
 
-            # Legg til nedlastingsknapper
-            st.subheader("Last ned data")
-            col1, col2 = st.columns(2)
-            
             # Lag en kopi for eksport og konverter datoer
             export_data = filtered_bestillinger.copy()
             
             # Konverter datetime-kolonner til timezone-naive
             datetime_columns = export_data.select_dtypes(include=['datetime64[ns, UTC]']).columns
             for col in datetime_columns:
-                logger.debug(f"Konverterer {col} fra {export_data[col].dtype}")
                 export_data[col] = pd.to_datetime(export_data[col]).dt.tz_localize(None)
-                logger.debug(f"Ny dtype for {col}: {export_data[col].dtype}")
 
-            with col1:
-                csv = export_data.to_csv(index=False)
-                st.download_button(
-                    label="📥 Last ned som CSV",
-                    data=csv,
-                    file_name=f"stroingsbestillinger_{start_date}_{end_date}.csv",
-                    mime="text/csv",
-                )
-
-            with col2:
-                buffer = BytesIO()
-                with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-                    try:
-                        export_data.to_excel(writer, sheet_name="Strøingsbestillinger", index=False)
-                        logger.debug("Excel-fil generert vellykket")
-                    except Exception as excel_error:
-                        logger.error(f"Feil ved Excel-generering: {str(excel_error)}")
-                        raise
-                        
-                st.download_button(
-                    label="📊 Last ned som Excel",
-                    data=buffer.getvalue(),
-                    file_name=f"stroingsbestillinger_{start_date}_{end_date}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
+            # Last ned knapp for CSV
+            csv = export_data.to_csv(index=False)
+            st.download_button(
+                label="📥 Last ned CSV",
+                data=csv,
+                file_name=f"stroingsbestillinger_{start_date}_{end_date}.csv",
+                mime="text/csv",
+            )
 
             # Vis bestillingstabell
             st.subheader("Bestillingsoversikt")

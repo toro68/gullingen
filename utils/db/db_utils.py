@@ -16,7 +16,6 @@ from utils.core.config import (
 from utils.core.logging_config import get_logger
 from utils.db.connection import get_db_connection
 from utils.db.schemas import get_database_schemas
-from utils.db.migrations import run_migrations
 
 # Sett opp logging
 logger = get_logger(__name__)
@@ -124,7 +123,8 @@ def initialize_database_system() -> bool:
             logger.error("Failed to create tables")
             return False
             
-        # 2. Kjør migrasjoner
+        # 2. Kjør migrasjoner - lazy import
+        from utils.db.migrations import run_migrations
         if not run_migrations():
             logger.error("Failed to run migrations")
             return False
@@ -241,6 +241,52 @@ def verify_schema_version(expected_version: str) -> bool:
         logger.error(f"Error verifying schema version: {str(e)}")
         return False
 
+def get_current_db_version(db_name: str) -> str:
+    """Henter gjeldende databaseversjon fra system-databasen"""
+    try:
+        with get_db_connection("system") as conn:
+            cursor = conn.cursor()
+            
+            # Opprett versjonstabell hvis den ikke eksisterer
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    db_name TEXT PRIMARY KEY,
+                    version TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    environment TEXT
+                )
+            """)
+            
+            # Hent gjeldende versjon
+            cursor.execute(
+                "SELECT version FROM schema_version WHERE db_name = ?",
+                (db_name,)
+            )
+            result = cursor.fetchone()
+            
+            if result:
+                logger.info(f"Fant versjon {result[0]} for database {db_name}")
+                return result[0]
+            
+            # Hvis ingen versjon er registrert, bruk standardversjon fra DB_CONFIG
+            default_version = DB_CONFIG.get(db_name, {}).get("version", "1.0.0")
+            
+            # Registrer standardversjon
+            cursor.execute(
+                """
+                INSERT INTO schema_version (db_name, version, environment) 
+                VALUES (?, ?, ?)
+                """,
+                (db_name, default_version, os.getenv('ENVIRONMENT', 'development'))
+            )
+            conn.commit()
+            
+            logger.info(f"Registrerte standardversjon {default_version} for {db_name}")
+            return default_version
+            
+    except Exception as e:
+        logger.error(f"Feil ved henting av databaseversjon for {db_name}: {str(e)}")
+        return "0.0.0"  # Returner sikker standardversjon ved feil
 
 def get_existing_tables(db_name: str) -> list:
     """Hent liste over eksisterende tabeller i databasen"""

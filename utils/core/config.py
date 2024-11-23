@@ -134,6 +134,18 @@ DB_CONFIG = {
         "version": 1,
         "schema": {"tables": ["tunbroyting_bestillinger"]},
     },
+    "feedback": {
+        "path": os.path.join(DATABASE_PATH, "feedback.db"),
+        "timeout": DB_TIMEOUT,
+        "version": "1.9.3",
+        "schema": {"tables": ["feedback"]}
+    },
+    "system": {
+        "path": os.path.join(DATABASE_PATH, "system.db"),
+        "timeout": DB_TIMEOUT,
+        "version": "1.9.4",
+        "schema": {"tables": ["schema_version", "migrations_history"]}
+    }
 }
 
 # GPS konfigurasjon
