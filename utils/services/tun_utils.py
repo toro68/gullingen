@@ -839,29 +839,35 @@ def vis_tunbroyting_oversikt():
         current_time = get_current_time()
         dagens_bestillinger = filter_todays_bookings(bestillinger)
         
-        # Fjern duplikat kartvisning og bruk unike nøkler
+        # Legg til kartvisning her
         st.subheader(f"Tunbrøytingskart for {format_date(current_time, 'display', 'date')}")
+        vis_dagens_tunkart(
+            dagens_bestillinger,
+            mapbox_token=mapbox_token,
+            title=f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
+        )
         
-        # Verifiser kartkonfigurasjon
-        is_valid, error_msg = verify_map_configuration(dagens_bestillinger, mapbox_token)
-        
-        if is_valid:
-            debug_map_data(dagens_bestillinger)
+        if not dagens_bestillinger.empty:
+            st.subheader(f"Kart over tunbrøytinger {format_date(current_time, 'display', 'date')}")
             
-            fig = vis_dagens_tunkart(
-                dagens_bestillinger,
-                mapbox_token=mapbox_token,
-                title=f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
-            )
+            # Verifiser kartkonfigurasjon
+            is_valid, error_msg = verify_map_configuration(dagens_bestillinger, mapbox_token)
             
-            if fig:
-                # Bruk timestamp som unik nøkkel
-                unique_key = f"tunkart_{datetime.now().timestamp()}"
-                st.plotly_chart(fig, use_container_width=True, key=unique_key)
+            if is_valid:
+                debug_map_data(dagens_bestillinger)  # Logger debug info
+                
+                fig_today = vis_dagens_tunkart(
+                    dagens_bestillinger, 
+                    mapbox_token, 
+                    f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
+                )
+                
+                if fig_today:
+                    st.plotly_chart(fig_today, use_container_width=True, key="fig_today")
+                else:
+                    st.warning("Kunne ikke generere kart for dagens tunbrøytinger")
             else:
-                st.warning("Kunne ikke generere kart for dagens tunbrøytinger")
-        else:
-            st.warning(f"Kunne ikke vise kart: {error_msg}")
+                st.warning(f"Kunne ikke vise kart: {error_msg}")
         
         # --- Vis dagens bestillinger som liste ---
         st.subheader(f"Tunbrøytinger {format_date(current_time, 'display', 'date')}")
