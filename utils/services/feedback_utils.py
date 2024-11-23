@@ -1118,21 +1118,24 @@ def display_admin_dashboard():
     try:
         st.title("🎛️ Feedback Dashboard")
         
-        # Hent data for siste 7 dager
-        end_date = get_current_time()
-        start_date = end_date - timedelta(days=7)
-        
+        # Hent data først
         feedback_data = get_feedback(
-            start_date=start_date,
-            end_date=end_date,
+            start_date=get_current_time() - timedelta(days=7),
+            end_date=get_current_time(),
             include_hidden=True
         )
         
-        # Vis statistikk i kolonner
-        col1, col2, col3 = st.columns(3)
+        # Opprett tabs
+        tab1, tab2, tab3 = st.tabs([
+            "📊 Feedback Oversikt",
+            "🚜 Vedlikehold",
+            "📈 Statistikk"
+        ])
         
-        with col1:
+        with tab1:
+            # Vedlikeholdsstatistikk øverst
             st.subheader("🚜 Vedlikehold siste 7 dager")
+            
             # Filtrer for vedlikeholdsrelatert feedback
             maintenance_data = feedback_data[
                 feedback_data['type'].str.contains('vedlikehold', case=False, na=False)
@@ -1141,18 +1144,24 @@ def display_admin_dashboard():
             if not maintenance_data.empty:
                 # Beregn daglig statistikk
                 maintenance_data['date'] = pd.to_datetime(maintenance_data['datetime']).dt.date
-                daily_stats = pd.DataFrame({
-                    'Dato': pd.date_range(start=start_date.date(), end=end_date.date()),
-                    'Fornøyd': 0,
-                    'Nøytral': 0,
-                    'Misfornøyd': 0
-                }).set_index('Dato')
                 
-                # Tell reaksjoner per dag
+                # Opprett dataframe med alle dager
+                date_range = pd.date_range(
+                    start=get_current_time().date() - timedelta(days=7),
+                    end=get_current_time().date(),
+                    freq='D'
+                )
+                
+                daily_stats = pd.DataFrame(index=date_range)
+                daily_stats.index.name = 'Dato'
+                daily_stats['Fornøyd'] = 0
+                daily_stats['Nøytral'] = 0
+                
+                # Oppdater med faktiske tall
                 for date, group in maintenance_data.groupby('date'):
-                    daily_stats.loc[date, 'Fornøyd'] = group['comment'].str.count('😊').sum()
-                    daily_stats.loc[date, 'Nøytral'] = group['comment'].str.count('😐').sum()
-                    daily_stats.loc[date, 'Misfornøyd'] = group['comment'].str.count('😡').sum()
+                    if date in daily_stats.index:
+                        daily_stats.loc[date, 'Fornøyd'] = group['comment'].str.count('😊').sum()
+                        daily_stats.loc[date, 'Nøytral'] = group['comment'].str.count('😐').sum()
                 
                 # Vis statistikk
                 display_df = daily_stats.reset_index()
@@ -1164,8 +1173,8 @@ def display_admin_dashboard():
                 )
             else:
                 st.info("Ingen vedlikeholdsdata for perioden")
-        
-        with tab1:
+            
+            # Vis resten av feedback oversikten
             display_feedback_overview(feedback_data)
             
         with tab2:
