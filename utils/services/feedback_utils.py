@@ -89,27 +89,36 @@ def get_feedback(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     feedback_type: Optional[str] = None,
-    include_hidden: bool = False
-) -> Optional[pd.DataFrame]:
+    include_hidden: bool = False,
+    customer_id: Optional[str] = None
+) -> pd.DataFrame:
     """
-    Henter feedback fra databasen.
+    Henter feedback fra databasen med garanterte kolonner.
     
     Args:
         start_date: Start dato for filtrering
         end_date: Slutt dato for filtrering
         feedback_type: Type feedback å filtrere på
         include_hidden: Om skjulte tilbakemeldinger skal inkluderes
+        customer_id: Spesifikk kunde-ID å filtrere på
         
     Returns:
-        pd.DataFrame eller None ved feil
+        pd.DataFrame med garanterte kolonner fra databaseskjemaet
     """
     try:
         logger.debug("Starting get_feedback")
         
+        # Definer forventede kolonner basert på databaseskjemaet
+        expected_columns = [
+            'id', 'type', 'customer_id', 'datetime', 'comment', 
+            'status', 'status_changed_by', 'status_changed_at', 
+            'hidden', 'is_alert', 'display_on_weather', 
+            'expiry_date', 'target_group'
+        ]
+        
         # Bygg spørring
-        query = """
-        SELECT id, type, datetime, comment, customer_id, status, 
-               status_changed_by, status_changed_at, hidden
+        query = f"""
+        SELECT {', '.join(expected_columns)}
         FROM feedback
         WHERE 1=1
         """
@@ -132,30 +141,47 @@ def get_feedback(
         if not include_hidden:
             query += " AND (hidden = 0 OR hidden IS NULL)"
             
+        # Legg til kundefilter hvis spesifisert
+        if customer_id:
+            query += " AND customer_id = ?"
+            params.append(customer_id)
+            
         query += " ORDER BY datetime DESC"
         
         # Hent data
         feedback_data = fetch_data("feedback", query, params)
         
-        # Konverter til DataFrame hvis vi fikk liste
+        # Konverter til DataFrame
         if isinstance(feedback_data, list):
-            feedback_data = pd.DataFrame(feedback_data)
+            df = pd.DataFrame(feedback_data, columns=expected_columns)
+        else:
+            # Hvis vi ikke fikk data, lag en tom DataFrame med riktige kolonner
+            df = pd.DataFrame(columns=expected_columns)
             
-        # Hvis vi har data, konverter datokolonner
-        if not feedback_data.empty:
+        # Sikre riktige datatyper
+        if not df.empty:
             # Konverter datetime-kolonner
             date_columns = ['datetime', 'status_changed_at']
             for col in date_columns:
-                if col in feedback_data.columns:
-                    feedback_data[col] = pd.to_datetime(feedback_data[col]).dt.tz_localize(TZ)
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col])
+                    # Legg til tidssone hvis mangler
+                    if df[col].dt.tz is None:
+                        df[col] = df[col].dt.tz_localize(TZ)
+                        
+            # Konverter numeriske kolonner
+            numeric_columns = ['hidden', 'is_alert', 'display_on_weather']
+            for col in numeric_columns:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
                     
-        logger.debug(f"Retrieved {len(feedback_data) if not feedback_data.empty else 0} feedback entries")
-        return feedback_data
+        logger.debug(f"Retrieved {len(df)} feedback entries")
+        return df
         
     except Exception as e:
         logger.error(f"Error fetching feedback: {str(e)}", exc_info=True)
-        return pd.DataFrame()  # Returner tom DataFrame ved feil
-
+        # Returner tom DataFrame med riktige kolonner ved feil
+        return pd.DataFrame(columns=expected_columns)
 
 def update_feedback_status(feedback_id, new_status, changed_by, new_expiry=None, new_display=None, new_target=None):
     """
