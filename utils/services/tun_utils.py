@@ -838,7 +838,6 @@ def vis_tunbroyting_oversikt():
     Bruker config.py for standardisert dato- og tidshåndtering.
     """
     st.title("Oversikt over tunbestillinger")
-    vis_broytekart
     
     try:
         # Hent bestillinger

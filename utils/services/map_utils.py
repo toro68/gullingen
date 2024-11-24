@@ -10,7 +10,8 @@ import streamlit as st
 # Local imports
 from utils.core.config import (
     safe_to_datetime,
-    format_date
+    format_date,
+    get_current_time
 )
 from utils.core.logging_config import get_logger
 from utils.core.util_functions import get_marker_properties
