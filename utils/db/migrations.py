@@ -199,7 +199,7 @@ def migrate_feedback_table():
         return False
 
 def migrate_tunbroyting_table():
-    """Migrerer tunbroyting-tabellen"""
+    """Migrerer tunbroytingtabellen"""
     try:
         with get_db_connection("tunbroyting") as conn:
             cursor = conn.cursor()
