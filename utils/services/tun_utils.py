@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import pytz
 
 from utils.core.config import (
     TZ,
@@ -590,50 +591,63 @@ def handle_tun():
     # Kunderedigeringskomponent
     customer_edit_component()
 
-def hent_aktive_bestillinger_for_dag(dato):
+def hent_aktive_bestillinger_for_dag(dato: datetime.date) -> pd.DataFrame:
+    """
+    Henter aktive bestillinger for en gitt dato.
+    
+    Args:
+        dato (datetime.date): Datoen å hente bestillinger for
+        
+    Returns:
+        pd.DataFrame: DataFrame med aktive bestillinger
+    """
+    logger.info("=== STARTER HENT_AKTIVE_BESTILLINGER_FOR_DAG ===")
     try:
-        dato_dt = normalize_datetime(dato)
-        logger.info(f"Normalisert dato for filtrering: {dato_dt}")
+        # Hent alle bestillinger først
+        bestillinger = get_bookings()
+        if bestillinger.empty:
+            return bestillinger
             
-        alle_bestillinger = get_bookings()
-        logger.info(f"Totalt antall bestillinger hentet: {len(alle_bestillinger)}")
+        # Normaliser input-dato til midnatt med tidssone
+        dato_normalisert = datetime.combine(dato, datetime.min.time())
+        dato_normalisert = pytz.timezone('Europe/Oslo').localize(dato_normalisert)
+        logger.info(f"Normalisert dato for filtrering: {dato_normalisert}")
+        
+        # Konverter datoer til datetime med tidssone
+        bestillinger['ankomst_dato'] = pd.to_datetime(bestillinger['ankomst_dato'])
+        if 'avreise_dato' in bestillinger.columns:
+            bestillinger['avreise_dato'] = pd.to_datetime(bestillinger['avreise_dato'])
             
-        # Konverter datokolonner til datetime med tidssone
+        # Konverter til riktig tidssone hvis ikke allerede satt
         for col in ['ankomst_dato', 'avreise_dato']:
-            if col in alle_bestillinger.columns:
-                alle_bestillinger[col] = pd.to_datetime(alle_bestillinger[col]).dt.tz_localize(TZ)
-
-        # Filtrer bestillinger - endret logikk her
-        aktive_bestillinger = alle_bestillinger[
-            # Årsabonnement som er aktive i dag (ikke utløpt)
+            if col in bestillinger.columns:
+                if bestillinger[col].dt.tz is None:
+                    bestillinger[col] = bestillinger[col].dt.tz_localize('Europe/Oslo')
+                else:
+                    bestillinger[col] = bestillinger[col].dt.tz_convert('Europe/Oslo')
+        
+        # Filtrer basert på dato og abonnement_type
+        mask = (
+            # Vanlige bestillinger som starter på den gitte datoen
             (
-                (alle_bestillinger['abonnement_type'] == 'Årsabonnement') &
-                (alle_bestillinger['ankomst_dato'].dt.date <= dato_dt.date()) &
-                (
-                    alle_bestillinger['avreise_dato'].isna() |
-                    (alle_bestillinger['avreise_dato'].dt.date >= dato_dt.date())
-                )
+                (bestillinger["abonnement_type"] != "Årsabonnement") &
+                (bestillinger["ankomst_dato"].dt.normalize() == dato_normalisert)
             ) |
-            # Ukentlige bestillinger som er aktive i dag
+            # Årsabonnement som er aktive (ankomst passert og ikke utløpt)
             (
-                (alle_bestillinger['abonnement_type'] == 'Ukentlig ved bestilling') &
-                (alle_bestillinger['ankomst_dato'].dt.date <= dato_dt.date()) &
+                (bestillinger["abonnement_type"] == "Årsabonnement") &
+                (bestillinger["ankomst_dato"].dt.normalize() <= dato_normalisert) &
                 (
-                    alle_bestillinger['avreise_dato'].isna() |
-                    (alle_bestillinger['avreise_dato'].dt.date >= dato_dt.date())
+                    bestillinger["avreise_dato"].isna() |
+                    (bestillinger["avreise_dato"].dt.normalize() >= dato_normalisert)
                 )
             )
-        ]
-        
-        logger.info(f"=== Resultat ===")
-        logger.info(f"Filtrerte bestillinger for {dato_dt.date()}:")
-        logger.info(f"Antall funnet: {len(aktive_bestillinger)}")
-        logger.info(f"Filtrerte data:\n{aktive_bestillinger.to_string()}")
-        
-        return aktive_bestillinger
+        )
+            
+        return bestillinger[mask].copy()
         
     except Exception as e:
-        logger.error(f"Feil i hent_aktive_bestillinger_for_dag: {str(e)}", exc_info=True)
+        logger.error(f"Feil i hent_aktive_bestillinger_for_dag: {str(e)}")
         return pd.DataFrame()
 
 def tunbroyting_kommende_uke(bestillinger):
