@@ -1,4 +1,5 @@
 # Hovedfunksjoner som er avhengige av andre moduler:
+kartet skal bare vise aktive bestillinger uavhengig av abonnement type. 
 
 ## vis_dagens_tunkart():
 Bruker customer_utils for å hente koordinater

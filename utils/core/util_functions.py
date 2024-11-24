@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 from typing import Tuple
-
 import pytz
+import pandas as pd
 import streamlit as st
 
-from utils.core.config import TZ
+from utils.core.config import normalize_datetime, TZ, format_date, get_current_time
 from utils.core.logging_config import get_logger
 from utils.services.gps_utils import get_last_gps_activity
 
@@ -93,7 +93,6 @@ def get_date_range(period):
         st.error(f"Ugyldig periodevalg: {period}")
         return None, None
 
-
 def get_status_text(row, has_active_booking):
     if has_active_booking:
         return "Aktiv bestilling"
@@ -103,51 +102,6 @@ def get_status_text(row, has_active_booking):
         return "Årsabonnement"
     else:
         return "Ingen brøyting"
-
-
-def get_marker_properties(
-    booking_type: str,
-    is_active: bool,
-    ankomst_dato: datetime,
-    current_date: datetime = None,
-) -> Tuple[str, str]:
-    """
-    Bestemmer markør-egenskaper basert på bestillingstype, aktivitetsstatus og ankomstdato.
-
-    Args:
-        booking_type (str): Typen bestilling ('Ukentlig ved bestilling', 'Årsabonnement', etc.)
-        is_active (bool): Om bestillingen er aktiv eller ikke
-        ankomst_dato (datetime): Ankomstdatoen for bestillingen
-        current_date (datetime, optional): Dagens dato. Hvis ikke oppgitt, brukes nåværende dato.
-
-    Returns:
-        Tuple[str, str]: En tuple med farge og form for markøren
-    """
-    if current_date is None:
-        current_date = datetime.now(TZ).date()
-    else:
-        current_date = current_date.date()
-
-    ankomst_dato = ankomst_dato.date()
-    days_until_arrival = (ankomst_dato - current_date).days
-
-    if is_active:
-        return "red", "circle"  # Aktiv bestilling
-    elif booking_type == "Ukentlig ved bestilling":
-        if 0 <= days_until_arrival <= 7:
-            # Gradvis endring fra oransje til rød jo nærmere ankomstdatoen
-            intensity = int(255 * (7 - days_until_arrival) / 7)
-            return f"rgb(255, {255 - intensity}, 0)", "circle"
-        else:
-            return (
-                "orange",
-                "circle",
-            )  # Ukentlig ved bestilling, mer enn 7 dager til ankomst
-    elif booking_type == "Årsabonnement":
-        return "blue", "circle"  # Årsabonnement
-    else:
-        return "gray", "circle"  # Ingen brøyting
-
 
 def get_status_display(status):
     """
@@ -180,3 +134,52 @@ def parse_date(date_string):
 
 def parse_time(time_string):
     return datetime.strptime(time_string, "%H:%M:%S").time() if time_string else None
+
+# filtrerer bestillinger i bestill_tunbroyting
+def filter_todays_bookings(bookings: pd.DataFrame) -> pd.DataFrame:
+    """Filtrerer bestillinger for dagens dato"""
+    logger.info("=== STARTER FILTER_TODAYS_BOOKINGS ===")
+    try:
+        if bookings.empty:
+            return bookings
+            
+        today = get_current_time().replace(hour=0, minute=0, second=0, microsecond=0)
+        logger.info(f"Dagens dato (normalisert): {today}")
+        
+        # Konverter datoer til datetime med tidssone
+        bookings['ankomst_dato'] = pd.to_datetime(bookings['ankomst_dato'])
+        if 'avreise_dato' in bookings.columns:
+            bookings['avreise_dato'] = pd.to_datetime(bookings['avreise_dato'])
+            
+        # Konverter til riktig tidssone hvis ikke allerede satt
+        for col in ['ankomst_dato', 'avreise_dato']:
+            if col in bookings.columns:
+                if bookings[col].dt.tz is None:
+                    bookings[col] = bookings[col].dt.tz_localize('Europe/Oslo')
+                else:
+                    bookings[col] = bookings[col].dt.tz_convert('Europe/Oslo')
+        
+        # Filtrer basert på dato og abonnement_type
+        mask = (
+            # Vanlige bestillinger som starter i perioden
+            (
+                (bookings["abonnement_type"] != "Årsabonnement") &
+                (bookings["ankomst_dato"].dt.normalize() == today)
+            ) |
+            # Årsabonnement som er aktive (ankomst passert og ikke utløpt)
+            (
+                (bookings["abonnement_type"] == "Årsabonnement") &
+                (bookings["ankomst_dato"].dt.normalize() <= today) &
+                (
+                    bookings["avreise_dato"].isna() |
+                    (bookings["avreise_dato"].dt.normalize() >= today)
+                )
+            )
+        )
+            
+        return bookings[mask].copy()
+        
+    except Exception as e:
+        logger.error(f"Feil i filter_todays_bookings: {str(e)}")
+        return pd.DataFrame()
+    

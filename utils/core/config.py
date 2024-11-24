@@ -87,9 +87,12 @@ DATE_CONVERSION = {
         "DATE": lambda x: safe_to_datetime(x).date() if x is not None else None,
         "TIME": lambda x: datetime.strptime(x, DATE_FORMATS["database"]["time"]).time() if x is not None else None,
         "DATETIME": lambda x: safe_to_datetime(x)
+    },
+    "to_map": {
+        "ankomst_dato": lambda x: ensure_tz_datetime(x),
+        "avreise_dato": lambda x: ensure_tz_datetime(x)
     }
 }
-
 
 # Database timeouts og retry konfigurasjon
 DB_TIMEOUT = 30

@@ -134,3 +134,51 @@ logs/*.log.*
 *.backup
 .DS_Store
 .DS_Store
+
+# Database versjoner og migrasjoner
+schema_version.json
+migrations/*.sql
+migrations/*.py[cod]
+
+# Cursor-spesifikke filer
+.cursor/
+.cursor-index/
+.cursor-cache/
+
+# Mapbox
+.mapbox
+*.mapbox-token
+
+# Plotly
+.plotly
+*.plotly-token
+
+# Streamlit cache
+.streamlit-cache/
+__pycache__/
+*.py[cod]
+
+# System database
+system.db
+system.db-journal
+
+# Spesifikke databaser
+tunbroyting.db
+customer.db
+stroing.db
+
+# GPS data
+gps_cache/
+*.gps.json
+
+# Temp data
+data/temp/
+*.tmp
+
+# Versjonskontroll
+.git/
+.gitattributes
+
+# Ekstra IDE filer
+*.code-workspace
+.history/

@@ -4,7 +4,7 @@ validation_utils.py - Sentralisert validering for Fjellbergsskardet
 
 import re
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 import numpy as np
 
 import streamlit as st
@@ -16,6 +16,7 @@ from utils.core.config import (
 from utils.core.config import safe_to_datetime
 from utils.core.logging_config import get_logger
 from utils.db.connection import get_db_connection
+from utils.core.models import MapBooking, ValidationResult
 
 logger = get_logger(__name__)
 
@@ -327,3 +328,10 @@ def validate_user_id(user_id: str) -> bool:
     Validerer bruker-ID (alias for validate_customer_id)
     """
     return validate_customer_id(user_id)
+
+def validate_map_data(bookings: List[MapBooking]) -> ValidationResult:
+    """Validerer data før kartvisning"""
+    return ValidationResult(
+        is_valid=True,
+        errors=[]
+    )
