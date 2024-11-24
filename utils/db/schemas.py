@@ -44,7 +44,7 @@ def get_database_schemas():
         """,
         "tunbroyting": """
             CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 customer_id TEXT NOT NULL,
                 ankomst_dato TEXT NOT NULL,
                 avreise_dato TEXT,

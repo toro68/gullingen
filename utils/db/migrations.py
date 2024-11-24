@@ -205,33 +205,34 @@ def migrate_tunbroyting_table():
             cursor = conn.cursor()
             logger.info("Starting tunbroyting table migration")
             
-            # Backup eksisterende tabell
+            # Sikker backup med commit
+            cursor.execute("DROP TABLE IF EXISTS tunbroyting_bestillinger_backup")
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger_backup 
+                CREATE TABLE tunbroyting_bestillinger_backup 
                 AS SELECT * FROM tunbroyting_bestillinger
             """)
+            conn.commit()
             
-            # Dropp original tabell
+            # Dropp og opprett ny tabell med forbedret skjema
             cursor.execute("DROP TABLE IF EXISTS tunbroyting_bestillinger")
-            
-            # Opprett ny tabell med oppdatert skjema
             cursor.execute("""
                 CREATE TABLE tunbroyting_bestillinger (
-                    id INTEGER PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     customer_id TEXT NOT NULL,
                     ankomst_dato TEXT NOT NULL,
                     avreise_dato TEXT,
-                    abonnement_type TEXT NOT NULL
+                    abonnement_type TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             
-            # Kopier data fra backup
+            # Kopier data med eksplisitt kolonnespesifikasjon
             cursor.execute("""
                 INSERT INTO tunbroyting_bestillinger (
-                    id, customer_id, ankomst_dato, avreise_dato, abonnement_type
+                    customer_id, ankomst_dato, avreise_dato, abonnement_type
                 )
                 SELECT 
-                    id, 
                     customer_id,
                     ankomst_dato,
                     avreise_dato,
@@ -239,22 +240,23 @@ def migrate_tunbroyting_table():
                 FROM tunbroyting_bestillinger_backup
             """)
             
-            # Opprett indekser
+            # Opprett indekser før commit
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_tunbroyting_customer_id 
+                CREATE INDEX idx_tunbroyting_customer_id 
                 ON tunbroyting_bestillinger(customer_id)
             """)
             cursor.execute("""
-                CREATE INDEX IF NOT EXISTS idx_tunbroyting_ankomst 
-                ON tunbroyting_bestillinger(ankomst_dato)
+                CREATE INDEX idx_tunbroyting_dates 
+                ON tunbroyting_bestillinger(ankomst_dato, avreise_dato)
             """)
             
             conn.commit()
-            logger.info("Successfully completed tunbroyting table migration")
             return True
             
     except Exception as e:
         logger.error(f"Error migrating tunbroyting table: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
         return False
 
 def migrate_login_history_table():
