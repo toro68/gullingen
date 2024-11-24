@@ -221,8 +221,7 @@ def migrate_tunbroyting_table():
                     customer_id TEXT NOT NULL,
                     ankomst_dato TEXT NOT NULL,
                     avreise_dato TEXT,
-                    abonnement_type TEXT NOT NULL,
-                    FOREIGN KEY (customer_id) REFERENCES customer(customer_id)
+                    abonnement_type TEXT NOT NULL
                 )
             """)
             
