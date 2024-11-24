@@ -72,8 +72,8 @@ DATE_DEFAULTS = {
 # Datotype-konfigurasjon for database
 DB_DATE_TYPES = {
     "tunbroyting_bestillinger": {
-        "ankomst_dato": "DATE",
-        "avreise_dato": "DATE"
+        "ankomst_dato": "TEXT NOT NULL",
+        "avreise_dato": "TEXT"
     }
 }
 # Konverteringsregler for datoer

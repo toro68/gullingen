@@ -75,10 +75,10 @@ sql
 CREATE TABLE IF NOT EXISTS tunbroyting_bestillinger (
 id INTEGER PRIMARY KEY,
 bruker TEXT,
-ankomst_dato DATE,
-ankomst_tid TIME,
-avreise_dato DATE,
-avreise_tid TIME,
+ankomst_dato TEXT NOT NULL,
+ankomst_tid TEXT,
+avreise_dato TEXT,
+avreise_tid TEXT,
 abonnement_type TEXT
 )
 
