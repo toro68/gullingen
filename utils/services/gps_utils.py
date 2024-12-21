@@ -5,7 +5,7 @@ import json
 import logging
 import re
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 
 import pandas as pd
@@ -260,74 +260,141 @@ def display_gps_data(start_date, end_date):
     with st.expander("Siste brøyteaktivitet"):
         if geojson_data and "features" in geojson_data:
             try:
-                # Samle alle datoer med tilhørende BILNR
-                activities = []
-                for feature in geojson_data["features"]:
-                    properties = feature.get("properties", {})
-                    if "lastUpdated" in properties and "BILNR" in properties:
+                # Samle alle tidspunkt og grupper etter kjøretøy
+                vehicle_data = {}
+                for f in geojson_data.get("features", []):
+                    props = f.get("properties", {})
+                    ts = props.get("lastUpdated")
+                    coords = f.get("geometry", {}).get("coordinates", [])
+                    
+                    if coords and len(coords) >= 2:
+                        lat = coords[0] if isinstance(coords[0], (int, float)) else coords[0][0]
+                        lon = coords[1] if isinstance(coords[1], (int, float)) else coords[0][1]
+                        vehicle_id = f"Kjøretøy {round(lat, 2)}_{round(lon, 2)}"
+                    else:
+                        continue
+                    
+                    if ts:
+                        clean_ts = ts.replace('$D', '')
                         try:
-                            date = parse_date(properties["lastUpdated"])
-                            if date:
-                                activities.append({
-                                    "BILNR": properties["BILNR"],
-                                    "Date": date
-                                })
+                            dt = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S.%fZ')
+                            if vehicle_id not in vehicle_data:
+                                vehicle_data[vehicle_id] = []
+                            vehicle_data[vehicle_id].append(dt)
                         except ValueError:
                             continue
 
-                if activities:
-                    # Konverter til DataFrame
-                    df = pd.DataFrame(activities)
+                if vehicle_data:
+                    # Finn den mest aktive økten
+                    longest_duration = timedelta(0)
+                    most_active = None
                     
-                    # Finn siste aktivitet per BILNR
-                    latest_activities = df.sort_values("Date").groupby("BILNR").last().reset_index()
+                    for vehicle, timestamps in vehicle_data.items():
+                        timestamps.sort()
+                        last = timestamps[-1]
+                        first = timestamps[0]
+                        duration = last - first
+                        
+                        if duration > longest_duration and duration.seconds > 600:  # Minst 10 minutter
+                            longest_duration = duration
+                            most_active = {
+                                'vehicle': vehicle,
+                                'first': first,
+                                'last': last,
+                                'duration': duration
+                            }
                     
-                    # Formater dato for visning
-                    latest_activities["Sist aktiv"] = latest_activities["Date"].dt.strftime(
-                        "%d.%m.%Y kl. %H:%M"
-                    )
-                    
-                    # Vis dataframe
-                    st.dataframe(
-                        latest_activities[["BILNR", "Sist aktiv"]], 
-                        hide_index=True
-                    )
-                    
-                    st.write(f"Antall aktive brøytebiler: {len(latest_activities)}")
+                    if most_active:
+                        hours = most_active['duration'].seconds // 3600
+                        minutes = (most_active['duration'].seconds % 3600) // 60
+                        
+                        st.markdown(
+                            f"""
+                            <div style='padding: 10px; background-color: #f0f2f6; border-radius: 10px; margin: 10px 0;'>
+                                <h3 style='margin: 0; color: #1f2937;'>🚜 Siste brøyteøkt:</h3>
+                                <p style='margin: 5px 0; color: #374151;'>
+                                    Fra: {most_active['first'].strftime('%d.%m.%Y kl. %H:%M')}<br>
+                                    Til: {most_active['last'].strftime('%d.%m.%Y kl. %H:%M')}<br>
+                                    Varighet: {hours:02d}:{minutes:02d}<br>
+                                    Rode: Hauge - Fjellbs
+                                </p>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.info("Ingen aktiv brøyting funnet i perioden.")
                 else:
-                    st.write("Ingen gyldig brøyteaktivitet funnet.")
+                    st.info("Ingen brøyteaktivitet registrert.")
                     
             except Exception as e:
                 logger.error(f"Feil ved visning av brøytedata: {e}")
                 st.error("Kunne ikke vise brøytedata.")
         else:
-            st.write("Ingen brøyteaktivitet registrert.")
+            st.info("Ingen brøyteaktivitet registrert.")
 
 def display_last_activity():
-    last_activity = get_last_gps_activity()
-    if isinstance(last_activity, datetime):
-        formatted_time = last_activity.strftime("%d.%m.%Y kl. %H:%M")
-        st.markdown(
-            """
-            <div style='padding: 10px; background-color: #f0f2f6; border-radius: 10px; margin: 10px 0;'>
-                <h3 style='margin: 0; color: #1f2937;'>
-                    🚜 Siste brøyting: <span style='color: #2563eb;'>{}</span>
-                </h3>
-            </div>
-            """.format(formatted_time),
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            """
-            <div style='padding: 10px; background-color: #f0f2f6; border-radius: 10px; margin: 10px 0;'>
-                <h3 style='margin: 0; color: #1f2937;'>
-                    🚜 Siste brøyting: <span style='color: #6b7280;'>Ingen data tilgjengelig</span>
-                </h3>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    """Viser siste brøyteaktivitet med start og slutt-tidspunkt."""
+    try:
+        geojson_data = get_geojson_data()
+        if not geojson_data or "features" not in geojson_data:
+            return None
+            
+        # Samle alle tidspunkt
+        timestamps = []
+        for feature in geojson_data.get("features", []):
+            ts = feature.get("properties", {}).get("lastUpdated")
+            if ts:
+                clean_ts = ts.replace('$D', '')
+                try:
+                    dt = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S.%fZ')
+                    timestamps.append(dt)
+                except ValueError:
+                    continue
+        
+        if timestamps:
+            # Finn nyeste tidspunkt og filtrer siste 24 timer
+            newest = max(timestamps)
+            day_ago = newest - timedelta(days=1)
+            recent_timestamps = [ts for ts in timestamps if ts > day_ago]
+            
+            if recent_timestamps:
+                recent_timestamps.sort()
+                first = recent_timestamps[0]
+                last = recent_timestamps[-1]
+                duration = last - first
+                hours = duration.seconds // 3600
+                minutes = (duration.seconds % 3600) // 60
+                
+                st.markdown(
+                    f"""
+                    <div style='padding: 10px; background-color: #f0f2f6; border-radius: 10px; margin: 10px 0;'>
+                        <h3 style='margin: 0; color: #1f2937;'>🚜 Siste brøyting:</h3>
+                        <p style='margin: 5px 0; color: #374151;'>
+                            Fra: {first.strftime('%d.%m.%Y kl. %H:%M')}<br>
+                            Til: {last.strftime('%d.%m.%Y kl. %H:%M')}<br>
+                            Varighet: {hours:02d}:{minutes:02d}
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.info("Ingen brøyteaktivitet siste 24 timer.")
+        else:
+            st.markdown(
+                """
+                <div style='padding: 10px; background-color: #f0f2f6; border-radius: 10px; margin: 10px 0;'>
+                    <h3 style='margin: 0; color: #1f2937;'>
+                        🚜 Siste brøyting: <span style='color: #6b7280;'>Ingen data tilgjengelig</span>
+                    </h3>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    except Exception as e:
+        logger.error(f"Feil ved visning av siste brøyting: {e}")
+        st.error("Kunne ikke vise siste brøyting.")
 
 def setup_debug_logging():
     logging.basicConfig(
