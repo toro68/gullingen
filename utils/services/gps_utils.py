@@ -91,54 +91,45 @@ def get_geojson_data() -> Dict:
         response = requests.get(url, timeout=10)
         
         if not response.ok:
-            print(f"Feil ved henting av data. Status: {response.status_code}")
+            logger.warning(f"Feil ved henting av data. Status: {response.status_code}")
             return {}
             
         soup = BeautifulSoup(response.text, 'html.parser')
         scripts = soup.find_all('script')
         
-        print(f"\nSøker gjennom {len(scripts)} script-tagger...")
+        logger.debug(f"Fant {len(scripts)} script-tagger")
         
-        for i, script in enumerate(scripts):
-            if not script.string:
-                continue
-                
-            content = script.string.strip()
-            
-            # Vi vet at script 29 inneholder dataene
-            if i == 28:  # 0-basert indeks for script 29
-                print("\nAnalyserer script 29:")
+        # Bruk spesifikt script 29 (indeks 28)
+        if len(scripts) > 28:
+            script = scripts[28]
+            if script.string:
+                content = script.string.strip()
                 
                 if 'self.__next_f.push' in content:
                     # Fjern JavaScript wrapper
                     content = content.replace('self.__next_f.push([1,"', '')
                     content = content.replace('"])', '')
-                    # Fjern escaping
                     content = content.replace('\\"', '"')
                     
-                    # Finn geojson-objektet
                     if '"geojson":' in content:
-                        start_idx = content.find('"geojson":') + len('"geojson":')
+                        start = content.find('"geojson":') + len('"geojson":')
                         
-                        # Finn slutten av JSON-objektet ved å telle krøllparenteser
+                        # Tell krøllparenteser for å finne slutten
                         brace_count = 0
                         in_string = False
                         escape_next = False
-                        end_idx = start_idx
+                        end_idx = start
                         
-                        for idx, char in enumerate(content[start_idx:], start=start_idx):
+                        for idx, char in enumerate(content[start:], start=start):
                             if escape_next:
                                 escape_next = False
                                 continue
-                                
                             if char == '\\':
                                 escape_next = True
                                 continue
-                                
                             if char == '"' and not escape_next:
                                 in_string = not in_string
                                 continue
-                                
                             if not in_string:
                                 if char == '{':
                                     brace_count += 1
@@ -148,29 +139,21 @@ def get_geojson_data() -> Dict:
                                         end_idx = idx + 1
                                         break
                         
+                        json_str = content[start:end_idx]
                         try:
-                            json_str = content[start_idx:end_idx]
-                            print(f"\nEkstrahert JSON ({len(json_str)} tegn):")
-                            print(f"Start: {json_str[:100]}")
-                            print(f"Slutt: {json_str[-100:]}")
-                            
                             data = json.loads(json_str)
                             if 'type' in data and 'features' in data:
-                                print(f"\nSuksess! Fant {len(data['features'])} features")
+                                logger.debug(f"Fant {len(data['features'])} features")
                                 return data
-                            
                         except json.JSONDecodeError as e:
-                            print(f"JSON parsing feilet: {str(e)}")
-                            print(f"På posisjon: {e.pos}")
-                            print(f"Linje: {e.lineno}, Kolonne: {e.colno}")
-                            
-        print("Ingen gyldig GPS-data funnet")
+                            logger.error(f"JSON parsing feilet: {str(e)}")
+        
+        logger.warning("Ingen gyldig GPS-data funnet")
         return {}
         
     except Exception as e:
-        print(f"Feil ved henting av GeoJSON-data: {str(e)}")
-        import traceback
-        print(f"Stacktrace:\n{traceback.format_exc()}")
+        logger.error(f"Feil ved henting av GeoJSON-data: {str(e)}")
+        logger.error(traceback.format_exc())
         return {}
 
 def fetch_gps_data() -> Optional[datetime]:
@@ -434,51 +417,3 @@ def get_latest_plowing_time(geojson_data):
                 latest_timestamp = clean_timestamp
                 print(f"Nytt siste tidspunkt: {latest_timestamp}")  # Debug print
     return latest_timestamp
-
-if __name__ == "__main__":
-    import json
-    from datetime import datetime
-
-    import requests
-    from bs4 import BeautifulSoup
-    
-    print("\nHenter brøytedata fra Fjellbergsskardet...")
-    
-    try:
-        url = "https://plowman-new.xn--snbryting-m8ac.net/nb/share/Y3VzdG9tZXItMTM="
-        response = requests.get(url, timeout=10)
-        
-        if not response.ok:
-            print(f"Feil ved henting av data. Status: {response.status_code}")
-            exit(1)
-            
-        soup = BeautifulSoup(response.text, 'html.parser')
-        scripts = soup.find_all('script')
-        
-        for script in scripts:
-            if script.string and 'self.__next_f.push' in script.string:
-                content = script.string.strip()
-                if '"geojson":' in content:
-                    start = content.find('"geojson":') + len('"geojson":')
-                    end = content.find('"}])', start)
-                    json_str = content[start:end]
-                    data = json.loads(json_str)
-                    
-                    latest = None
-                    for f in data.get("features", []):
-                        ts = f.get("properties", {}).get("lastUpdated")
-                        if ts:
-                            clean_ts = ts.replace('$D', '')
-                            if not latest or clean_ts > latest:
-                                latest = clean_ts
-                    
-                    if latest:
-                        dt = datetime.strptime(latest, '%Y-%m-%dT%H:%M:%S.%fZ')
-                        print(f"\n🚜 Sist brøytet: {dt.strftime('%d.%m.%Y kl. %H:%M')}\n")
-                        exit(0)
-        
-        print("\n❌ Fant ingen brøytedata\n")
-        
-    except Exception as e:
-        print(f"\n❌ Feil: {str(e)}\n")
-        exit(1)
