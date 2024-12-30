@@ -6,6 +6,7 @@ import logging
 import re
 import traceback
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Union
 
 import pandas as pd
@@ -35,7 +36,10 @@ def parse_date(date_str):
         
         for fmt in formats:
             try:
-                return datetime.strptime(date_str, fmt)
+                dt = datetime.strptime(date_str, fmt)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=TZ)
+                return dt
             except ValueError:
                 continue
                 
@@ -201,8 +205,12 @@ def get_last_gps_activity() -> Optional[datetime]:
             if ts:
                 clean_ts = ts.replace('$D', '')
                 try:
-                    dt = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S.%fZ')
-                    if latest_timestamp is None or dt > latest_timestamp:
+                    # Parse til UTC først
+                    dt = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=ZoneInfo('UTC'))
+                    # Konverter til Oslo-tid
+                    dt = dt.astimezone(TZ)
+                    logger.info(f"Converted time: {dt}")
+                    if not latest_timestamp or dt > latest_timestamp:
                         latest_timestamp = dt
                 except ValueError:
                     continue
@@ -334,53 +342,40 @@ def display_gps_data(start_date, end_date):
             st.info("Ingen brøyteaktivitet registrert.")
 
 def display_last_activity():
-    """Viser siste brøyteaktivitet med start og slutt-tidspunkt."""
+    """Viser siste brøyteaktivitet."""
     try:
         geojson_data = get_geojson_data()
         if not geojson_data or "features" not in geojson_data:
             return None
             
-        # Samle alle tidspunkt
-        timestamps = []
+        # Finn bare siste tidspunkt
+        latest_timestamp = None
         for feature in geojson_data.get("features", []):
             ts = feature.get("properties", {}).get("lastUpdated")
             if ts:
                 clean_ts = ts.replace('$D', '')
                 try:
-                    dt = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S.%fZ')
-                    timestamps.append(dt)
+                    # Parse til UTC først
+                    dt = datetime.strptime(clean_ts, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=ZoneInfo('UTC'))
+                    # Konverter til Oslo-tid
+                    dt = dt.astimezone(TZ)
+                    if not latest_timestamp or dt > latest_timestamp:
+                        latest_timestamp = dt
                 except ValueError:
                     continue
         
-        if timestamps:
-            # Finn nyeste tidspunkt og filtrer siste 24 timer
-            newest = max(timestamps)
-            day_ago = newest - timedelta(days=1)
-            recent_timestamps = [ts for ts in timestamps if ts > day_ago]
-            
-            if recent_timestamps:
-                recent_timestamps.sort()
-                first = recent_timestamps[0]
-                last = recent_timestamps[-1]
-                duration = last - first
-                hours = duration.seconds // 3600
-                minutes = (duration.seconds % 3600) // 60
-                
-                st.markdown(
-                    f"""
-                    <div style='padding: 10px; background-color: #f0f2f6; border-radius: 10px; margin: 10px 0;'>
-                        <h3 style='margin: 0; color: #1f2937;'>🚜 Siste brøyting:</h3>
-                        <p style='margin: 5px 0; color: #374151;'>
-                            Fra: {first.strftime('%d.%m.%Y kl. %H:%M')}<br>
-                            Til: {last.strftime('%d.%m.%Y kl. %H:%M')}<br>
-                            Varighet: {hours:02d}:{minutes:02d}
-                        </p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.info("Ingen brøyteaktivitet siste 24 timer.")
+        if latest_timestamp:
+            st.markdown(
+                f"""
+                <div style='padding: 10px; background-color: #f0f2f6; border-radius: 10px; margin: 10px 0;'>
+                    <h3 style='margin: 0; color: #1f2937;'>🚜 Siste brøyting:</h3>
+                    <p style='margin: 5px 0; color: #374151;'>
+                        {latest_timestamp.strftime('%d.%m.%Y kl. %H:%M')}
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
         else:
             st.markdown(
                 """
@@ -390,7 +385,7 @@ def display_last_activity():
                     </h3>
                 </div>
                 """,
-                unsafe_allow_html=True,
+                unsafe_allow_html=True
             )
     except Exception as e:
         logger.error(f"Feil ved visning av siste brøyting: {e}")
