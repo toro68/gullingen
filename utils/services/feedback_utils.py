@@ -1067,8 +1067,8 @@ def display_daily_maintenance_rating():
         with col3:
             sad = st.button("😡 Misfornøyd", key="sad_btn")
         
-        # Flytt lenken hit, under emojiene
-        st.markdown("[🔗 Klikk her for å gi en mer detaljert tilbakemelding](https://docs.google.com/forms/d/e/1FAIpQLSf6vVjQy1H4Alfac3_qMl1QtEOyG4_KykRsX0R5w9R-qtcS3A/viewform)", unsafe_allow_html=True)
+        # Legg til target="_blank" i lenken
+        st.markdown('<a href="https://docs.google.com/forms/d/e/1FAIpQLSf6vVjQy1H4Alfac3_qMl1QtEOyG4_KykRsX0R5w9R-qtcS3A/viewform" target="_blank">🔗 Klikk her for å gi en mer detaljert tilbakemelding</a>', unsafe_allow_html=True)
         
         if any([happy, neutral, sad]):
             reaction_type = (
