@@ -114,7 +114,17 @@ def display_home_page(customer):
             - [Brøytekart](https://sartopo.com/m/J881)
             - [Brøytestandard](https://docs.google.com/document/d/1Kz7RTsp9J7KFNswmkuHiYbAY0QL6zLeSWrlbBxwUaAg/edit?usp=sharing)
             - [Tunkart - alle tun](https://t.ly/2ewsw)
-            - Tunkart bare for årsabonnement, [se her](https://t.ly/Rgrm_)
+            - [Tunkart - årsabonnement](https://t.ly/Rgrm_)
+            - [Tunkart - vinter 2024](https://t.ly/2ewsw)
+            - [Tunkart - vinter 2024 årsabonnement](https://t.ly/Rgrm_)
+            """
+        )
+
+    with st.expander("📸 Webkamera"):
+        st.markdown(
+            """
+            - [Webkamera Nesvik](https://www.vegvesen.no/trafikkinformasjon/reiseinformasjon/webkamera/#/vis/3001002_1)
+            - [Webkamera Hjelmeland](https://www.vegvesen.no/trafikkinformasjon/reiseinformasjon/webkamera/#/vis/3001003_1)
             """
         )
 
