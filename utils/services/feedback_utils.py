@@ -1067,6 +1067,9 @@ def display_daily_maintenance_rating():
         with col3:
             sad = st.button("😡 Misfornøyd", key="sad_btn")
         
+        # Flytt lenken hit, under emojiene
+        st.markdown("[🔗 Klikk her for å gi en mer detaljert tilbakemelding](https://docs.google.com/forms/d/e/1FAIpQLSf6vVjQy1H4Alfac3_qMl1QtEOyG4_KykRsX0R5w9R-qtcS3A/viewform)", unsafe_allow_html=True)
+        
         if any([happy, neutral, sad]):
             reaction_type = (
                 'positive' if happy else
@@ -1081,12 +1084,9 @@ def display_daily_maintenance_rating():
             )
             
             if result:
-                st.success("Takk for din tilbakemelding! Bruk 'Gi feedback' i menyen for en mer detaljert tilbakemelding")
+                st.success("Takk for din tilbakemelding!")
             else:
                 st.error("Beklager, det oppstod en feil ved lagring av tilbakemeldingen.")
-        
-        # Legg til visuell separator
-        st.write("---")
     
     except Exception as e:
         logger.error(f"Error in display_daily_maintenance_rating: {str(e)}", exc_info=True)
