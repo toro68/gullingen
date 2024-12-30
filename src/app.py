@@ -37,7 +37,6 @@ from utils.services.customer_utils import (
 )
 from utils.services.feedback_utils import (
     display_daily_maintenance_rating,
-    give_feedback,
     handle_user_feedback,
     display_admin_dashboard,
 )
@@ -251,8 +250,6 @@ def main():
                     bestill_tunbroyting()
                 elif selected == "Bestill Strøing":
                     bestill_stroing()
-                elif selected == "Gi feedback":
-                    give_feedback()
                 elif selected == "Live Brøytekart":
                     display_live_plowmap()
                 elif selected == "Administrasjon" and st.session_state.is_admin:

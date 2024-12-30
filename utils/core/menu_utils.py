@@ -15,7 +15,6 @@ def create_menu(customer_id, user_type):
             "Hjem",
             "Bestill Tunbrøyting",
             "Bestill Strøing",
-            "Gi feedback",
             "Live Brøytekart",
         ]
         
@@ -30,7 +29,6 @@ def create_menu(customer_id, user_type):
             "house",
             "snow",
             "moisture",
-            "chat-dots",
             "map",
             "gear",
         ]

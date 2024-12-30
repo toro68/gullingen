@@ -39,7 +39,6 @@ try:
         check_session_timeout,
         bestill_tunbroyting,
         bestill_stroing,
-        give_feedback,
         display_live_plowmap,
         vis_tunbroyting_oversikt,
         admin_alert,
@@ -95,8 +94,6 @@ try:
                 bestill_tunbroyting()
             elif selected == "Bestill Strøing":
                 bestill_stroing()
-            elif selected == "Gi feedback":
-                give_feedback()
             elif selected == "Live Brøytekart":
                 display_live_plowmap()
             elif selected == "Administrasjon" and st.session_state.is_admin:
