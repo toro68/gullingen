@@ -55,11 +55,10 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
         formatted_coordinates = {}
         for cabin_id, coords in cabin_coordinates.items():
             formatted_coordinates[cabin_id] = {
-                'lat': coords[0],  # Første element i tuple
-                'lon': coords[1]   # Andre element i tuple
+                'lat': coords[0],
+                'lon': coords[1]
             }
         
-        # Bruk de formaterte koordinatene
         cabin_coordinates = formatted_coordinates
         
         if not cabin_coordinates:
@@ -79,31 +78,35 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
             showlegend=False
         ))
         
-        # Fortsett med normal prosessering hvis vi har data
-        logger.info(f"Aktive bestillinger: {len(aktive_bestillinger)}")
-        
-        # Legg til grå markører som én gruppe
+        # Legg til grå markører som én gruppe med clustering
         gray_lats = []
         gray_lons = []
         gray_texts = []
         for cabin_id, coords in cabin_coordinates.items():
-            # Konverter cabin_id til string for sammenligning
             cabin_id_str = str(cabin_id)
-            # Sjekk om hytta har aktiv bestilling
             if not any(str(booking['customer_id']) == cabin_id_str 
                        for _, booking in aktive_bestillinger.iterrows()):
                 gray_lats.append(coords['lat'])
                 gray_lons.append(coords['lon'])
                 gray_texts.append(f"Hytte: {cabin_id}")
-        if gray_lats:  # Bare legg til hvis det finnes inaktive hytter
+        if gray_lats:
             fig.add_trace(go.Scattermapbox(
                 lat=gray_lats,
                 lon=gray_lons,
-                mode='markers',
+                mode='markers+text',
                 marker=dict(
                     size=8,
                     color=GRAY,
-                    symbol='circle'
+                    symbol='circle',
+                    opacity=0.6,
+                    allowoverlap=False,
+                    cluster=dict(
+                        enabled=True,
+                        step=5,
+                        color=GRAY,
+                        opacity=0.6,
+                        size=20
+                    )
                 ),
                 text=gray_texts,
                 hoverinfo='text',
@@ -111,7 +114,7 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
                 showlegend=True
             ))
         
-        # Legg til aktive bestillinger (alle med samme farge)
+        # Legg til aktive bestillinger med clustering
         if not aktive_bestillinger.empty:
             active_lats = []
             active_lons = []
@@ -123,7 +126,6 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
                 if coords:
                     active_lats.append(coords['lat'])
                     active_lons.append(coords['lon'])
-                    # Konverter booking til MapBooking objekt
                     map_booking = MapBooking(
                         customer_id=customer_id,
                         ankomst_dato=booking.get('ankomst_dato'),
@@ -133,15 +135,24 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
                     )
                     active_texts.append(get_map_popup_text(map_booking))
             
-            if active_lats:  # Bare legg til hvis det finnes aktive bestillinger
+            if active_lats:
                 fig.add_trace(go.Scattermapbox(
                     lat=active_lats,
                     lon=active_lons,
-                    mode='markers',
+                    mode='markers+text',
                     marker=dict(
                         size=12,
-                        color=RED,  # Bruker rød for alle aktive bestillinger
-                        symbol='circle'
+                        color=RED,
+                        symbol='circle',
+                        opacity=0.8,
+                        allowoverlap=False,
+                        cluster=dict(
+                            enabled=True,
+                            step=5,
+                            color=RED,
+                            opacity=0.8,
+                            size=20
+                        )
                     ),
                     text=active_texts,
                     hoverinfo='text',
