@@ -1163,7 +1163,7 @@ def display_feedback_overview(feedback_data: pd.DataFrame, section_title: str):
                 column_config={
                     'datetime': st.column_config.TextColumn('Tidspunkt', width=150),
                     'type': st.column_config.TextColumn('Type', width=140),
-                    'comment': st.column_config.TextColumn('Kommentar', width=400),
+                    'comment': st.column_config.TextColumn('Kommentar', width=150),
                     'customer_id': st.column_config.TextColumn('Hytte', width=80)
                 },
                 use_container_width=True,
