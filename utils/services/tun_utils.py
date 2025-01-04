@@ -1092,10 +1092,25 @@ def vis_hyttegrend_aktivitet():
         
         for dato in dato_range:
             dato_normalized = normalize_datetime(dato)
-            daily_bestillinger = alle_bestillinger[
+            
+            # Tell enkeltbestillinger for denne dagen
+            enkelt_bestillinger = alle_bestillinger[
+                (alle_bestillinger['abonnement_type'] != 'Årsabonnement') &
                 (alle_bestillinger['ankomst_dato'].apply(normalize_datetime) == dato_normalized)
             ]
-            df_aktivitet.loc[dato, 'antall'] = len(daily_bestillinger)
+            
+            # Tell årsabonnement som er aktive denne dagen
+            års_bestillinger = alle_bestillinger[
+                (alle_bestillinger['abonnement_type'] == 'Årsabonnement') &
+                (alle_bestillinger['ankomst_dato'].apply(normalize_datetime) <= dato_normalized) &
+                (
+                    alle_bestillinger['avreise_dato'].isna() |
+                    (alle_bestillinger['avreise_dato'].apply(normalize_datetime) >= dato_normalized)
+                )
+            ]
+            
+            # Summer begge typer bestillinger
+            df_aktivitet.loc[dato, 'antall'] = len(enkelt_bestillinger) + len(års_bestillinger)
         
         fig = px.bar(
             df_aktivitet,
