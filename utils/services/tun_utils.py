@@ -872,13 +872,32 @@ def vis_dagens_bestillinger():
                 st.dataframe(
                     visnings_df,
                     column_config={
-                        "rode": "Rode",
-                        "hytte": "Hytte",
-                        "abonnement_type": "Type",
-                        "ankomst": "Ankomst",
-                        "avreise": "Avreise"
+                        "rode": st.column_config.TextColumn(
+                            "Rode",
+                            help="Rodeområde for hytten",
+                            width="small"
+                        ),
+                        "hytte": st.column_config.TextColumn(
+                            "Hytte",
+                            help="Hyttenummer"
+                        ),
+                        "abonnement_type": st.column_config.SelectboxColumn(
+                            "Type",
+                            help="Type abonnement",
+                            width="medium",
+                            options=["Årsabonnement", "Ukentlig ved bestilling"]
+                        ),
+                        "ankomst": st.column_config.DatetimeColumn(
+                            "Ankomst",
+                            format="DD.MM.YYYY HH:mm"
+                        ),
+                        "avreise": st.column_config.DatetimeColumn(
+                            "Avreise",
+                            format="DD.MM.YYYY HH:mm"
+                        )
                     },
-                    hide_index=True
+                    hide_index=True,
+                    use_container_width=True
                 )
             else:
                 st.info("Ingen aktive bestillinger i dag.")
