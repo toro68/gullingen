@@ -1037,8 +1037,6 @@ def vis_tunbroyting_oversikt():
         - Brøytes automatisk på fredager når det vurderes nødvendig
         - Kan ha ekstrabestillinger på andre dager
         - Tun brøytes kun samtidig med veinettet
-        - Noen kan ha bestilt brøyting for hele sesongen (1. november til 1. mai)
-        - Brøytes ut hvis det står biler i tunet
 
         #### Hytter med ukentlig bestilling (røde markører):
         - Brøytes KUN på fredager og KUN ved bestilling
