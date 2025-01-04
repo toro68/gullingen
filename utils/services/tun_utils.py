@@ -1088,7 +1088,8 @@ def vis_hyttegrend_aktivitet():
         
         df_aktivitet = pd.DataFrame(index=dato_range)
         df_aktivitet['dato_str'] = df_aktivitet.index.strftime(get_date_format("display", "short_date"))
-        df_aktivitet['antall'] = 0
+        df_aktivitet['årsabonnement'] = 0  # Ny kolonne for årsabonnement
+        df_aktivitet['ukentlig'] = 0       # Ny kolonne for ukentlige bestillinger
         
         for dato in dato_range:
             dato_normalized = normalize_datetime(dato)
@@ -1098,6 +1099,7 @@ def vis_hyttegrend_aktivitet():
                 (alle_bestillinger['abonnement_type'] != 'Årsabonnement') &
                 (alle_bestillinger['ankomst_dato'].apply(normalize_datetime) == dato_normalized)
             ]
+            df_aktivitet.loc[dato, 'ukentlig'] = len(enkelt_bestillinger)
             
             # Tell årsabonnement som er aktive denne dagen
             års_bestillinger = alle_bestillinger[
@@ -1108,16 +1110,19 @@ def vis_hyttegrend_aktivitet():
                     (alle_bestillinger['avreise_dato'].apply(normalize_datetime) >= dato_normalized)
                 )
             ]
-            
-            # Summer begge typer bestillinger
-            df_aktivitet.loc[dato, 'antall'] = len(enkelt_bestillinger) + len(års_bestillinger)
+            df_aktivitet.loc[dato, 'årsabonnement'] = len(års_bestillinger)
         
+        # Lag stablede stolper med forskjellige farger
         fig = px.bar(
             df_aktivitet,
             x=df_aktivitet.index,
-            y='antall',
-            labels={'x': 'Dato', 'antall': 'Antall bestillinger'},
-            title='Tunbrøytingsaktivitet neste uke'
+            y=['årsabonnement', 'ukentlig'],
+            labels={'x': 'Dato', 'value': 'Antall bestillinger', 'variable': 'Type'},
+            title='Tunbrøytingsaktivitet neste uke',
+            color_discrete_map={
+                'årsabonnement': 'rgb(0, 123, 255)',  # Blå
+                'ukentlig': 'rgb(220, 53, 69)'        # Rød
+            }
         )
         
         st.plotly_chart(fig, use_container_width=True, key="unique_key_1")
