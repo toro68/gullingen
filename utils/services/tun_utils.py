@@ -1042,7 +1042,7 @@ def vis_tunbroyting_oversikt():
         - Brøytes KUN på fredager og KUN ved bestilling
 
         #### Generelle retningslinjer:
-        - Vedlikeholdsbrøyting kan utføres ved behov for å unngå gjengroing
+        - Vedlikeholdsbrøyting kan utføres ved behov for å unngå gjengroing og frosne brøytekanter
         - Siktemål er å være ferdig med all tunbrøyting innen kl. 15 på fredager
         """)
             
