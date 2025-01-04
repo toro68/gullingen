@@ -1027,6 +1027,27 @@ def vis_tunbroyting_oversikt():
         except Exception as e:
             st.error(f"Kunne ikke laste oversiktskartet: {str(e)}")
             
+        # Legg til informasjon for brøyter nederst
+        st.write("---")
+        st.subheader("Informasjon til brøyter")
+        st.markdown("""
+        ### Rutiner for tunbrøyting i Fjellbergsskardet - Vintersesongen 2024/2025
+
+        #### Hytter med årsabonnement (blå markører):
+        - Brøytes automatisk på fredager når det vurderes nødvendig
+        - Kan ha ekstrabestillinger på andre dager
+        - Tun brøytes kun samtidig med veinettet, aldri enkeltvis
+        - Noen kan ha bestilt brøyting for hele sesongen (1. november til 1. mai)
+        - Brøytes ut hvis det står biler i tunet
+
+        #### Hytter med ukentlig bestilling (røde markører):
+        - Brøytes KUN på fredager og KUN ved bestilling
+
+        #### Generelle retningslinjer:
+        - Vedlikeholdsbrøyting kan utføres ved behov for å unngå gjengroing
+        - Siktemål er å være ferdig med all tunbrøyting innen kl. 15 på fredager
+        """)
+            
     except Exception as e:
         logger.error(f"Error in vis_tunbroyting_oversikt: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av oversikten. Vennligst prøv igjen senere.")
