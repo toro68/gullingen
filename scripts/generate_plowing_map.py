@@ -15,7 +15,7 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 PROJECT_ROOT = SCRIPT_DIR.parent
 DATA_DIR = PROJECT_ROOT / "data"
 CUSTOMERS_FILE = DATA_DIR / "customers.csv"
-OUTPUT_FILE = PROJECT_ROOT / "docs" / "kart.html"
+OUTPUT_FILE = PROJECT_ROOT / "pages" / "plowing_map.html"
 
 def load_customer_data():
     """Laster kundedata fra CSV-filen."""
