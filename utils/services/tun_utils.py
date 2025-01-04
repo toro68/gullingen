@@ -902,6 +902,9 @@ def vis_tunbroyting_oversikt():
     """
     st.title("Oversikt over tunbestillinger")
     
+    # Lenke til statisk kart
+    st.markdown("[🗺️ Se kart over hytter og abonnementstyper](plowing_map.html)")
+    
     try:
         # Hent bestillinger
         bestillinger = get_bookings()
