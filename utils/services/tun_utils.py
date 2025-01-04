@@ -902,8 +902,13 @@ def vis_tunbroyting_oversikt():
     """
     st.title("Oversikt over tunbestillinger")
     
-    # Lenke til statisk kart
-    st.markdown("[🗺️ Se kart over hytter og abonnementstyper](/static/plowing_map.html)")
+    # Les og vis kartet direkte
+    try:
+        with open("utils/services/plowing_map.html", "r") as f:
+            html_content = f.read()
+        st.components.v1.html(html_content, height=600)
+    except Exception as e:
+        st.error(f"Kunne ikke laste kartet: {str(e)}")
     
     try:
         # Hent bestillinger
