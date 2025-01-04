@@ -902,14 +902,6 @@ def vis_tunbroyting_oversikt():
     """
     st.title("Oversikt over tunbestillinger")
     
-    # Les og vis kartet direkte
-    try:
-        with open("utils/services/plowing_map.html", "r") as f:
-            html_content = f.read()
-        st.components.v1.html(html_content, height=600)
-    except Exception as e:
-        st.error(f"Kunne ikke laste kartet: {str(e)}")
-    
     try:
         # Hent bestillinger
         bestillinger = get_bookings()
@@ -967,67 +959,18 @@ def vis_tunbroyting_oversikt():
         vis_dagens_bestillinger()
         st.write("---")
         
-        # --- Vis bestillinger for valgt periode ---
-        st.subheader("Tunbrøyting i valgt periode")
-        
-        # Bruk standardiserte datofunksjoner fra config
-        default_start, default_end = get_date_range_defaults()
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input(
-                "Fra dato",
-                value=default_start,  # Nå er dette allerede en date
-                min_value=datetime.now(TZ).date() - timedelta(days=DATE_VALIDATION["default_date_range"]),
-                max_value=datetime.now(TZ).date() + timedelta(days=DATE_VALIDATION["max_future_booking"]),
-                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
-            )
-        
-        with col2:
-            end_date = st.date_input(
-                "Til dato",
-                value=default_end,  # Nå er dette allerede en date
-                min_value=start_date,
-                max_value=start_date + timedelta(days=DATE_VALIDATION["max_future_booking"]),
-                format=get_date_format("display", "date").replace("%Y", "YYYY").replace("%m", "MM").replace("%d", "DD")
-            )
-        
-        # Konverter datoer til datetime med tidssone
-        periode_start = combine_date_with_tz(start_date)
-        periode_slutt = combine_date_with_tz(end_date)
-        
-        periode_bestillinger = hent_bestillinger_for_periode(periode_start, periode_slutt)
-        if not periode_bestillinger.empty:
-            for col in ['ankomst_dato', 'avreise_dato']:
-                if col in periode_bestillinger.columns:
-                    periode_bestillinger[col] = periode_bestillinger[col].apply(safe_to_datetime)
+        # Vis statisk kart over alle hytter og abonnementstyper
+        st.subheader("Oversiktskart - Hytter og abonnementstyper")
+        try:
+            with open("utils/services/plowing_map.html", "r") as f:
+                html_content = f.read()
+            st.components.v1.html(html_content, height=600)
+        except Exception as e:
+            st.error(f"Kunne ikke laste oversiktskartet: {str(e)}")
             
-            # Vis oversikt
-            st.dataframe(
-                periode_bestillinger,
-                column_config={
-                    "customer_id": "Hytte",
-                    "ankomst_dato": st.column_config.DatetimeColumn(
-                        "Ankomst",
-                        format="DD.MM.YYYY"
-                    ),
-                    "avreise_dato": st.column_config.DatetimeColumn(
-                        "Avreise",
-                        format="DD.MM.YYYY"
-                    ),
-                    "abonnement_type": "Type"
-                }
-            )
-        else:
-            st.info("Ingen bestillinger funnet for valgt periode.")
-        
-        # --- Vis hytter med årsabonnement ---
-        st.write("---")
-        vis_arsabonnenter()
-
     except Exception as e:
-        logger.error(f"Feil i vis_tunbroyting_oversikt: {str(e)}", exc_info=True)
-        st.error("Det oppstod en feil ved visning av tunbrøytingsoversikten")
+        logger.error(f"Error in vis_tunbroyting_oversikt: {str(e)}", exc_info=True)
+        st.error("Det oppstod en feil ved lasting av oversikten. Vennligst prøv igjen senere.")
 
 def vis_hyttegrend_aktivitet():
     try:
