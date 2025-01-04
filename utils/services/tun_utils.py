@@ -1125,6 +1125,12 @@ def vis_hyttegrend_aktivitet():
             }
         )
         
+        # Sett y-aksen til å vise hele tall
+        fig.update_yaxes(
+            dtick=1,  # Setter intervallet mellom hver tick til 1
+            tick0=0   # Starter fra 0
+        )
+        
         st.plotly_chart(fig, use_container_width=True, key="unique_key_1")
         return df_aktivitet
         
