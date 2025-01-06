@@ -594,34 +594,58 @@ def save_maintenance_reaction(customer_id, reaction_type, date):
             return False
 
         feedback_type = "Vintervedlikehold"
-        comment = reaction_mapping[reaction_type]  # Lagrer bare emojien og teksten
+        comment = reaction_mapping[reaction_type]
+        
+        # Sikre at datoen har tidssone
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=TZ)
+        
+        logger.debug(
+            f"Lagrer reaksjon - Type: {feedback_type}, "
+            f"Kommentar: {comment}, Kunde: {customer_id}, "
+            f"Dato: {date.isoformat()}"
+        )
 
         result = save_feedback(
             feedback_type=feedback_type,
             datetime_str=date.isoformat(),
             comment=comment,
             customer_id=customer_id,
-            hidden=False,
+            hidden=False
         )
 
         if result:
-            logger.info(
-                f"Vedlikeholdsreaksjon lagret for hytte {customer_id}: {reaction_type}"
-            )
+            logger.info(f"Vedlikeholdsreaksjon lagret for hytte {customer_id}: {reaction_type}")
+            logger.debug("Lagring vellykket")
+        else:
+            logger.error("Lagring feilet")
         return result
 
     except Exception as e:
-        logger.error(f"Feil ved lagring av vedlikeholdsreaksjon: {str(e)}")
+        logger.error(f"Feil ved lagring av vedlikeholdsreaksjon: {str(e)}", exc_info=True)
         return False
 
 
 def get_maintenance_reactions(start_datetime, end_datetime):
     try:
+        logger.debug("Starting get_maintenance_reactions")
+        logger.debug(f"Input parameters - start: {start_datetime}, end: {end_datetime}")
+        
+        # Sjekk at input er gyldig
+        if not start_datetime or not end_datetime:
+            logger.error("Manglende dato-parametere")
+            return pd.DataFrame(columns=['datetime', 'customer_id', 'comment', 'type'])
+            
+        # Konverter datoer til ISO format med tidssone
+        start_str = start_datetime.isoformat()
+        end_str = end_datetime.isoformat()
+        
         query = """
-        SELECT datetime, comment, customer_id
+        SELECT datetime as datetime, comment, customer_id, type
         FROM feedback 
         WHERE type = 'Vintervedlikehold'
-        AND datetime BETWEEN ? AND ?
+        AND datetime >= ?
+        AND datetime <= ?
         AND (
             comment LIKE '%😊%' OR 
             comment LIKE '%😐%' OR 
@@ -629,25 +653,46 @@ def get_maintenance_reactions(start_datetime, end_datetime):
         )
         ORDER BY datetime DESC
         """
+        
+        logger.debug(f"SQL Query: {query}")
+        logger.debug(f"Parameters: start={start_str}, end={end_str}")
 
-        reactions_df = pd.DataFrame(fetch_data(
-            "feedback",
-            query,
-            [start_datetime, end_datetime]
-        ))
-
-        if not reactions_df.empty:
-            # Konverter datetime til riktig format
-            reactions_df['datetime'] = pd.to_datetime(reactions_df['datetime'])
+        # Hent data fra databasen
+        with get_db_connection("feedback") as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, [start_str, end_str])
+            rows = cursor.fetchall()
+            logger.debug(f"Rådata fra database (rows): {rows}")
             
-            # Hent ut hyttenummer fra reaksjonsteksten
-            reactions_df['customer_id'] = reactions_df['comment'].str.extract(r'Hytte (\d+)')
+            # Konverter til DataFrame med eksplisitte kolonnenavn
+            reactions_df = pd.DataFrame(
+                rows,
+                columns=['datetime', 'comment', 'customer_id', 'type']
+            )
+            
+            logger.debug(f"DataFrame før datetime konvertering:")
+            logger.debug(f"Kolonner: {reactions_df.columns.tolist()}")
+            logger.debug(f"Antall rader: {len(reactions_df)}")
+            logger.debug(f"Første rad: {reactions_df.iloc[0].to_dict() if not reactions_df.empty else 'Ingen data'}")
+            logger.debug(f"DataFrame info:")
+            logger.debug(reactions_df.info())
 
-        return reactions_df
+            if not reactions_df.empty:
+                # Konverter datetime til riktig format med samme metode som i get_feedback
+                reactions_df['datetime'] = pd.to_datetime(
+                    reactions_df['datetime'], 
+                    format='mixed', 
+                    utc=True
+                ).dt.tz_convert(TZ)
+                logger.debug(f"Data etter datetime konvertering:")
+                logger.debug(f"Første rad: {reactions_df.iloc[0].to_dict()}")
+                logger.debug(f"Unike kommentarer: {reactions_df['comment'].unique().tolist()}")
+
+            return reactions_df
 
     except Exception as e:
-        logger.error(f"Feil ved henting av vedlikeholdsreaksjoner: {str(e)}")
-        return pd.DataFrame(columns=['datetime', 'customer_id', 'reaction'])
+        logger.error(f"Feil ved henting av vedlikeholdsreaksjoner: {str(e)}", exc_info=True)
+        return pd.DataFrame(columns=['datetime', 'customer_id', 'comment', 'type'])
 
 def display_maintenance_feedback():
     try:
@@ -961,136 +1006,165 @@ def display_reaction_report(feedback_data):
         st.error("Kunne ikke vise reaksjonsrapport")
 
 
-def calculate_maintenance_stats(reactions_df, group_by='day', days_back=DATE_VALIDATION["default_date_range"]):
+def calculate_maintenance_stats(df, group_by='day', days_back=7):
     """
     Beregner statistikk for vedlikeholdsreaksjoner.
     
     Args:
-        reactions_df (pd.DataFrame): DataFrame med reaksjoner
-        group_by (str): Gruppering ('day', 'week', 'month')
-        days_back (int): Antall dager bakover i tid
+        df (pd.DataFrame): DataFrame med reaksjoner
+        group_by (str): 'day' eller 'week'
+        days_back (int): Antall dager å se tilbake
         
     Returns:
-        tuple[pd.DataFrame, pd.DataFrame, pd.Series]: (daily_stats, daily_stats_pct, daily_score)
+        tuple: (daily_stats, daily_stats_pct, daily_score)
     """
     try:
         logger.debug(f"Calculating maintenance stats grouped by: {group_by}")
-        logger.debug(f"Input DataFrame shape: {reactions_df.shape}")
+        logger.debug(f"Input DataFrame shape: {df.shape}")
         
-        if reactions_df.empty:
-            logger.warning("Tomt reactions_df datasett")
-            return pd.DataFrame(), pd.DataFrame(), pd.Series()
+        if df.empty:
+            logger.warning("Tomt DataFrame, returnerer tomme statistikker")
+            empty_df = pd.DataFrame(columns=['😊 Fornøyd', '😐 Nøytral', '😡 Misfornøyd'])
+            return empty_df, empty_df, pd.Series(dtype=float)
+            
+        # Konverter datetime til riktig format hvis ikke allerede gjort
+        if not pd.api.types.is_datetime64_any_dtype(df['datetime']):
+            df['datetime'] = pd.to_datetime(df['datetime'])
             
         # Filtrer for siste X dager
-        end_date = get_current_time()
-        start_date = end_date - timedelta(days=days_back)
+        end_date = df['datetime'].max()
+        start_date = end_date - pd.Timedelta(days=days_back)
+        mask = (df['datetime'] >= start_date) & (df['datetime'] <= end_date)
+        df = df[mask].copy()
         
-        reactions_df = reactions_df.copy()
-        reactions_df['datetime'] = pd.to_datetime(reactions_df['datetime'])
+        logger.debug(f"Filtrert DataFrame shape: {df.shape}")
+        logger.debug(f"Dato range: {start_date} til {end_date}")
         
-        # Sikre at datetime har riktig tidssone
-        if reactions_df['datetime'].dt.tz is None:
-            reactions_df['datetime'] = reactions_df['datetime'].dt.tz_localize(TZ)
-        else:
-            reactions_df['datetime'] = reactions_df['datetime'].dt.tz_convert(TZ)
+        if df.empty:
+            logger.warning("Ingen data etter filtrering")
+            empty_df = pd.DataFrame(columns=['😊 Fornøyd', '😐 Nøytral', '😡 Misfornøyd'])
+            return empty_df, empty_df, pd.Series(dtype=float)
             
-        mask = (reactions_df['datetime'] >= start_date) & (reactions_df['datetime'] <= end_date)
-        reactions_df = reactions_df[mask]
-        
-        if reactions_df.empty:
-            logger.warning(f"Ingen data for siste {days_back} dager")
-            return pd.DataFrame(), pd.DataFrame(), pd.Series()
+        # Grupper etter dag eller uke
+        if group_by == 'day':
+            df['group'] = df['datetime'].dt.date
+        else:  # week
+            df['group'] = df['datetime'].dt.isocalendar().week
             
-        # Definer grupperingsfunksjon basert på group_by
-        if group_by == 'week':
-            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-W%V')
-        elif group_by == 'month':
-            reactions_df['group'] = reactions_df['datetime'].dt.strftime('%Y-%m')
-        else:  # default to day
-            reactions_df['group'] = reactions_df['datetime'].dt.strftime(DATE_FORMATS['database']['date'])
-            
-        # Tell reaksjoner
-        stats = pd.DataFrame({
-            '😊 Fornøyd': reactions_df['comment'].str.count('😊'),
-            '😐 Nøytral': reactions_df['comment'].str.count('😐'),
-            '😡 Misfornøyd': reactions_df['comment'].str.count('😡')
-        })
+        # Tell opp reaksjoner per gruppe
+        daily_stats = pd.DataFrame({
+            '😊 Fornøyd': df[df['comment'].str.contains('😊')].groupby('group').size(),
+            '😐 Nøytral': df[df['comment'].str.contains('😐')].groupby('group').size(),
+            '😡 Misfornøyd': df[df['comment'].str.contains('😡')].groupby('group').size()
+        }).fillna(0)
         
-        # Grupper etter valgt periode
-        daily_stats = stats.groupby(reactions_df['group']).sum()
+        logger.debug(f"Statistikk per gruppe:\n{daily_stats}")
         
         # Beregn prosenter
-        daily_total = daily_stats.sum(axis=1)
-        daily_stats_pct = daily_stats.div(daily_total, axis=0) * 100
+        daily_totals = daily_stats.sum(axis=1)
+        daily_stats_pct = daily_stats.div(daily_totals, axis=0) * 100
         
-        # Beregn score
-        daily_score = (
-            daily_stats['😊 Fornøyd'] * 1.0 + 
-            daily_stats['😐 Nøytral'] * 0.5
-        ) / daily_total
+        # Beregn score (0-1)
+        weights = {'😊 Fornøyd': 1, '😐 Nøytral': 0.5, '😡 Misfornøyd': 0}
+        daily_score = pd.Series(0, index=daily_stats.index, dtype=float)
         
-        # Vis statistikk i dataframe
-        st.subheader("Statistikk oversikt")
-        summary_df = pd.DataFrame({
-            'Dato': daily_stats.index,
-            'Fornøyd': daily_stats['😊 Fornøyd'],
-            'Nøytral': daily_stats['😐 Nøytral'],
-            'Misfornøyd': daily_stats['😡 Misfornøyd'],
-            'Total': daily_total,
-            'Score': daily_score.round(2)
-        })
-        st.dataframe(summary_df, use_container_width=True)
+        for reaction, weight in weights.items():
+            daily_score += daily_stats[reaction] * weight
+            
+        daily_score = daily_score / daily_totals
         
         return daily_stats, daily_stats_pct, daily_score
         
     except Exception as e:
         logger.error(f"Feil ved beregning av vedlikeholdsstatistikk: {str(e)}", exc_info=True)
-        return pd.DataFrame(), pd.DataFrame(), pd.Series()
+        empty_df = pd.DataFrame(columns=['😊 Fornøyd', '😐 Nøytral', '😡 Misfornøyd'])
+        return empty_df, empty_df, pd.Series(dtype=float)
 
 def display_daily_maintenance_rating():
-    """Viser et enkelt skjema for å vurdere dagens brøyting"""
+    """Viser dagens vedlikeholdsvurdering"""
     try:
-        st.subheader("Gi din vurdering av dagens brøyting her")
+        # Hent dagens reaksjoner
+        end_date = get_current_time().replace(hour=23, minute=59, second=59)
+        start_date = end_date.replace(hour=0, minute=0, second=0)
         
-        if 'customer_id' not in st.session_state:
-            st.warning("Du må være logget inn for å gi tilbakemelding")
-            return
+        logger.debug(f"Henter reaksjoner for periode: {start_date} til {end_date}")
         
+        reactions = get_maintenance_reactions(start_date, end_date)
+        num_reactions = len(reactions) if not reactions.empty else 0
+        logger.debug(f"Antall reaksjoner funnet: {num_reactions}")
+        
+        # Vis reaksjonsknapper
+        st.write("### Gi din vurdering av dagens brøyting")
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            happy = st.button("😊 Fornøyd", key="happy_btn")
-        
+            if st.button("😊 Fornøyd", use_container_width=True):
+                if save_maintenance_reaction(
+                    st.session_state.get('customer_id'),
+                    'positive',
+                    get_current_time()
+                ):
+                    st.rerun()
+                    
         with col2:
-            neutral = st.button("😐 Nøytral", key="neutral_btn")
-        
+            if st.button("😐 Nøytral", use_container_width=True):
+                if save_maintenance_reaction(
+                    st.session_state.get('customer_id'),
+                    'neutral',
+                    get_current_time()
+                ):
+                    st.rerun()
+                    
         with col3:
-            sad = st.button("😡 Misfornøyd", key="sad_btn")
+            if st.button("😡 Misfornøyd", use_container_width=True):
+                if save_maintenance_reaction(
+                    st.session_state.get('customer_id'),
+                    'negative',
+                    get_current_time()
+                ):
+                    st.rerun()
         
-        # Legg til target="_blank" i lenken
-        st.markdown('<a href="https://docs.google.com/forms/d/e/1FAIpQLSf6vVjQy1H4Alfac3_qMl1QtEOyG4_KykRsX0R5w9R-qtcS3A/viewform" target="_blank">🔗 Klikk her for å gi en mer detaljert tilbakemelding</a>', unsafe_allow_html=True)
+        st.write("---")
         
-        if any([happy, neutral, sad]):
-            reaction_type = (
-                'positive' if happy else
-                'neutral' if neutral else
-                'negative'
-            )
+        if reactions.empty:
+            st.info("Ingen tilbakemeldinger registrert for i dag")
+            return
             
-            result = save_maintenance_reaction(
-                st.session_state.customer_id,
-                reaction_type,
-                datetime.now(TZ)
-            )
+        # Beregn statistikk
+        daily_stats, _, _ = calculate_maintenance_stats(
+            reactions,
+            group_by='day',
+            days_back=1
+        )
+        
+        # Vis statistikk
+        if not daily_stats.empty:
+            st.write("### Dagens vurdering")
             
-            if result:
-                st.success("Takk for din tilbakemelding!")
-            else:
-                st.error("Beklager, det oppstod en feil ved lagring av tilbakemeldingen.")
-    
+            # Vis antall reaksjoner
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                positive_count = int(daily_stats.iloc[-1]['😊 Fornøyd'])
+                st.metric("😊 Fornøyd", str(positive_count))
+                
+            with col2:
+                neutral_count = int(daily_stats.iloc[-1]['😐 Nøytral'])
+                st.metric("😐 Nøytral", str(neutral_count))
+                
+            with col3:
+                negative_count = int(daily_stats.iloc[-1]['😡 Misfornøyd'])
+                st.metric("😡 Misfornøyd", str(negative_count))
+                
+            # Vis totalt antall
+            st.caption(f"Totalt antall tilbakemeldinger: {num_reactions}")
+            
+        else:
+            st.info("Ingen statistikk tilgjengelig for i dag")
+            
     except Exception as e:
-        logger.error(f"Error in display_daily_maintenance_rating: {str(e)}", exc_info=True)
-        st.error("Det oppstod en feil ved visning av tilbakemeldingsskjema")
+        logger.error(f"Feil ved visning av dagens vurdering: {str(e)}", exc_info=True)
+        st.error("Kunne ikke vise dagens vurdering")
 
 def display_admin_dashboard():
     """Viser admin dashboard for feedback"""
@@ -1380,4 +1454,153 @@ def display_maintenance_chart(data):
         st.line_chart(data)
     except Exception as e:
         logger.error(f"Feil ved visning av vedlikeholdsgraf: {str(e)}")
+
+def test_maintenance_graph(use_streamlit=False):
+    """Test funksjon for å debugge grafvisning"""
+    try:
+        logger.debug("Starting test_maintenance_graph")
+        
+        # Hent data for siste 7 dager
+        end_date = get_current_time()
+        start_date = end_date - timedelta(days=7)
+        
+        logger.debug(f"Tester for periode: {start_date} til {end_date}")
+        
+        # Hent reaksjoner
+        reactions = get_maintenance_reactions(start_date, end_date)
+        logger.debug(f"Hentet {len(reactions) if not reactions.empty else 0} reaksjoner")
+        
+        if reactions.empty:
+            logger.warning("Ingen reaksjoner funnet for test")
+            return False
+            
+        # Beregn statistikk
+        daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(
+            reactions,
+            group_by='day',
+            days_back=7
+        )
+        
+        logger.debug(f"Statistikk beregnet:")
+        logger.debug(f"daily_stats:\n{daily_stats}")
+        logger.debug(f"daily_stats_pct:\n{daily_stats_pct}")
+        logger.debug(f"daily_score:\n{daily_score}")
+        
+        # Prøv å lage graf
+        if not daily_stats.empty:
+            fig = create_maintenance_chart(daily_stats, daily_stats_pct, daily_score, 'day')
+            if fig is not None:
+                logger.debug("Graf opprettet vellykket")
+                if use_streamlit:
+                    st.plotly_chart(fig, use_container_width=True)
+                return True
+            else:
+                logger.error("Kunne ikke opprette graf")
+                return False
+        else:
+            logger.warning("Ingen data for graf")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Feil i test_maintenance_graph: {str(e)}", exc_info=True)
+        return False
+
+def test_database_content():
+    """Test funksjon for å sjekke databaseinnhold direkte"""
+    try:
+        logger.debug("Starting test_database_content")
+        
+        # Test databasetilkobling
+        try:
+            with get_db_connection("feedback") as conn:
+                logger.debug("Databasetilkobling opprettet")
+                
+                cursor = conn.cursor()
+                
+                # Sjekk om tabellen eksisterer
+                cursor.execute("""
+                    SELECT name 
+                    FROM sqlite_master 
+                    WHERE type='table' 
+                    AND name='feedback'
+                """)
+                if not cursor.fetchone():
+                    logger.error("Feedback-tabellen eksisterer ikke")
+                    return False
+                    
+                # Sjekk tabellstruktur
+                cursor.execute("PRAGMA table_info(feedback)")
+                columns = cursor.fetchall()
+                logger.debug("Tabellstruktur:")
+                for col in columns:
+                    logger.debug(f"Kolonne: {col}")
+                    
+                # Sjekk data
+                cursor.execute("""
+                    SELECT datetime, comment, customer_id, type
+                    FROM feedback 
+                    WHERE type = 'Vintervedlikehold'
+                    LIMIT 5
+                """)
+                rows = cursor.fetchall()
+                logger.debug("Eksempeldata:")
+                for row in rows:
+                    logger.debug(f"Rad: {row}")
+                    
+            return True
+            
+        except Exception as e:
+            logger.error(f"Feil ved lesing av database: {str(e)}", exc_info=True)
+            return False
+            
+    except Exception as e:
+        logger.error(f"Feil i test_database_content: {str(e)}", exc_info=True)
+        return False
+
+def test_maintenance_data():
+    """Test funksjon som bare sjekker dataene"""
+    try:
+        logger.debug("Starting test_maintenance_data")
+        
+        # Hent data for siste 7 dager
+        end_date = get_current_time().replace(hour=23, minute=59, second=59)
+        start_date = end_date - timedelta(days=7)
+        
+        logger.debug(f"Tester for periode: {start_date} til {end_date}")
+        
+        # Hent reaksjoner
+        reactions = get_maintenance_reactions(start_date, end_date)
+        logger.debug(f"Hentet {len(reactions) if not reactions.empty else 0} reaksjoner")
+        
+        if reactions.empty:
+            logger.warning("Ingen reaksjoner funnet for test")
+            return False
+            
+        # Skriv ut data
+        logger.debug("\nReaksjoner:")
+        logger.debug(f"Kolonner: {reactions.columns.tolist()}")
+        logger.debug(f"\nFørste rad:\n{reactions.iloc[0] if not reactions.empty else 'Ingen data'}")
+        logger.debug(f"\nAlle data:\n{reactions}")
+        
+        # Beregn statistikk
+        daily_stats, daily_stats_pct, daily_score = calculate_maintenance_stats(
+            reactions,
+            group_by='day',
+            days_back=7
+        )
+        
+        logger.debug("\nStatistikk:")
+        logger.debug(f"daily_stats:\n{daily_stats}")
+        logger.debug(f"daily_stats_pct:\n{daily_stats_pct}")
+        logger.debug(f"daily_score:\n{daily_score}")
+        
+        return True
+            
+    except Exception as e:
+        logger.error(f"Feil i test_maintenance_data: {str(e)}", exc_info=True)
+        return False
+
+# Kjør test når modulen lastes
+if __name__ == "__main__":
+    test_maintenance_data()
 
