@@ -626,19 +626,21 @@ def save_maintenance_reaction(customer_id, reaction_type, date):
         return False
 
 
-def get_maintenance_reactions(start_datetime, end_datetime):
+def get_maintenance_reactions(start_date=None, end_date=None):
+    """Henter vedlikeholdsreaksjoner for gitt periode"""
+    logger.info("Henter vedlikeholdsreaksjoner med forbedret datetime-håndtering")
     try:
         logger.debug("Starting get_maintenance_reactions")
-        logger.debug(f"Input parameters - start: {start_datetime}, end: {end_datetime}")
+        logger.debug(f"Input parameters - start: {start_date}, end: {end_date}")
         
         # Sjekk at input er gyldig
-        if not start_datetime or not end_datetime:
+        if not start_date or not end_date:
             logger.error("Manglende dato-parametere")
             return pd.DataFrame(columns=['datetime', 'customer_id', 'comment', 'type'])
             
         # Konverter datoer til ISO format med tidssone
-        start_str = start_datetime.isoformat()
-        end_str = end_datetime.isoformat()
+        start_str = start_date.isoformat() if start_date else None
+        end_str = end_date.isoformat() if end_date else None
         
         query = """
         SELECT datetime as datetime, comment, customer_id, type
