@@ -272,6 +272,8 @@ def give_feedback():
     """
         )
 
+        st.markdown("[🔗 Klikk her for å gi en mer detaljert tilbakemelding](https://docs.google.com/forms/d/e/1FAIpQLSf6vVjQy1H4Alfac3_qMl1QtEOyG4_KykRsX0R5w9R-qtcS3A/viewform)")
+
         feedback_type = st.radio(
             "Velg type feedback:",
             ["Avvik", "Generell tilbakemelding", "Forslag til forbedring", "Annet"],
