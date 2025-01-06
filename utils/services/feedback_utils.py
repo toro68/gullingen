@@ -1132,8 +1132,6 @@ def display_daily_maintenance_rating():
                 ):
                     st.rerun()
         
-        st.write("---")
-        
         st.link_button(
             "🔗 Klikk her for å gi en mer detaljert tilbakemelding",
             "https://docs.google.com/forms/d/e/1FAIpQLSf6vVjQy1H4Alfac3_qMl1QtEOyG4_KykRsX0R5w9R-qtcS3A/viewform",
