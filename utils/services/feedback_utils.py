@@ -272,13 +272,11 @@ def give_feedback():
     """
         )
 
-        st.write("")  # Legg til litt mellomrom
-        st.markdown(
-            "[🔗 Klikk her for å gi en mer detaljert tilbakemelding]"
-            "(https://docs.google.com/forms/d/e/1FAIpQLSf6vVjQy1H4Alfac3_qMl1QtEOyG4_KykRsX0R5w9R-qtcS3A/viewform)",
-            unsafe_allow_html=True
+        st.link_button(
+            "🔗 Klikk her for å gi en mer detaljert tilbakemelding",
+            "https://docs.google.com/forms/d/e/1FAIpQLSf6vVjQy1H4Alfac3_qMl1QtEOyG4_KykRsX0R5w9R-qtcS3A/viewform",
+            use_container_width=True,
         )
-        st.write("")  # Legg til litt mellomrom
 
         feedback_type = st.radio(
             "Velg type feedback:",
