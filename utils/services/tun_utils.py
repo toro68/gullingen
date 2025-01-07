@@ -1093,6 +1093,28 @@ def vis_hyttegrend_aktivitet():
             if col in alle_bestillinger.columns:
                 alle_bestillinger[col] = alle_bestillinger[col].apply(safe_to_datetime)
         
+        # Vis kart over dagens bestillinger
+        current_time = get_current_time()
+        dagens_bestillinger = filter_todays_bookings(alle_bestillinger.copy())
+        
+        # Hent Mapbox token
+        mapbox_token = st.secrets["mapbox"]["access_token"]
+        
+        # Vis kartet
+        if not dagens_bestillinger.empty:
+            fig_today = ny_dagens_tunkart(
+                dagens_bestillinger, 
+                mapbox_token, 
+                f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
+            )
+            if fig_today:
+                st.plotly_chart(fig_today, use_container_width=True)
+            else:
+                st.warning("Kunne ikke generere kart for dagens tunbrøytinger")
+        else:
+            st.info("Ingen aktive tunbrøytinger i dag")
+        
+        # Vis aktivitetsgrafen under kartet
         start_date, end_date = get_date_range_defaults()
         if isinstance(start_date, date):
             start_date = datetime.combine(start_date, datetime.min.time())
