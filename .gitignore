@@ -182,3 +182,5 @@ data/temp/
 # Ekstra IDE filer
 *.code-workspace
 .history/
+
+debug_response.html
