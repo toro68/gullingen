@@ -46,6 +46,7 @@ from utils.services.map_interface import (
     debug_map_data,
     verify_map_configuration
 )
+from utils.services.map_utils import ny_dagens_tunkart
 
 logger = get_logger(__name__)
 
@@ -950,7 +951,7 @@ def vis_tunbroyting_oversikt():
         logger.info(f"Dagens bestillinger før kartvisning: {len(dagens_bestillinger)} rader")
         if not dagens_bestillinger.empty:
             logger.info(f"Første rad: {dagens_bestillinger.iloc[0].to_dict()}")
-        
+
         # Vis kun kartet én gang
         st.subheader(f"Tunbrøytingskart for {format_date(current_time, 'display', 'date')}")
         
@@ -960,7 +961,8 @@ def vis_tunbroyting_oversikt():
         if is_valid:
             debug_map_data(dagens_bestillinger)  # Logger debug info
             
-            fig_today = vis_dagens_tunkart(
+            # Bruk ny kartfunksjon
+            fig_today = ny_dagens_tunkart(
                 dagens_bestillinger, 
                 mapbox_token, 
                 f"Tunbrøyting {format_date(current_time, 'display', 'date')}"
@@ -1031,7 +1033,7 @@ def vis_tunbroyting_oversikt():
             )
         else:
             st.info("Ingen bestillinger funnet for valgt periode.")
-        
+
         # --- Vis hytter med årsabonnement ---
         st.write("---")
         vis_arsabonnenter()
@@ -1064,7 +1066,7 @@ def vis_tunbroyting_oversikt():
         - Vedlikeholdsbrøyting kan utføres ved behov for å unngå gjengroing og frosne brøytekanter
         - Siktemål er å være ferdig med all tunbrøyting innen kl. 15 på fredager
         """)
-            
+
     except Exception as e:
         logger.error(f"Error in vis_tunbroyting_oversikt: {str(e)}", exc_info=True)
         st.error("Det oppstod en feil ved lasting av oversikten. Vennligst prøv igjen senere.")
