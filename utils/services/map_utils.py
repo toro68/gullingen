@@ -453,10 +453,12 @@ def ny_dagens_tunkart(bookings, mapbox_token, title="Tunbrøyting"):
                 fig.add_trace(go.Scattermapbox(
                     lat=[lat],
                     lon=[lon],
-                    mode="markers",
+                    mode="markers+text",
                     marker=dict(size=15, color=color),
-                    text=popup_text,
+                    text=[customer_id],
+                    textposition="top center",
                     hoverinfo="text",
+                    hovertext=[popup_text],
                     showlegend=True,
                     name=booking["abonnement_type"]
                 ))
