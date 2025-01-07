@@ -30,6 +30,7 @@ def create_menu(customer_id, user_type):
             "snow",
             "moisture",
             "map",
+            "chat-dots",
             "gear",
         ]
 
