@@ -917,12 +917,18 @@ def get_bookings_for_map_display(date: datetime) -> List[MapBooking]:
 # Category: View Functions
 def vis_tunbroyting_oversikt():
     """
-    Viser oversikt over tunbrøytingsbestillinger med kart og lister.
+    Viser oversikt over tunbrøytingbestillinger med kart og lister.
     Bruker config.py for standardisert dato- og tidshåndtering.
     """
     st.title("Oversikt over tunbestillinger")
     
     try:
+        logger.info("=== STARTER VIS_TUNBROYTING_OVERSIKT ===")
+        
+        # Hent Mapbox token
+        mapbox_token = st.secrets["mapbox"]["access_token"]
+        logger.info(f"Mapbox token hentet fra secrets: {'Ja' if mapbox_token else 'Nei'}")
+        
         # Hent bestillinger
         bestillinger = get_bookings()
         
@@ -934,14 +940,6 @@ def vis_tunbroyting_oversikt():
         for col in ['ankomst_dato', 'avreise_dato']:
             if col in bestillinger.columns:
                 bestillinger[col] = bestillinger[col].apply(safe_to_datetime)
-
-        # Hent Mapbox token
-        try:
-            mapbox_token = st.secrets["mapbox"]["access_token"]
-        except Exception as e:
-            st.error("Kunne ikke hente Mapbox token. Vennligst sjekk konfigurasjonen.")
-            logger.error(f"Mapbox token error: {str(e)}")
-            return
 
         # --- Vis kart for dagens bestillinger ---
         current_time = get_current_time()

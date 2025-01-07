@@ -37,6 +37,8 @@ def vis_dagens_tunkart(bestillinger, mapbox_token, title):
     """Viser kart over dagens tunbrøytinger."""
     logger.info(f"=== STARTER VIS_DAGENS_TUNKART ===")
     logger.info(f"Input bestillinger: {len(bestillinger)} rader")
+    logger.info(f"Mapbox token tilgjengelig: {'Ja' if mapbox_token else 'Nei'}")
+    logger.info(f"Token lengde: {len(str(mapbox_token)) if mapbox_token else 0}")
     
     try:
         if bestillinger.empty:
@@ -421,9 +423,13 @@ def ny_dagens_tunkart(bookings, mapbox_token, title="Tunbrøyting"):
     Viser kart over dagens tunbrøytinger med forbedret visning.
     """
     try:
+        logger.info("=== STARTER NY_DAGENS_TUNKART ===")
+        logger.info(f"Mapbox token lengde: {len(str(mapbox_token)) if mapbox_token else 0}")
+        logger.info(f"Kartstil: streets")
+        
         if bookings.empty:
             logger.warning("Ingen bestillinger å vise på kartet")
-            return create_empty_map()
+            return create_empty_map(mapbox_token)
             
         # Opprett grunnkartet
         fig = go.Figure()
@@ -470,7 +476,7 @@ def ny_dagens_tunkart(bookings, mapbox_token, title="Tunbrøyting"):
         fig.update_layout(
             mapbox=dict(
                 accesstoken=mapbox_token,
-                style="outdoors",
+                style="streets",
                 zoom=13,
                 center=dict(lat=59.389, lon=6.427)
             ),
