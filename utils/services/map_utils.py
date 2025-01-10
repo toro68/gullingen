@@ -424,7 +424,8 @@ def ny_dagens_tunkart(bookings, mapbox_token, title="Tunbrøyting"):
     """
     try:
         logger.info("=== STARTER NY_DAGENS_TUNKART ===")
-        logger.info(f"Mapbox token lengde: {len(str(mapbox_token)) if mapbox_token else 0}")
+        token_len = len(str(mapbox_token)) if mapbox_token else 0
+        logger.info(f"Mapbox token lengde: {token_len}")
         logger.info(f"Kartstil: streets")
         
         if bookings.empty:
@@ -437,14 +438,13 @@ def ny_dagens_tunkart(bookings, mapbox_token, title="Tunbrøyting"):
         # Hent koordinater for alle hytter
         coordinates = get_cabin_coordinates()
         
-        # Legg til markører for bestillinger
-        for _, booking in bookings.iterrows():
+        # Legg til markører for årsabonnement først
+        arsabo_filter = bookings["abonnement_type"] == "Årsabonnement"
+        seen_annual = False
+        for _, booking in bookings[arsabo_filter].iterrows():
             customer_id = booking["customer_id"]
             if customer_id in coordinates:
                 lat, lon = coordinates[customer_id]
-                
-                # Sett farge basert på abonnement
-                color = "blue" if booking["abonnement_type"] == "Årsabonnement" else "red"
                 
                 # Lag popup tekst
                 popup_text = f"Hytte {customer_id}<br>"
@@ -454,26 +454,42 @@ def ny_dagens_tunkart(bookings, mapbox_token, title="Tunbrøyting"):
                     lat=[lat],
                     lon=[lon],
                     mode="markers+text",
-                    marker=dict(size=15, color=color),
+                    marker=dict(size=15, color="blue"),
                     text=[customer_id],
                     textposition="top center",
                     hoverinfo="text",
                     hovertext=[popup_text],
-                    showlegend=True,
-                    name=booking["abonnement_type"]
+                    showlegend=not seen_annual,
+                    name="Årsabonnement"
                 ))
-        
-        # Fjern duplikater i tegnforklaringen ved å gruppere unike verdier
-        for trace in fig.data:
-            if trace.name == "Årsabonnement":
-                trace.showlegend = False  # Skjul alle først
-        
-        # Vis kun én gang i tegnforklaringen
-        for trace in fig.data:
-            if trace.name == "Årsabonnement":
-                trace.showlegend = True  # Vis kun den første
-                break
+                seen_annual = True
                 
+        # Legg til markører for ukentlige bestillinger
+        ukentlig_filter = bookings["abonnement_type"] == "Ukentlig ved bestilling"
+        seen_weekly = False
+        for _, booking in bookings[ukentlig_filter].iterrows():
+            customer_id = booking["customer_id"]
+            if customer_id in coordinates:
+                lat, lon = coordinates[customer_id]
+                
+                # Lag popup tekst
+                popup_text = f"Hytte {customer_id}<br>"
+                popup_text += f"Type: {booking['abonnement_type']}<br>"
+                
+                fig.add_trace(go.Scattermapbox(
+                    lat=[lat],
+                    lon=[lon],
+                    mode="markers+text",
+                    marker=dict(size=15, color="red"),
+                    text=[customer_id],
+                    textposition="top center",
+                    hoverinfo="text",
+                    hovertext=[popup_text],
+                    showlegend=not seen_weekly,
+                    name="Ukentlig bestilling"
+                ))
+                seen_weekly = True
+                    
         # Konfigurer kartvisning
         fig.update_layout(
             mapbox=dict(
@@ -490,7 +506,9 @@ def ny_dagens_tunkart(bookings, mapbox_token, title="Tunbrøyting"):
                 y=0.99,
                 xanchor="left",
                 x=0.01,
-                bgcolor="white"
+                bgcolor="white",
+                bordercolor="rgba(0, 0, 0, 0.2)",
+                borderwidth=1
             )
         )
         
