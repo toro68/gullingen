@@ -146,9 +146,18 @@ def initialize_app():
         logger.info("=== Starting app initialization ===")
         logger.info(f"Current working directory: {os.getcwd()}")
         logger.info(f"Database path: {DATABASE_PATH}")
-        logger.info(f"Database files exist: {[f.name for f in DATABASE_PATH.glob('*.db')]}")
         
-        # Kjør migrasjoner først
+        # Sjekk om databasefilene eksisterer
+        db_files = [f.name for f in DATABASE_PATH.glob('*.db')]
+        logger.info(f"Database files exist: {db_files}")
+        
+        # Initialiser databasesystem først
+        logger.info("Initializing database system")
+        if not initialize_database_system():
+            logger.error("Failed to initialize database system")
+            return False
+            
+        # Kjør migrasjoner
         migrations = [
             migrate_feedback_table,
             migrate_tunbroyting_table,
@@ -159,25 +168,26 @@ def initialize_app():
         
         for migration in migrations:
             logger.info(f"Running migration: {migration.__name__}")
-            if not migration():
-                logger.error(f"Failed to run {migration.__name__}")
+            try:
+                if not migration():
+                    logger.error(f"Failed to run {migration.__name__}")
+                    return False
+                logger.info(f"Successfully completed {migration.__name__}")
+            except Exception as e:
+                logger.error(f"Error during {migration.__name__}: {str(e)}")
                 return False
         
         # Kjør generell migrasjonssjekk
+        logger.info("Running general migration check")
         if not run_migrations():
             logger.error("Failed to run migrations")
-            return False
-            
-        # Initialiser databasesystem
-        if not initialize_database_system():
-            logger.error("Failed to initialize database system")
             return False
             
         logger.info("=== App initialization completed successfully ===")
         return True
         
     except Exception as e:
-        logger.error(f"Error during app initialization: {str(e)}")
+        logger.error(f"Error during app initialization: {str(e)}", exc_info=True)
         return False
 
 
