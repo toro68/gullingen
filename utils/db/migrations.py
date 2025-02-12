@@ -201,15 +201,21 @@ def migrate_feedback_table():
 def migrate_tunbroyting_table():
     """Migrerer tunbroytingtabellen"""
     try:
+        logger.info("=== Starting tunbroyting table migration ===")
         with get_db_connection("tunbroyting") as conn:
             cursor = conn.cursor()
-            logger.info("Starting tunbroyting table migration")
             
             # Sjekk om tabellen eksisterer først
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tunbroyting_bestillinger'")
             table_exists = cursor.fetchone() is not None
+            logger.info(f"Table 'tunbroyting_bestillinger' exists: {table_exists}")
             
             if table_exists:
+                # Sjekk antall rader før backup
+                cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
+                count_before = cursor.fetchone()[0]
+                logger.info(f"Number of rows before migration: {count_before}")
+                
                 # Sikker backup med commit
                 cursor.execute("DROP TABLE IF EXISTS tunbroyting_bestillinger_backup")
                 cursor.execute("""
@@ -217,6 +223,7 @@ def migrate_tunbroyting_table():
                     AS SELECT * FROM tunbroyting_bestillinger
                 """)
                 conn.commit()
+                logger.info("Created backup table successfully")
             
             # Dropp og opprett ny tabell med forbedret skjema
             cursor.execute("DROP TABLE IF EXISTS tunbroyting_bestillinger")
@@ -231,6 +238,7 @@ def migrate_tunbroyting_table():
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            logger.info("Created new table with updated schema")
             
             if table_exists:
                 # Kopier data med eksplisitt kolonnespesifikasjon
@@ -245,6 +253,15 @@ def migrate_tunbroyting_table():
                         abonnement_type
                     FROM tunbroyting_bestillinger_backup
                 """)
+                
+                # Sjekk antall rader etter migrering
+                cursor.execute("SELECT COUNT(*) FROM tunbroyting_bestillinger")
+                count_after = cursor.fetchone()[0]
+                logger.info(f"Number of rows after migration: {count_after}")
+                
+                if count_before != count_after:
+                    logger.error(f"Data mismatch! Before: {count_before}, After: {count_after}")
+                    raise ValueError("Data count mismatch after migration")
             
             # Opprett indekser før commit
             cursor.execute("""
@@ -255,13 +272,14 @@ def migrate_tunbroyting_table():
                 CREATE INDEX idx_tunbroyting_dates 
                 ON tunbroyting_bestillinger(ankomst_dato, avreise_dato)
             """)
+            logger.info("Created indexes successfully")
             
             conn.commit()
-            logger.info("Successfully completed tunbroyting table migration")
+            logger.info("=== Successfully completed tunbroyting table migration ===")
             return True
             
     except Exception as e:
-        logger.error(f"Error migrating tunbroyting table: {str(e)}")
+        logger.error(f"Error migrating tunbroyting table: {str(e)}", exc_info=True)
         if 'conn' in locals():
             try:
                 conn.rollback()

@@ -59,7 +59,7 @@ def create_menu(customer_id, user_type):
             if user_type == "Superadmin":
                 logger.info("Adding superadmin options")
                 admin_options.extend(
-                    ["Kunder", "Håndter tunbestillinger", "Dashbord for rapporter"]
+                    ["Database Debug", "Kunder", "Håndter tunbestillinger", "Dashbord for rapporter"]
                 )
 
             admin_icons = [

@@ -209,6 +209,39 @@ def initialize_session_state():
         st.session_state.tz = ZoneInfo("Europe/Oslo")
 
 
+def view_database_content():
+    """Viser innhold fra databasen for debugging"""
+    st.title("Database Innhold")
+    
+    try:
+        with get_db_connection("tunbroyting") as conn:
+            cursor = conn.cursor()
+            
+            # Vis tunbroyting_bestillinger
+            st.subheader("Tunbrøyting Bestillinger")
+            cursor.execute("SELECT * FROM tunbroyting_bestillinger ORDER BY created_at DESC")
+            rows = cursor.fetchall()
+            
+            if rows:
+                # Konverter til pandas DataFrame for pen visning
+                import pandas as pd
+                df = pd.DataFrame(rows)
+                st.dataframe(df)
+                st.info(f"Totalt antall bestillinger: {len(rows)}")
+            else:
+                st.warning("Ingen bestillinger funnet i databasen")
+            
+            # Vis tabellstruktur
+            st.subheader("Tabellstruktur")
+            cursor.execute("PRAGMA table_info(tunbroyting_bestillinger)")
+            columns = cursor.fetchall()
+            st.code("\n".join([f"{col[1]} ({col[2]})" for col in columns]))
+            
+    except Exception as e:
+        st.error(f"Feil ved henting av databaseinnhold: {str(e)}")
+        logger.error(f"Error viewing database content: {str(e)}", exc_info=True)
+
+
 def main():
     try:
         logger.info("=== Starting main() function ===")
@@ -283,6 +316,8 @@ def main():
                         admin_stroing_page()
                     elif admin_choice == "Dashboard":
                         display_admin_dashboard()
+                    elif admin_choice == "Database Debug" and user_type == "Superadmin":
+                        view_database_content()
                     elif admin_choice == "Kunder" and user_type == "Superadmin":
                         handle_customers()
                     elif (
